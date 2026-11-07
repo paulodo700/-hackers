@@ -184,7 +184,7 @@
       const roomLabel = this.kind === 'boss'
         ? 'Chefe · ' + Run.chapterDef().name
         : `Sala ${Run.step + 1} de ${V.Data.STEPS_PER_CHAPTER} · ${this.kind === 'elite' ? 'Campeão' : 'Combate'}`;
-      UI.text(g, roomLabel, 18, 67, { size: 12, weight: 'bold', color: '#e6dcff', shadow: false });
+      UI.text(g, roomLabel, 18, 80, { size: 12, weight: 'bold', color: '#e6dcff', shadow: false });
       UI.button(g, { ...PAUSE_BTN, label: 'Pausa', color: '#4a4558', size: 13 });
 
       // Barra do chefe
