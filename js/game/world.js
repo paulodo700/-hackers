@@ -46,6 +46,7 @@
       this.pendingLevelUps = 0;
       this.bossNotice = 0;
       this.lastDmgAt = -10;
+      this.hitstop = 0;
     }
 
     // ---------- Utilidades de mundo (usadas por entidades e IA) ----------
@@ -162,6 +163,7 @@
             pierce: s.pierce,
             bounces: s.bounces,
             homing: s.homing,
+            chill: s.frost,
             explode: s.explode,
             life: 1.6,
           })
@@ -195,6 +197,7 @@
       this.floatText(p.x, p.y - 30, '-' + dealt, '#ff6b6b', 16);
       this.particles(p.x, p.y, { color: '#ff5a5a', count: 8, speed: 120 });
       this.shake(5);
+      this.hitstop = Math.max(this.hitstop, 0.05);
       this.sfx('hurt');
       this.lastDmgAt = this.time;
       if (s.hp <= 0) {
@@ -240,6 +243,7 @@
 
     // Aplica dano a um inimigo e cuida do texto, partículas e morte.
     damageEnemy(e, dmg, crit, x, y) {
+      if (crit) this.hitstop = Math.max(this.hitstop, 0.04);
       const killed = e.damage(dmg);
       this.floatText(e.x, e.y - e.size * 0.5, String(Math.round(dmg)), crit ? '#ffd166' : '#ffffff', crit ? 20 : 14);
       this.particles(x, y, { color: crit ? '#ffd166' : '#fff3c4', count: crit ? 7 : 4, speed: 110, life: 0.3 });
@@ -344,6 +348,12 @@
         this.endT -= dt;
         for (const pk of this.pickups) pk.update(dt, this);
         this.pickups = this.pickups.filter((p) => !p.dead);
+        this.updateParticles(dt);
+        this.updateFx(dt);
+        return;
+      }
+      if (this.hitstop > 0) {
+        this.hitstop -= dt;
         this.updateParticles(dt);
         this.updateFx(dt);
         return;
@@ -497,6 +507,7 @@
         if (dist(p.x, p.y, e.x, e.y) < e.r + p.r) {
           p.hits.add(e.uid);
           this.damageEnemy(e, p.dmg, p.crit, p.x, p.y);
+          if (p.chill && !e.dead) e.slowT = Math.max(e.slowT, 1.2 + 0.5 * p.chill);
           if (p.explode > 0) this.explosion(p.x, p.y, 46, p.dmg * p.explode);
           if (p.pierce > 0 && p.hits.size <= p.pierce) continue;
           p.dead = true;

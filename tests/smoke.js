@@ -276,6 +276,24 @@ const assert = (cond, msg) => {
   assert(stress.errors.length === 0, 'estresse de IA/sprites sem exceções (' + stress.frames + ' quadros, ' + stress.sprites + ' sprites)');
   for (const e of stress.errors.slice(0, 8)) errors.push('estresse: ' + e);
 
+  // 12c) Carta gélida aplica efeito e a run salva continua do mesmo passo
+  const persist = await page.evaluate(() => {
+    V.Run.start();
+    const card = V.Data.cards.find((c) => c.id === 'frost');
+    V.Run.pickCard(card, true);
+    const frostOk = V.Run.stats.frost === 1 && V.Run.cardCount('frost') === 1;
+    V.Run.advance();
+    V.Run.advance();
+    const snap = JSON.parse(JSON.stringify(V.Run.serialize()));
+    V.Run.active = false;
+    const restored = V.Run.restore(snap);
+    const sameStep = V.Run.step === snap.step && V.Run.chapter === snap.chapter && V.Run.stats.frost === 1;
+    V.Run.active = false;
+    return { frostOk, restored, sameStep };
+  });
+  assert(persist.frostOk, 'carta Flecha Gélida aumenta o efeito de congelamento');
+  assert(persist.restored && persist.sameStep, 'run salva é restaurada no mesmo passo e com as mesmas cartas');
+
   // 13) Erros de execução
   const realErrors = errors.filter((e) => !/favicon/.test(e));
   if (realErrors.length) {

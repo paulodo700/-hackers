@@ -13,6 +13,7 @@
     pierce: 0,
     bounces: 0,
     homing: 0,
+    frost: 0,
     explode: 0,
     critChance: 0.08,
     critMult: 2,

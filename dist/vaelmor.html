@@ -2022,6 +2022,12 @@ body {
           g.beginPath(); g.moveTo(0, -14); g.lineTo(12, 0); g.lineTo(0, 14); g.lineTo(-12, 0); g.closePath(); fillc('#c9a0ff'); stroke('#3d1f6b', 1.8);
           g.beginPath(); g.moveTo(0, -14); g.lineTo(0, 14); stroke('rgba(255,255,255,0.5)', 1.2);
           break;
+        case 'frost':
+          for (const a of [0, Math.PI / 3, (2 * Math.PI) / 3]) {
+            g.save(); g.rotate(a); g.beginPath(); g.moveTo(-13, 0); g.lineTo(13, 0); stroke('#bfe9ff', 2.4); g.restore();
+          }
+          g.beginPath(); g.arc(0, 0, 3, 0, TAU); fillc('#ffffff');
+          break;
         case 'hp':
           g.beginPath(); g.moveTo(0, 12); g.bezierCurveTo(-16, 0, -12, -14, 0, -6); g.bezierCurveTo(12, -14, 16, 0, 0, 12); fillc('#ff6b6b');
           break;
@@ -2320,6 +2326,11 @@ body {
       desc: 'Chefes deixam +2 Relíquias ao cair.',
       apply: (p) => { p.relicBonus += 2; },
     },
+    {
+      id: 'frost', name: 'Flecha Gélida', icon: 'frost', rarity: 'rare', max: 3,
+      desc: 'Flechas congelam o alvo, que fica mais lento por um tempo.',
+      apply: (p) => { p.frost += 1; },
+    },
   ];
 
   // Melhorias permanentes: cada nível custa Relíquias crescentes.
@@ -2551,8 +2562,9 @@ body {
       }
       V.AI.update(this, dt, w);
       if (Math.abs(this.vx) > 6) this.face = this.vx > 0 ? 1 : -1;
-      this.x += this.vx * dt;
-      this.y += this.vy * dt;
+      const slowK = this.slowT > 0 ? 0.6 : 1;
+      this.x += this.vx * dt * slowK;
+      this.y += this.vy * dt * slowK;
       w.resolveMove(this, this.r);
       this.hpBar = V.Util.approach(this.hpBar, this.hp / this.maxHp, dt * 1.5);
     }
@@ -2635,6 +2647,7 @@ body {
       this.homing = o.homing || 0;
       this.explode = o.explode || 0;
       this.crit = !!o.crit;
+      this.chill = o.chill || 0;
       this.slow = o.slow || 0;
       this.hits = new Set();
       this.dead = false;
@@ -2683,8 +2696,8 @@ body {
       if (this.vy !== undefined) {
         this.x += this.vx * dt;
         this.y += this.vy * dt;
-        this.vx *= 0.9;
-        this.vy = (this.vy + 260 * dt) * 0.92;
+        this.vx *= Math.pow(0.9, dt * 60);
+        this.vy = (this.vy + 260 * dt) * Math.pow(0.92, dt * 60);
         if (this.y > w.arena.y1 - 10) {
           this.y = w.arena.y1 - 10;
           this.vy = -this.vy * 0.3;
@@ -3524,6 +3537,7 @@ body {
     pierce: 0,
     bounces: 0,
     homing: 0,
+    frost: 0,
     explode: 0,
     critChance: 0.08,
     critMult: 2,
@@ -3845,6 +3859,7 @@ body {
       this.pendingLevelUps = 0;
       this.bossNotice = 0;
       this.lastDmgAt = -10;
+      this.hitstop = 0;
     }
 
     // ---------- Utilidades de mundo (usadas por entidades e IA) ----------
@@ -3961,6 +3976,7 @@ body {
             pierce: s.pierce,
             bounces: s.bounces,
             homing: s.homing,
+            chill: s.frost,
             explode: s.explode,
             life: 1.6,
           })
@@ -3994,6 +4010,7 @@ body {
       this.floatText(p.x, p.y - 30, '-' + dealt, '#ff6b6b', 16);
       this.particles(p.x, p.y, { color: '#ff5a5a', count: 8, speed: 120 });
       this.shake(5);
+      this.hitstop = Math.max(this.hitstop, 0.05);
       this.sfx('hurt');
       this.lastDmgAt = this.time;
       if (s.hp <= 0) {
@@ -4039,6 +4056,7 @@ body {
 
     // Aplica dano a um inimigo e cuida do texto, partículas e morte.
     damageEnemy(e, dmg, crit, x, y) {
+      if (crit) this.hitstop = Math.max(this.hitstop, 0.04);
       const killed = e.damage(dmg);
       this.floatText(e.x, e.y - e.size * 0.5, String(Math.round(dmg)), crit ? '#ffd166' : '#ffffff', crit ? 20 : 14);
       this.particles(x, y, { color: crit ? '#ffd166' : '#fff3c4', count: crit ? 7 : 4, speed: 110, life: 0.3 });
@@ -4143,6 +4161,12 @@ body {
         this.endT -= dt;
         for (const pk of this.pickups) pk.update(dt, this);
         this.pickups = this.pickups.filter((p) => !p.dead);
+        this.updateParticles(dt);
+        this.updateFx(dt);
+        return;
+      }
+      if (this.hitstop > 0) {
+        this.hitstop -= dt;
         this.updateParticles(dt);
         this.updateFx(dt);
         return;
@@ -4296,6 +4320,7 @@ body {
         if (dist(p.x, p.y, e.x, e.y) < e.r + p.r) {
           p.hits.add(e.uid);
           this.damageEnemy(e, p.dmg, p.crit, p.x, p.y);
+          if (p.chill && !e.dead) e.slowT = Math.max(e.slowT, 1.2 + 0.5 * p.chill);
           if (p.explode > 0) this.explosion(p.x, p.y, 46, p.dmg * p.explode);
           if (p.pierce > 0 && p.hits.size <= p.pierce) continue;
           p.dead = true;
@@ -5126,6 +5151,14 @@ body {
     draw(g) {
       const w = this.world;
       w.draw(g);
+      if (w.state === 'play' && Run.stats.hp / Run.stats.maxHp < 0.3) {
+        const pulse = 0.5 + 0.5 * Math.sin(this.fx * 6);
+        const grad = g.createRadialGradient(180, 360, 120, 180, 360, 330);
+        grad.addColorStop(0, 'rgba(180,0,20,0)');
+        grad.addColorStop(1, `rgba(180,0,20,${(0.25 + 0.25 * pulse).toFixed(3)})`);
+        g.fillStyle = grad;
+        g.fillRect(0, 0, 360, 640);
+      }
       // Joystick virtual
       if (Input.stick.active) {
         g.save();

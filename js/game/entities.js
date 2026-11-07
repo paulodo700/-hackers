@@ -138,8 +138,9 @@
       }
       V.AI.update(this, dt, w);
       if (Math.abs(this.vx) > 6) this.face = this.vx > 0 ? 1 : -1;
-      this.x += this.vx * dt;
-      this.y += this.vy * dt;
+      const slowK = this.slowT > 0 ? 0.6 : 1;
+      this.x += this.vx * dt * slowK;
+      this.y += this.vy * dt * slowK;
       w.resolveMove(this, this.r);
       this.hpBar = V.Util.approach(this.hpBar, this.hp / this.maxHp, dt * 1.5);
     }
@@ -222,6 +223,7 @@
       this.homing = o.homing || 0;
       this.explode = o.explode || 0;
       this.crit = !!o.crit;
+      this.chill = o.chill || 0;
       this.slow = o.slow || 0;
       this.hits = new Set();
       this.dead = false;
@@ -270,8 +272,8 @@
       if (this.vy !== undefined) {
         this.x += this.vx * dt;
         this.y += this.vy * dt;
-        this.vx *= 0.9;
-        this.vy = (this.vy + 260 * dt) * 0.92;
+        this.vx *= Math.pow(0.9, dt * 60);
+        this.vy = (this.vy + 260 * dt) * Math.pow(0.92, dt * 60);
         if (this.y > w.arena.y1 - 10) {
           this.y = w.arena.y1 - 10;
           this.vy = -this.vy * 0.3;

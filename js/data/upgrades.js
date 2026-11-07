@@ -85,6 +85,11 @@
       desc: 'Chefes deixam +2 Relíquias ao cair.',
       apply: (p) => { p.relicBonus += 2; },
     },
+    {
+      id: 'frost', name: 'Flecha Gélida', icon: 'frost', rarity: 'rare', max: 3,
+      desc: 'Flechas congelam o alvo, que fica mais lento por um tempo.',
+      apply: (p) => { p.frost += 1; },
+    },
   ];
 
   // Melhorias permanentes: cada nível custa Relíquias crescentes.

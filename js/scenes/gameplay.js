@@ -161,6 +161,14 @@
     draw(g) {
       const w = this.world;
       w.draw(g);
+      if (w.state === 'play' && Run.stats.hp / Run.stats.maxHp < 0.3) {
+        const pulse = 0.5 + 0.5 * Math.sin(this.fx * 6);
+        const grad = g.createRadialGradient(180, 360, 120, 180, 360, 330);
+        grad.addColorStop(0, 'rgba(180,0,20,0)');
+        grad.addColorStop(1, `rgba(180,0,20,${(0.25 + 0.25 * pulse).toFixed(3)})`);
+        g.fillStyle = grad;
+        g.fillRect(0, 0, 360, 640);
+      }
       // Joystick virtual
       if (Input.stick.active) {
         g.save();

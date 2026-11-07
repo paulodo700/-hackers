@@ -205,6 +205,12 @@
           g.beginPath(); g.moveTo(0, -14); g.lineTo(12, 0); g.lineTo(0, 14); g.lineTo(-12, 0); g.closePath(); fillc('#c9a0ff'); stroke('#3d1f6b', 1.8);
           g.beginPath(); g.moveTo(0, -14); g.lineTo(0, 14); stroke('rgba(255,255,255,0.5)', 1.2);
           break;
+        case 'frost':
+          for (const a of [0, Math.PI / 3, (2 * Math.PI) / 3]) {
+            g.save(); g.rotate(a); g.beginPath(); g.moveTo(-13, 0); g.lineTo(13, 0); stroke('#bfe9ff', 2.4); g.restore();
+          }
+          g.beginPath(); g.arc(0, 0, 3, 0, TAU); fillc('#ffffff');
+          break;
         case 'hp':
           g.beginPath(); g.moveTo(0, 12); g.bezierCurveTo(-16, 0, -12, -14, 0, -6); g.bezierCurveTo(12, -14, 16, 0, 0, 12); fillc('#ff6b6b');
           break;
