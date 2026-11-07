@@ -298,6 +298,7 @@
     bossDeath(e) {
       this.bossDown = true;
       this.run.bossesKilled++;
+      this.run.bossRelics = (this.run.bossRelics || 0) + 3 + this.run.stats.relicBonus;
       this.shake(10);
       this.sfx('slam');
       this.particles(e.x, e.y, { ring: true, color: '#ffd166', size: 14, life: 0.6 });
@@ -341,6 +342,8 @@
     update(dt) {
       if (this.state !== 'play') {
         this.endT -= dt;
+        for (const pk of this.pickups) pk.update(dt, this);
+        this.pickups = this.pickups.filter((p) => !p.dead);
         this.updateParticles(dt);
         this.updateFx(dt);
         return;
@@ -381,7 +384,7 @@
 
       if (this.kind !== 'boss' && this.waves.length === 0 && this.enemies.length === 0 && this.state === 'play') {
         this.state = 'won';
-        this.endT = 0.9;
+        this.endT = 0.4;
         this.sfx('roomClear');
       }
       if (this.kind === 'boss' && this.bossSpawned && !this.bossDown && this.enemies.length === 0) {

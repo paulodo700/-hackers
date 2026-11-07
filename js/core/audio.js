@@ -234,6 +234,7 @@
       if (!this.ctx || !this.enabled || !this._pattern) return;
       const p = this._pattern;
       const stepDur = 60 / p.bpm / 2; // colcheias
+      if (this._nextTime < this.ctx.currentTime) this._nextTime = this.ctx.currentTime + 0.05;
       while (this._nextTime < this.ctx.currentTime + 0.25) {
         const i = this._step % p.length;
         const t = this._nextTime;

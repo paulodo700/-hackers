@@ -106,6 +106,7 @@
         this.canvas,
         (cx, cy) => this.toLogical(cx, cy),
         (code, down, e) => {
+          if (e && e.repeat) return;
           if (down) V.Audio.unlock();
           if (this.cur && this.cur.onKey) this.cur.onKey(code, down, e);
         },

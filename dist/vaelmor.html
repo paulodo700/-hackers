@@ -254,7 +254,10 @@ body {
 
       const down = (e) => {
         const p = toLogical(e.clientX, e.clientY);
-        if (stick.id !== null && e.pointerId !== stick.id) return;
+        if (stick.id !== null && e.pointerId !== stick.id) {
+          if (onPointerCb) onPointerCb('down', p.x, p.y);
+          return;
+        }
         stick.active = true;
         stick.id = e.pointerId;
         stick.ox = p.x;
@@ -578,6 +581,7 @@ body {
       if (!this.ctx || !this.enabled || !this._pattern) return;
       const p = this._pattern;
       const stepDur = 60 / p.bpm / 2; // colcheias
+      if (this._nextTime < this.ctx.currentTime) this._nextTime = this.ctx.currentTime + 0.05;
       while (this._nextTime < this.ctx.currentTime + 0.25) {
         const i = this._step % p.length;
         const t = this._nextTime;
@@ -1755,6 +1759,9 @@ body {
     // Piso de sala, cacheado por tema e semente.
     floor(themeId, w, h, seed) {
       const key = `floor:${themeId}:${w}x${h}:${seed}`;
+      if (!cache.has(key)) {
+        for (const k of [...cache.keys()]) if (k.startsWith('floor:')) cache.delete(k);
+      }
       return cached(key, () => {
         const c = makeCanvas(w * 2, h * 2);
         const g = c.getContext('2d');
@@ -2496,6 +2503,7 @@ body {
       this.speed = def.speed * (o.speedMul || 1);
       this.dmg = (def.dmg || 12) * (o.dmgMul || 1);
       this.sizeMul = o.sizeMul || 1;
+      this.dmgMul = o.dmgMul || 1;
       this.r = def.radius * this.sizeMul;
       this.size = def.size * this.sizeMul;
       this.ai = def.ai;
@@ -2682,7 +2690,7 @@ body {
           this.vy = -this.vy * 0.3;
         }
       }
-      if (d < 92 || this.magnet) {
+      if (d < 92 || this.magnet || w.state !== 'play') {
         this.magnet = true;
         const sp = 260 + (92 - Math.min(d, 92)) * 4;
         const dx = p.x - this.x;
@@ -3564,6 +3572,7 @@ body {
       this.kills = 0;
       this.roomsCleared = 0;
       this.bossesKilled = 0;
+      this.bossRelics = 0;
       this.startedAt = Date.now();
       this.active = true;
       V.Meta.applyToStats(this.stats);
@@ -3682,6 +3691,7 @@ body {
         kills: this.kills,
         roomsCleared: this.roomsCleared,
         bossesKilled: this.bossesKilled,
+        bossRelics: this.bossRelics,
       };
     },
 
@@ -3701,15 +3711,15 @@ body {
       this.kills = d.kills || 0;
       this.roomsCleared = d.roomsCleared || 0;
       this.bossesKilled = d.bossesKilled || 0;
+      this.bossRelics = d.bossRelics || 0;
       this.active = true;
       return true;
     },
 
     // Relíquias ganhas ao final da run (morte ou vitória).
     relicsOnEnd(victory) {
-      let r = Math.floor(this.progress() / 2) + this.bossesKilled * 3;
+      let r = Math.floor(this.progress() / 2) + (this.bossRelics || 0);
       if (victory) r += 10;
-      r += this.stats.relicBonus * this.bossesKilled;
       return Math.max(1, r);
     },
   };
@@ -4087,6 +4097,7 @@ body {
     bossDeath(e) {
       this.bossDown = true;
       this.run.bossesKilled++;
+      this.run.bossRelics = (this.run.bossRelics || 0) + 3 + this.run.stats.relicBonus;
       this.shake(10);
       this.sfx('slam');
       this.particles(e.x, e.y, { ring: true, color: '#ffd166', size: 14, life: 0.6 });
@@ -4130,6 +4141,8 @@ body {
     update(dt) {
       if (this.state !== 'play') {
         this.endT -= dt;
+        for (const pk of this.pickups) pk.update(dt, this);
+        this.pickups = this.pickups.filter((p) => !p.dead);
         this.updateParticles(dt);
         this.updateFx(dt);
         return;
@@ -4170,7 +4183,7 @@ body {
 
       if (this.kind !== 'boss' && this.waves.length === 0 && this.enemies.length === 0 && this.state === 'play') {
         this.state = 'won';
-        this.endT = 0.9;
+        this.endT = 0.4;
         this.sfx('roomClear');
       }
       if (this.kind === 'boss' && this.bossSpawned && !this.bossDown && this.enemies.length === 0) {
@@ -4747,7 +4760,7 @@ body {
     combat: { name: 'Combate', icon: 'sword', color: '#4fbf6a', desc: 'Ondas de monstros. XP e ouro comuns.' },
     elite: { name: 'Campeão', icon: 'fire', color: '#e0573f', desc: 'Campeões fortes. Recompensa maior.' },
     treasure: { name: 'Tesouro', icon: 'gold', color: '#e0b84a', desc: 'Escolha 1 de 3 cartas sem custo.' },
-    rest: { name: 'Descanso', icon: 'heart', color: '#5fd3a0', desc: 'Recupera 35% da vida atual.' },
+    rest: { name: 'Descanso', icon: 'heart', color: '#5fd3a0', desc: 'Recupera 35% do HP máximo.' },
     shop: { name: 'Mercador', icon: 'relic', color: '#9a7bff', desc: 'Compre poções e cartas com ouro.' },
     boss: { name: 'Chefe', icon: 'moon', color: '#ffb347', desc: 'Enfrente o guardião do capítulo.' },
   };
@@ -4992,11 +5005,11 @@ body {
       w.update(dt);
       if (this.hintT > 0) this.hintT -= dt;
 
-      if (w.state === 'play' && w.pendingLevelUps > 0) {
+      if (w.state !== 'lost' && w.pendingLevelUps > 0) {
         this.openLevelUp();
         return;
       }
-      if (w.state !== 'play' && w.endT <= 0) this.finish();
+      if (w.state !== 'play' && w.endT <= 0 && (w.pickups.length === 0 || w.endT <= -1.5)) this.finish();
     },
 
     // ---------- Subida de nível ----------
@@ -5289,7 +5302,7 @@ body {
         { id: 'potion', label: 'Poção de Vida', desc: 'Recupera 40 HP imediatamente.', cost: 25, icon: 'hp', color: '#ff6b6b' },
         { id: 'card', label: rare ? rare.name : 'Carta Misteriosa', desc: rare ? rare.desc : 'Nenhuma carta disponível.', cost: 60, icon: rare ? rare.icon : 'relic', color: '#c79bff', card: rare },
         { id: 'maxhp', label: 'Coração Forte', desc: '+15 HP máximo e cura de 15.', cost: 40, icon: 'heart', color: '#ff8fa3' },
-      ];
+      ].filter((o) => o.id !== 'card' || o.card);
     },
 
     leave() {
@@ -5439,6 +5452,7 @@ body {
     onKey(code, down) {
       if (!down) return;
       if (code === 'Enter' || code === 'Space') {
+        if (this.type === 'treasure') return;
         if (this.type === 'rest' && !this.healed) {
           this.onPointer('down', 180, 425);
           return;
@@ -5838,6 +5852,7 @@ body {
         this.canvas,
         (cx, cy) => this.toLogical(cx, cy),
         (code, down, e) => {
+          if (e && e.repeat) return;
           if (down) V.Audio.unlock();
           if (this.cur && this.cur.onKey) this.cur.onKey(code, down, e);
         },

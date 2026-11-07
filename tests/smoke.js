@@ -176,6 +176,11 @@ const assert = (cond, msg) => {
     const w = window.V.Game.cur.world;
     w.damageEnemy(w.bossRef, 99999, false, w.bossRef.x, w.bossRef.y);
   });
+  // Subidas de nível causadas pelo chefe pedem a escolha da carta antes do desfecho
+  for (let i = 0; i < 40 && (await scene()) === 'gameplay'; i++) {
+    await page.waitForTimeout(300);
+    if ((await page.evaluate(() => window.V.Game.cur.overlay)) === 'levelup') await click(180, 246);
+  }
   assert(await waitScene('story', 8000), 'derrotar o chefe leva ao desfecho do capítulo');
   for (let i = 0; i < 160 && (await scene()) === 'story'; i++) {
     await page.keyboard.press('Enter');

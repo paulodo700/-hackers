@@ -90,6 +90,7 @@
       this.speed = def.speed * (o.speedMul || 1);
       this.dmg = (def.dmg || 12) * (o.dmgMul || 1);
       this.sizeMul = o.sizeMul || 1;
+      this.dmgMul = o.dmgMul || 1;
       this.r = def.radius * this.sizeMul;
       this.size = def.size * this.sizeMul;
       this.ai = def.ai;
@@ -276,7 +277,7 @@
           this.vy = -this.vy * 0.3;
         }
       }
-      if (d < 92 || this.magnet) {
+      if (d < 92 || this.magnet || w.state !== 'play') {
         this.magnet = true;
         const sp = 260 + (92 - Math.min(d, 92)) * 4;
         const dx = p.x - this.x;

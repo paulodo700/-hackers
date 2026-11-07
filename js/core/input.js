@@ -62,7 +62,10 @@
 
       const down = (e) => {
         const p = toLogical(e.clientX, e.clientY);
-        if (stick.id !== null && e.pointerId !== stick.id) return;
+        if (stick.id !== null && e.pointerId !== stick.id) {
+          if (onPointerCb) onPointerCb('down', p.x, p.y);
+          return;
+        }
         stick.active = true;
         stick.id = e.pointerId;
         stick.ox = p.x;

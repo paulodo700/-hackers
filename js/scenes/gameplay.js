@@ -40,11 +40,11 @@
       w.update(dt);
       if (this.hintT > 0) this.hintT -= dt;
 
-      if (w.state === 'play' && w.pendingLevelUps > 0) {
+      if (w.state !== 'lost' && w.pendingLevelUps > 0) {
         this.openLevelUp();
         return;
       }
-      if (w.state !== 'play' && w.endT <= 0) this.finish();
+      if (w.state !== 'play' && w.endT <= 0 && (w.pickups.length === 0 || w.endT <= -1.5)) this.finish();
     },
 
     // ---------- Subida de nível ----------

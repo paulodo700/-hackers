@@ -7,7 +7,7 @@
     combat: { name: 'Combate', icon: 'sword', color: '#4fbf6a', desc: 'Ondas de monstros. XP e ouro comuns.' },
     elite: { name: 'Campeão', icon: 'fire', color: '#e0573f', desc: 'Campeões fortes. Recompensa maior.' },
     treasure: { name: 'Tesouro', icon: 'gold', color: '#e0b84a', desc: 'Escolha 1 de 3 cartas sem custo.' },
-    rest: { name: 'Descanso', icon: 'heart', color: '#5fd3a0', desc: 'Recupera 35% da vida atual.' },
+    rest: { name: 'Descanso', icon: 'heart', color: '#5fd3a0', desc: 'Recupera 35% do HP máximo.' },
     shop: { name: 'Mercador', icon: 'relic', color: '#9a7bff', desc: 'Compre poções e cartas com ouro.' },
     boss: { name: 'Chefe', icon: 'moon', color: '#ffb347', desc: 'Enfrente o guardião do capítulo.' },
   };

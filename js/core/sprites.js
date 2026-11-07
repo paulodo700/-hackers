@@ -1091,6 +1091,9 @@
     // Piso de sala, cacheado por tema e semente.
     floor(themeId, w, h, seed) {
       const key = `floor:${themeId}:${w}x${h}:${seed}`;
+      if (!cache.has(key)) {
+        for (const k of [...cache.keys()]) if (k.startsWith('floor:')) cache.delete(k);
+      }
       return cached(key, () => {
         const c = makeCanvas(w * 2, h * 2);
         const g = c.getContext('2d');

@@ -61,6 +61,7 @@
       this.kills = 0;
       this.roomsCleared = 0;
       this.bossesKilled = 0;
+      this.bossRelics = 0;
       this.startedAt = Date.now();
       this.active = true;
       V.Meta.applyToStats(this.stats);
@@ -179,6 +180,7 @@
         kills: this.kills,
         roomsCleared: this.roomsCleared,
         bossesKilled: this.bossesKilled,
+        bossRelics: this.bossRelics,
       };
     },
 
@@ -198,15 +200,15 @@
       this.kills = d.kills || 0;
       this.roomsCleared = d.roomsCleared || 0;
       this.bossesKilled = d.bossesKilled || 0;
+      this.bossRelics = d.bossRelics || 0;
       this.active = true;
       return true;
     },
 
     // Relíquias ganhas ao final da run (morte ou vitória).
     relicsOnEnd(victory) {
-      let r = Math.floor(this.progress() / 2) + this.bossesKilled * 3;
+      let r = Math.floor(this.progress() / 2) + (this.bossRelics || 0);
       if (victory) r += 10;
-      r += this.stats.relicBonus * this.bossesKilled;
       return Math.max(1, r);
     },
   };

@@ -38,7 +38,7 @@
         { id: 'potion', label: 'Poção de Vida', desc: 'Recupera 40 HP imediatamente.', cost: 25, icon: 'hp', color: '#ff6b6b' },
         { id: 'card', label: rare ? rare.name : 'Carta Misteriosa', desc: rare ? rare.desc : 'Nenhuma carta disponível.', cost: 60, icon: rare ? rare.icon : 'relic', color: '#c79bff', card: rare },
         { id: 'maxhp', label: 'Coração Forte', desc: '+15 HP máximo e cura de 15.', cost: 40, icon: 'heart', color: '#ff8fa3' },
-      ];
+      ].filter((o) => o.id !== 'card' || o.card);
     },
 
     leave() {
@@ -188,6 +188,7 @@
     onKey(code, down) {
       if (!down) return;
       if (code === 'Enter' || code === 'Space') {
+        if (this.type === 'treasure') return;
         if (this.type === 'rest' && !this.healed) {
           this.onPointer('down', 180, 425);
           return;
