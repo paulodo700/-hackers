@@ -745,6 +745,7 @@ window.__anelZero = {
   get zone() { return zone; }, get player() { return player; }, get entities() { return entities; },
   get transitioning() { return transitioning; },
   get roamers() { return roamers; },
+  renderer,
   flags: debugFlags,
   audioPeak: () => outputPeak(),
   setVolume: (kind, v) => setVolume(kind, v),

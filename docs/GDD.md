@@ -150,6 +150,23 @@ O pedido desta rodada era muito amplo, e não cabe com qualidade verificável nu
 - **Sistemas novos de peso:** efeitos de estado em batalha, reputação com as NPCs, novas zonas e uma progressão de talentos ampliada.
 - **Mais mobs e NPCs** além dos já existentes.
 
+## Desempenho (rodada 8)
+
+Medido com `node tests/perf.mjs cache`: Chromium headless, renderização por software, 360 por 740. Os números comparam partes entre si. Não preveem o desempenho em aparelho real.
+
+| Configuração | Antes: FPS / triângulos | Depois: FPS / triângulos |
+|---|---|---|
+| Tudo ligado | 12,8 / 18 006 | 26,6 / 10 560 |
+| Sem paredes | 33,1 / 7 698 | 28,2 / 7 650 |
+| Sem decoração instanciada | 13,0 / 15 950 | 25,7 / 8 480 |
+| Sem itens no chão | 12,7 / 18 030 | 27,2 / 10 560 |
+| Sem bytes | 12,6 / 17 982 | 31,2 / 10 560 |
+| Sem cenário inteiro | 60,3 / 2 496 | 60,3 / 2 448 |
+
+**O que mudou.** As paredes deixaram de ser um cubo por célula e passaram a ser uma malha só, com as faces que aparecem: o topo de cada parede e as laterais voltadas para piso. As faces escondidas entre duas paredes não são mais geradas. Isso reduz os triângulos das paredes em cerca de 60%, e o FPS em cerca de duas vezes neste cenário.
+
+**O que ainda pesa.** Itens no chão e bytes quase não aparecem nas medições. A decoração instanciada é pequena. O piso e o cenário restante, somados, são o que sobra de custo.
+
 ## Balanceamento
 
 Os números vêm do simulador `tests/sim/sim.mjs`, que roda batalhas sem navegador com sementes fixas. O jogador simulado ataca sempre, usa poção abaixo de 35% de vida e usa o equipamento típico de cada faixa de nível. Não usa habilidades.

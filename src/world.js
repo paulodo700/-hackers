@@ -168,22 +168,41 @@ export function buildZone(def, scene) {
     }
   }
 
-  // Paredes (chips) — um InstancedMesh só
+  // Paredes (chips): uma malha só com as faces que aparecem (topo de cada parede e laterais
+  // voltadas para piso). Faces escondidas entre duas paredes não são geradas.
   if (walls.length) {
     const topTex = chipTopTexture(theme, hashStr(def.id) + 1, 256, FLOOR_STYLE_BY_DECOR[def.decor] || 'grid');
     const mat = new THREE.MeshStandardMaterial({
       color: 0x6f8799, map: topTex, roughness: 0.5, metalness: 0.45,
       emissive: new THREE.Color(theme.accent).multiplyScalar(0.12),
     });
-    const inst = new THREE.InstancedMesh(new THREE.BoxGeometry(TILE, 2.6, TILE), mat, walls.length);
-    inst.castShadow = true; inst.receiveShadow = true;
-    const m = new THREE.Matrix4();
-    walls.forEach(([c, r], i) => {
-      m.makeTranslation(c * TILE, 1.3, r * TILE);
-      inst.setMatrixAt(i, m);
-    });
-    inst.instanceMatrix.needsUpdate = true;
-    group.add(inst);
+    const wallSet = new Set(walls.map(([c, r]) => c + ',' + r));
+    const isOpen = (c, r) => c >= 0 && r >= 0 && c < cols && r < rows && !wallSet.has(c + ',' + r);
+    const H = 2.6, h = TILE / 2;
+    const verts = [], uvs = [];
+    const quad = (a, b, cc, d) => {
+      // dois triângulos: a-b-cc e a-cc-d, com UVs 0..1 em cada face
+      verts.push(...a, ...b, ...cc, ...a, ...cc, ...d);
+      uvs.push(0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1);
+    };
+    for (const [c, r] of walls) {
+      const x = c * TILE, z = r * TILE;
+      const x0 = x - h, x1 = x + h, z0 = z - h, z1 = z + h;
+      quad([x0, H, z0], [x1, H, z0], [x1, H, z1], [x0, H, z1]); // topo
+      if (isOpen(c, r - 1)) quad([x0, 0, z0], [x1, 0, z0], [x1, H, z0], [x0, H, z0]); // face norte
+      if (isOpen(c, r + 1)) quad([x1, 0, z1], [x0, 0, z1], [x0, H, z1], [x1, H, z1]); // face sul
+      if (isOpen(c - 1, r)) quad([x0, 0, z1], [x0, 0, z0], [x0, H, z0], [x0, H, z1]); // face oeste
+      if (isOpen(c + 1, r)) quad([x1, 0, z0], [x1, 0, z1], [x1, H, z1], [x1, H, z0]); // face leste
+    }
+    const wallGeo = new THREE.BufferGeometry();
+    wallGeo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+    wallGeo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+    wallGeo.computeVertexNormals();
+    const wallMesh = new THREE.Mesh(wallGeo, mat);
+    wallMesh.name = 'walls';
+    wallMesh.castShadow = true;
+    wallMesh.receiveShadow = true;
+    group.add(wallMesh);
   }
 
   // Trilhas brilhantes

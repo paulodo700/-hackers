@@ -765,7 +765,7 @@ export default [
           window.__anelZero.loadZone(id, null, null, true);
           let url = null;
           window.__anelZero.zone.group.traverse((o) => {
-            if (!url && o.isInstancedMesh && o.geometry.parameters && o.geometry.parameters.height === 2.6 && o.material.map) {
+            if (!url && o.name === 'walls' && o.material.map) {
               url = o.material.map.image.toDataURL();
             }
           });
