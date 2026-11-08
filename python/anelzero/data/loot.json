@@ -1,0 +1,213 @@
+{
+  "CHEST_LOOT": {
+    "cache_c1": [
+      [
+        "pasta_termica",
+        1
+      ],
+      [
+        "capacitor",
+        1
+      ]
+    ],
+    "cache_c2": [
+      [
+        "capsula_energia",
+        2
+      ]
+    ],
+    "cache_c3": [
+      [
+        "lamina_solda",
+        1
+      ]
+    ],
+    "cache_c4": [
+      [
+        "kit_solda",
+        1
+      ],
+      [
+        "pasta_termica",
+        1
+      ]
+    ],
+    "regs_c1": [
+      [
+        "capacitor",
+        2
+      ]
+    ],
+    "regs_c2": [
+      [
+        "escudo_dissipador",
+        1
+      ]
+    ],
+    "alu_c1": [
+      [
+        "capsula_energia",
+        2
+      ],
+      [
+        "kit_solda",
+        1
+      ]
+    ],
+    "alu_c2": [
+      [
+        "pinca_ressonante",
+        1
+      ]
+    ],
+    "alu_key": [
+      [
+        "chave_forja",
+        1
+      ]
+    ],
+    "pipe_c1": [
+      [
+        "capacitor",
+        1
+      ],
+      [
+        "pasta_termica",
+        1
+      ]
+    ],
+    "pipe_c2": [
+      [
+        "capsula_energia",
+        1
+      ],
+      [
+        "kit_solda",
+        1
+      ]
+    ],
+    "pipe_c3": [
+      [
+        "escudo_dissipador",
+        1
+      ]
+    ],
+    "mem_c1": [
+      [
+        "pasta_termica",
+        2
+      ]
+    ],
+    "mem_c2": [
+      [
+        "capsula_energia",
+        2
+      ]
+    ],
+    "mem_c3": [
+      [
+        "capacitor",
+        2
+      ],
+      [
+        "kit_solda",
+        1
+      ]
+    ],
+    "core_selo": [
+      [
+        "selo_vigia",
+        1
+      ]
+    ],
+    "mem_frag1": [
+      [
+        "fragmento_memoria",
+        1
+      ]
+    ],
+    "mem_frag2": [
+      [
+        "fragmento_memoria",
+        1
+      ]
+    ],
+    "mem_frag3": [
+      [
+        "fragmento_memoria",
+        1
+      ]
+    ],
+    "bus_c1": [
+      [
+        "kit_solda",
+        2
+      ],
+      [
+        "pasta_termica",
+        2
+      ]
+    ],
+    "bus_c2": [
+      [
+        "capacitor",
+        1
+      ],
+      [
+        "escudo_dissipador",
+        1
+      ]
+    ],
+    "bus_c3": [
+      [
+        "capsula_energia",
+        3
+      ]
+    ],
+    "bus_c4": [
+      [
+        "pasta_termica",
+        3
+      ]
+    ]
+  },
+  "ZONE_LOOT": {
+    "cache": [
+      "pasta_termica",
+      "capsula_energia",
+      "kit_solda",
+      "capacitor",
+      "lamina_solda"
+    ],
+    "regs": [
+      "capacitor",
+      "pinca_ressonante",
+      "capsula_energia",
+      "cristal_silicio"
+    ],
+    "alu": [
+      "kit_solda",
+      "liga_ferrugem",
+      "escudo_dissipador",
+      "capsula_energia"
+    ],
+    "pipeline": [
+      "pasta_termica",
+      "capsula_energia",
+      "kit_solda",
+      "escudo_dissipador"
+    ],
+    "memory": [
+      "capacitor",
+      "liga_ferrugem",
+      "pasta_termica",
+      "fio_cobre"
+    ],
+    "bus": [
+      "kit_solda",
+      "escudo_dissipador",
+      "capsula_energia",
+      "pinca_ressonante"
+    ]
+  }
+}
