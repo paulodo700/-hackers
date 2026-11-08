@@ -15,7 +15,7 @@ import { RECEITAS } from '../src/data/recipes.js';
 
 const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 const TRAVA_PARA_O_ROBO = new Set([WALL, NPC, MERCHANT, CHEST, DOOR, DAMAGED, GATE, SOCKET]);
-const PRIORIDADE_CRIACAO = ['reparo_trilha', 'ajuste_energia', 'reforco_nucleo', 'chave_nucleo', 'pasta_termica', 'dissipador_mk1', 'antena_mk1', 'modulo_sinal', 'kit_reparo', 'refrigerante'];
+const PRIORIDADE_CRIACAO = ['reparo_trilha', 'ajuste_energia', 'reforco_nucleo', 'pasta_termica', 'dissipador_mk1', 'antena_mk1', 'modulo_sinal', 'kit_reparo', 'refrigerante'];
 
 // Caminho mais curto (BFS). Células de ferramenta contam como passáveis se o robô tem a ferramenta.
 function caminho(game, alvos) {
@@ -86,21 +86,24 @@ export function tick(game, memoria) {
   manutencao(game);
   // Vida baixa e sem inimigo por perto: descansa antes de seguir.
   if (game.player.hp < game.estatisticas().maxHp * 0.6 && !adjacenteAInimigo(game)) { game.esperar(); return true; }
-  // Calor alto: pasta térmica se houver; senão vai à zona fria mais próxima ou espera onde está.
+  // Calor alto: pasta térmica se houver; senão vai à zona fria mais próxima e, se já estiver nela, espera.
   if (game.player.calor >= 60 && contar(game, 'pasta_termica') === 0) {
+    if (game.grid.at(game.player.c, game.player.r) === COOL && game.player.calor >= 30) { game.esperar(); return true; }
     const frios = alvosDoObjetivo(game, 'fresco');
-    if (frios.length && caminho(game, frios) && !(game.grid.at(game.player.c, game.player.r) === COOL)) {
-      // segue para a zona fria (abaixo)
+    if (frios.length && caminho(game, frios)) {
+      memoria.alvo = { tipo: 'fresco', celulas: frios, chave: 'fresco' };
     } else if (!adjacenteAInimigo(game)) {
       game.esperar();
       return true;
     }
   }
-  if (game.player.calor >= 70 && contar(game, 'pasta_termica') > 0) return usarConsumivel(game, 'pasta_termica').ok || true;
-  if (game.grid.at(game.player.c, game.player.r) === COOL && game.player.calor >= 40) { game.esperar(); return true; }
-  // Mantém o alvo escolhido até alcançá-lo ou deixar de existir.
   // Falhas andam: o alvo de falha é recalculado a cada tique, com as posições atuais.
-  if (memoria.alvo && (memoria.alvo.tipo === 'falha' || !valido(game, memoria))) memoria.alvo = null;
+  // Alvo mantido; as células que já deixaram de servir (coletadas, abertas) saem da lista.
+  if (memoria.alvo && memoria.alvo.tipo !== 'npc' && memoria.alvo.tipo !== 'falha') {
+    memoria.alvo.celulas = memoria.alvo.celulas.filter(([c, r]) => alvoAindaValido(game, memoria.alvo.tipo, game.grid.at(c, r)));
+    if (!memoria.alvo.celulas.length) memoria.alvo = null;
+  }
+  if (memoria.alvo && !valido(game, memoria)) memoria.alvo = null;
   if (!memoria.alvo) memoria.alvo = escolherAlvo(game, memoria);
   if (!memoria.alvo) return vaguear(game);
   const ok = irPara(game, memoria.alvo.celulas, memoria, memoria.alvo.npc);
@@ -118,7 +121,9 @@ function escolherAlvo(game, memoria) {
   const alcance = (celulas) => celulas.filter((c) => !memoria.bloqueados.has(cellKey(...c)));
   // Abaixo do nível 3, o robô sobe primeiro: encontra as falhas comuns (dão XP) antes de tentar o chefe.
   const comuns = game.layerState().entities.filter((e) => !e.boss);
-  if (comuns.length && game.player.nivel < 3) {
+  // Nível esperado para a camada: 3 na primeira, +2 em cada camada seguinte.
+  const nivelAlvo = 3 + 2 * LAYER_ORDER.indexOf(game.player.camada);
+  if (comuns.length && game.player.nivel < nivelAlvo) {
     const cel = comuns.map((e) => [e.c, e.r]);
     if (cel.length && caminho(game, cel)) return { tipo: 'falha', celulas: cel, chave: 'falha' };
   }
@@ -135,6 +140,16 @@ function escolherAlvo(game, memoria) {
     if (ok.length && caminho(game, ok)) return { tipo, celulas: ok, chave: `${tipo}:${ok.map((c) => c.join(',')).join(';')}` };
   }
   return null;
+}
+
+// Uma célula ainda serve ao tipo de alvo?
+function alvoAindaValido(game, tipo, ch) {
+  if (tipo === 'chave') return ch === KEY;
+  if (tipo === 'material') return !!PICKUP_ITEMS[ch];
+  if (tipo === 'bau') return ch === CHEST;
+  if (tipo === 'fresco') return ch === COOL;
+  if (tipo === 'saida') return ch === DOWN || ch === GOAL;
+  return true;
 }
 
 // O alvo continua valendo? (ainda existe, e o NPC ainda aceita conversa)

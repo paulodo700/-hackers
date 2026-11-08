@@ -8,7 +8,7 @@ import { LAYER_ORDER, LAYERS } from './layers.js';
 import { generateMap } from './mapgen.js';
 import { estatisticas } from './systems/stats.js';
 import {
-  efeitosDoPasso, coletarNaCelula, moverFalhas, contatoComFalha, interagir, usarFerramenta,
+  efeitosDoPasso, coletarNaCelula, moverFalhas, contatoComFalha, interagir, usarFerramenta, reaparecerFalhas,
 } from './systems/world.js';
 import { COOL, HOT } from './grid.js';
 import { clamp } from './systems/util.js';
@@ -187,6 +187,7 @@ export class Game {
     this.reveal();
     const coletado = coletarNaCelula(this);
     if (efeitosDoPasso(this)) return { type: 'derrota' };
+    reaparecerFalhas(this);
     moverFalhas(this);
     const contato = contatoComFalha(this);
     if (contato && !this.battle) iniciarBatalha(this, { ...contato, camada: p.camada });

@@ -175,3 +175,19 @@ test('vencer o jogo: pisar no anel dá a vitória e trava o movimento', () => {
   assert.equal(g.won, true);
   assert.equal(g.move(-1, 0).type, 'won');
 });
+
+test('falhas reaparecem devagar: a cada 120 passos nasce uma falha longe de Bit, até o limite da camada', () => {
+  const g = novoJogo(12);
+  const camada = g.player.camada;
+  const antes = g.world[camada].entities.filter((e) => !e.boss).length;
+  g.world[camada].grid = new Grid(['#################', '#S...............#', '#################']);
+  g.world[camada].entities = [];
+  g.world[camada].origin = g.world[camada].grid.rows.slice();
+  Object.assign(g.player, { c: 1, r: 1, fc: 1, fr: 0, passos: 119 });
+  g.reveal();
+  g.move(1, 0);
+  const depois = g.world[camada].entities.filter((e) => !e.boss).length;
+  assert.equal(depois, 1, 'nasceu uma falha ao chegar a 120 passos');
+  assert.ok(Math.abs(g.world[camada].entities[0].c - g.player.c) + Math.abs(g.world[camada].entities[0].r - g.player.r) >= 8);
+  assert.ok(antes >= 0);
+});

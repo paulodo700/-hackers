@@ -1,6 +1,6 @@
 // Mundo: calor, inimigos que se movem, contato com falhas, baús, ferramentas, coleta e interação. Sem DOM.
 import {
-  WALL, FLOOR, HOT, COOL, KEY, BLOCKING, PICKUP_ITEMS, TOOL_CELLS, OPENED, NPC, MERCHANT, CHEST,
+  WALL, FLOOR, TRACE, HOT, COOL, KEY, BLOCKING, PICKUP_ITEMS, TOOL_CELLS, OPENED, NPC, MERCHANT, CHEST,
 } from '../grid.js';
 
 export const REFORCO_VIDA = 8; // vida máxima ganha com cada reforço do núcleo
@@ -10,6 +10,11 @@ import { aplicarDanoJogador, derrota, iniciarBatalha } from './combat.js';
 import { progresso } from './quests.js';
 import { iniciarConversa } from './dialogue.js';
 import { lojaDoMercador } from './shops.js';
+import { LAYERS } from '../layers.js';
+
+// Falhas reaparecem devagar, para que a camada não vire um deserto de XP depois da primeira limpeza.
+export const REAPARECE_A_CADA = 120; // passos
+export const DISTANCIA_MINIMA_SPAWN = 8;
 
 const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 export const manhattan = (a, b) => Math.abs(a.c - b.c) + Math.abs(a.r - b.r);
@@ -154,4 +159,37 @@ export function usarFerramenta(game) {
   game.say(`${nomeItem(game, ferramenta)} aplicado.`);
   progresso(game, { tipo: 'reparou', celula: ch });
   return { tipo: 'usada', ferramenta, c, r };
+}
+
+// A cada REAPARECE_A_CADA passos, nasce uma falha da camada numa célula alcançável e longe de Bit,
+// até um limite de falhas vivas que cresce com a camada (4 na primeira, 5 na segunda, ...).
+export function reaparecerFalhas(game) {
+  const p = game.player;
+  if (p.passos === 0 || p.passos % REAPARECE_A_CADA !== 0) return;
+  const camada = game.world[p.camada];
+  const cfg = LAYERS[p.camada];
+  const vivas = camada.entities.filter((e) => !e.boss).length;
+  if (vivas >= 4 + game.layerOrdem(p.camada) || !cfg.enemies?.length) return;
+  const g = camada.grid;
+  const visitado = new Set([`${p.c},${p.r}`]);
+  const fila = [[p.c, p.r]];
+  const alcancaveis = [];
+  while (fila.length) {
+    const [c, r] = fila.shift();
+    for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nc = c + dc, nr = r + dr, k = `${nc},${nr}`;
+      const ch = g.at(nc, nr);
+      if (visitado.has(k) || ch === WALL || BLOCKING.has(ch)) continue;
+      visitado.add(k);
+      fila.push([nc, nr]);
+      alcancaveis.push([nc, nr]);
+    }
+  }
+  const ocupadas = new Set(camada.entities.map((e) => `${e.c},${e.r}`));
+  const longe = alcancaveis.filter(([c, r]) => Math.abs(c - p.c) + Math.abs(r - p.r) >= DISTANCIA_MINIMA_SPAWN
+    && !ocupadas.has(`${c},${r}`) && [FLOOR, TRACE, HOT, COOL].includes(g.at(c, r)));
+  const cell = escolher(game.rng, longe);
+  if (!cell) return;
+  const foe = escolher(game.rng, cfg.enemies)[0];
+  camada.entities.push(game.novaEntidade(p.camada, foe, cell[0], cell[1], false));
 }

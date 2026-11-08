@@ -4,7 +4,6 @@ export const RECEITAS = {
   reparo_trilha: { nome: 'Reparo de trilha', produz: 'reparo_trilha', qtd: 1, custo: { liga_ferrugem: 2, fio_cobre: 1 }, ciclos: 0 },
   ajuste_energia: { nome: 'Ajuste de energia', produz: 'ajuste_energia', qtd: 1, custo: { cristal_silicio: 2, fio_cobre: 1 }, ciclos: 0 },
   reforco_nucleo: { nome: 'Reforço do núcleo', produz: 'reforco_nucleo', qtd: 1, custo: { fio_cobre: 3, liga_ferrugem: 1 }, ciclos: 0 },
-  chave_nucleo: { nome: 'Chave do núcleo', produz: 'chave_nucleo', qtd: 1, custo: { cristal_silicio: 1, placa_base: 1 }, ciclos: 10 },
 
   pasta_termica: { nome: 'Pasta térmica', produz: 'pasta_termica', qtd: 1, custo: { polimero_termico: 1, fio_cobre: 1 }, ciclos: 0 },
   refrigerante: { nome: 'Refrigerante', produz: 'refrigerante', qtd: 1, custo: { polimero_termico: 2, cristal_silicio: 1 }, ciclos: 5 },
