@@ -1,11 +1,13 @@
 // Ponto de entrada: renderizador, câmera, laço principal e ligação entre os sistemas.
 import * as THREE from 'three';
 import { ZONES, START_ZONE } from './data/zones.js';
-import { NPCS, QUESTS, ENEMIES, ITEMS, INTRO_TEXT, ENDING } from './data/content.js';
+import {
+  NPCS, QUESTS, ENEMIES, ITEMS, INTRO_TEXT, ENDINGS, VIGIA_CHOICE, VIGIA_CHOICES, ENDING_RESUME,
+} from './data/content.js';
 import {
   state, resetState, saveGame, loadGame, hasSave, maxHp, maxEn, gainXp, addItem,
-  setFlag, hasFlag, bump, meets, questStatus, questStage, startQuest, checkQuests,
-  discoverZone, clampVitals, activeQuestId,
+  setFlag, hasFlag, bump, meets, questStage, startQuest, checkQuests,
+  discoverZone, clampVitals, activeQuestId, sceneMatches, questStatus,
 } from './state.js';
 import { buildZone } from './world.js';
 import {
@@ -17,9 +19,19 @@ import * as UI from './ui.js';
 import { startBattle, closeBattleScreen, isBattleOpen } from './battle.js';
 import { startRepair, isRepairOpen, bindRepairUI, repairDebug } from './repair.js';
 import { CHEST_LOOT, requirementText } from './loot.js';
+import { settings, loadSettings, applySettings, saveSettings, vibrate } from './settings.js';
+import { unlockAudio, sfx, setMusicZone, setSoundEnabled } from './audio.js';
 
 const el = (id) => document.getElementById(id);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+// Configuração de reparo por zona: tamanho do tabuleiro, tempo limite (s) e fusíveis
+const REPAIR_CFG = {
+  cache: { size: 4, timeLimit: 0, fuses: 1 },
+  regs: { size: 5, timeLimit: 120, fuses: 1 },
+  alu: { size: 5, timeLimit: 0, fuses: 2 },
+  pipeline: { size: 6, timeLimit: 90, fuses: 2 },
+};
 
 // ---------- Renderizador e cena ----------
 const canvas = el('game');
@@ -61,6 +73,8 @@ let player = null;
 let entities = [];
 let roamers = [];
 let running = false;
+let transitioning = false;
+let battlePending = false; // evita duas batalhas ao mesmo tempo quando vários glitches encostam
 let yaw = 0;
 let camDist = 11;
 let lastTile = null;
@@ -73,16 +87,6 @@ function autosave() {
   const t = player.tile();
   state.pos = { c: t.c, r: t.r };
   saveGame();
-}
-
-function matchWhen(w) {
-  if (!w) return true;
-  if (w.quest) {
-    if (w.done) return questStatus(w.quest) === 'done';
-    return questStage(w.quest) === w.stage;
-  }
-  if (w.flag) return hasFlag(w.flag);
-  return true;
 }
 
 function describeRewards(done) {
@@ -101,7 +105,7 @@ function applyActions(actions = []) {
   }
   const done = checkQuests();
   msgs.push(...describeRewards(done));
-  if (msgs.length) UI.toast(msgs.join(' · '), 4200);
+  if (msgs.length) { UI.toast(msgs.join(' · '), 4200); sfx('chest'); }
   UI.updateHud();
   UI.updateQuestBox();
   autosave();
@@ -126,6 +130,8 @@ function loadZone(id, fromId = null, tile = null, quiet = false) {
   scene.background.set(def.theme.fog);
   scene.fog.color.set(def.theme.fog);
   scene.fog.density = id === 'core' ? 0.045 : 0.03;
+  hemi.color.set(def.theme.sky);
+  setMusicZone(id);
 
   entities = createMarkerEntities(zone, scene);
   entities.forEach(refreshEntity);
@@ -180,17 +186,25 @@ function nearestEntity(maxDist = 2.4) {
 }
 
 function promptFor(e) {
-  if (e.type === 'npc') return `E · Falar com ${e.name}`;
+  if (e.type === 'npc') {
+    if (NPCS[e.id]?.shop) return `E · Comprar e vender (${e.name})`;
+    return `E · Falar com ${e.name}`;
+  }
+  if (e.type === 'bench') return 'E · Bancada de criação';
   if (e.type === 'chest') return e.opened ? 'Baú vazio' : 'E · Abrir baú';
   if (e.type === 'repair') return e.fixed ? 'Trilha restaurada' : 'E · Reparar trilha';
-  if (e.type === 'boss') return `E · Enfrentar ${ENEMIES[e.enemy].name.split(' —')[0]}`;
+  if (e.type === 'boss') {
+    if (e.enemy === 'vigia') return hasFlag('ending_paz') || hasFlag('ending_guerra') ? 'O Vigia observa em silêncio' : 'E · Falar com o Vigia';
+    return `E · Enfrentar ${ENEMIES[e.enemy].name.split(' —')[0]}`;
+  }
   return '';
 }
 
 function interact(e) {
   if (e.type === 'npc') {
     const def = NPCS[e.id];
-    const sc = def.scenes.find((s) => !s.when || matchWhen(s.when));
+    if (def.shop) return UI.openShop('buy', { title: def.name, onChange: () => UI.updateHud() });
+    const sc = def.scenes.find((s) => !s.when || sceneMatches(s.when));
     if (!sc) return;
     const lines = sc.lines.map((l) => ({ s: l.s || def.name, t: l.t }));
     // Cenas genéricas lembram o objetivo atual da missão ativa
@@ -202,6 +216,9 @@ function interact(e) {
     UI.openDialog(lines, () => applyActions(sc.actions));
     return;
   }
+  if (e.type === 'bench') {
+    return UI.openShop('craft', { title: 'Bancada de criação', onChange: () => UI.updateHud() });
+  }
   if (e.type === 'chest') {
     if (hasFlag(`opened_${e.id}`)) return UI.toast('Este baú já foi esvaziado.');
     setFlag(`opened_${e.id}`);
@@ -211,38 +228,70 @@ function interact(e) {
     const credits = 5 + state.level * 2;
     state.gold += credits;
     refreshEntity(e);
+    sfx('chest');
     UI.toast(`Baú aberto: ${names.join(', ')} · +${credits} cr`, 3600);
     afterProgress();
     return;
   }
   if (e.type === 'repair') {
     if (hasFlag(`repaired_${e.id}`)) return UI.toast('Esta trilha já foi restaurada.');
-    const size = zone.id === 'cache' ? 4 : zone.id === 'pipeline' ? 6 : 5;
+    const cfg = REPAIR_CFG[zone.id] || REPAIR_CFG.cache;
     startRepair({
-      size,
+      size: cfg.size,
+      timeLimit: cfg.timeLimit,
+      fuses: cfg.fuses,
+      zoneId: zone.id,
       title: `Reparo — ${zone.name}`,
-      onDone: (ok) => {
-        if (!ok) return UI.toast('Reparo interrompido.');
+      onDone: (ok, score, reason) => {
+        if (!ok) { sfx('locked'); return UI.toast(reason === 'timeout' ? 'Tempo esgotado. Tente de novo.' : 'Reparo interrompido.'); }
         setFlag(`repaired_${e.id}`);
         bump(`repair_${zone.id}`);
         refreshEntity(e);
-        gainXp(20);
+        const xp = 20 + Math.round(score / 50);
+        gainXp(xp);
         state.gold += 10;
-        UI.toast('Trilha restaurada! +20 XP · +10 cr', 3000);
+        UI.toast(`Trilha restaurada! Pontos: ${score} · +${xp} XP · +10 cr`, 3600);
         afterProgress();
       },
     });
     return;
   }
   if (e.type === 'boss') {
+    if (e.enemy === 'vigia') return interactVigia(e);
     const def = ENEMIES[e.enemy];
     UI.openDialog([{ s: def.name, t: def.lore }, { s: 'Bit', t: 'Vou consertar o que você quebrou.' }], () => beginBattle(e.enemy, e));
   }
 }
 
+// Confronto com o Vigia: escolha entre paz e guerra
+function interactVigia(e) {
+  if (hasFlag('ending_paz') || hasFlag('ending_guerra')) return UI.toast('O Vigia observa em silêncio.');
+  UI.openDialog(VIGIA_CHOICE, (choice) => {
+    if (choice === 'paz') {
+      setFlag('choice_paz');
+      setFlag('vigia_resolvido');
+      setFlag('boss_vigia');
+      removeEntity(e, scene);
+      playEnding('paz');
+    } else {
+      setFlag('choice_guerra');
+      beginBattle('vigia', e);
+    }
+  }, VIGIA_CHOICES);
+}
+
+function playEnding(kind) {
+  const lines = ENDINGS[kind];
+  UI.openDialog(lines, () => {
+    setFlag(`ending_${kind}`);
+    UI.toast(ENDING_RESUME, 4200);
+    afterProgress();
+  });
+}
+
 function afterProgress(extra = {}) {
   const done = [...(extra.done || []), ...checkQuests()];
-  if (done.length) UI.toast(describeRewards(done).join(' · '), 4200);
+  if (done.length) { UI.toast(describeRewards(done).join(' · '), 4200); sfx('win'); }
   UI.updateHud();
   UI.updateQuestBox();
   autosave();
@@ -250,11 +299,18 @@ function afterProgress(extra = {}) {
 
 // ---------- Batalhas ----------
 function beginBattle(enemyId, entity) {
+  setMusicZone('battle');
   startBattle(enemyId, (result, extra = {}) => {
     closeBattleScreen();
+    setMusicZone(zone.id);
     if (result === 'win') {
-      if (entity && entity.type === 'boss') removeEntity(entity, scene);
-      if (enemyId === 'vigia') return onEnding();
+      if (entity && entity.type === 'boss') { removeEntity(entity, scene); setFlag(`boss_${enemyId}`); }
+      player.play('victory');
+      if (enemyId === 'vigia') {
+        setFlag('vigia_resolvido');
+        playEnding('guerra');
+        return;
+      }
       afterProgress(extra);
       return;
     }
@@ -265,6 +321,7 @@ function beginBattle(enemyId, entity) {
       clampVitals();
       const sp = zone.spawn;
       player.setTile(sp.c, sp.r);
+      player.play('hurt');
       lastTile = { c: sp.c, r: sp.r };
       updateSunAndCamera(1);
       UI.toast('Você foi restaurado no ponto seguro. Perdeu 10% dos créditos.', 3800);
@@ -277,35 +334,45 @@ function beginBattle(enemyId, entity) {
   });
 }
 
-function onEnding() {
-  UI.openDialog(ENDING, () => {
-    setFlag('ending_seen');
-    UI.toast('Obrigado por jogar Anel Zero! Continue explorando.', 4200);
-    afterProgress();
-  });
-}
-
 // ---------- Portais ----------
 function tryPortal(p, prev) {
   if (!meets(p.requires)) {
+    sfx('locked');
     UI.toast(requirementText(p.requires), 3200);
     player.setTile(prev.c, prev.r);
     lastTile = prev;
     return;
   }
-  loadZone(p.to, zone.id);
+  transitioning = true;
+  sfx('portal');
+  UI.fadeTo(() => loadZone(p.to, zone.id)).then(() => { transitioning = false; });
 }
 
 // ---------- Menus ----------
 function openMainMenu() {
-  if (!running || UI.isDialogOpen() || isBattleOpen() || isRepairOpen()) return;
+  if (!running || UI.isDialogOpen() || isBattleOpen() || isRepairOpen() || UI.isShopOpen()) return;
+  sfx('ui');
   UI.openMenu('status', { refresh: () => { UI.updateHud(); UI.updateQuestBox(); } });
 }
 
 function busy() {
-  return UI.isDialogOpen() || UI.isMenuOpen() || isBattleOpen() || isRepairOpen() || !running;
+  return UI.isDialogOpen() || UI.isMenuOpen() || UI.isShopOpen() || isBattleOpen() || isRepairOpen() || !running || transitioning;
 }
 
+input.onKey = (code, type, e) => {
+  // N liga e desliga o som
+  if (code === 'KeyN' && !e.repeat) {
+    setSoundEnabled(!settings.sound);
+    saveSettings();
+    UI.toast(settings.sound ? 'Som ligado' : 'Som desligado', 1500);
+    return true;
+  }
+  // 1, 2, 3 escolhem nas caixas de diálogo com opções
+  if (/^Digit[1-3]$/.test(code) && UI.isDialogOpen()) {
+    return UI.chooseByIndex(Number(code.slice(-1)));
+  }
+  return false;
+};
 input.onInteract = () => {
   if (UI.isDialogOpen()) return UI.advanceDialog();
   if (!running || busy()) return;
@@ -313,23 +380,31 @@ input.onInteract = () => {
   if (e) interact(e);
 };
 input.onMenu = () => {
+  if (UI.isShopOpen()) return UI.closeShop();
   if (UI.isMenuOpen()) return UI.closeMenu();
   openMainMenu();
 };
 
-el('dialog').addEventListener('click', () => UI.advanceDialog());
+el('dialog').addEventListener('click', (ev) => {
+  // Cliques nos botões de escolha são tratados pela própria UI
+  if (ev.target.closest('#dlg-choices button')) return;
+  UI.advanceDialog();
+});
 el('btn-menu').addEventListener('click', openMainMenu);
 el('btn-close').addEventListener('click', () => UI.closeMenu());
+el('shop-close').addEventListener('click', () => UI.closeShop());
 el('btn-save').addEventListener('click', () => {
   autosave();
+  sfx('ui');
   UI.toast('Jogo salvo.');
 });
 UI.bindMenuUI();
+UI.bindShopUI();
 bindRepairUI();
 
 // ---------- Título ----------
 function showScreen(id) {
-  for (const s of ['title', 'menu', 'battle', 'repair', 'controls']) el(s).classList.toggle('hidden', s !== id);
+  for (const s of ['title', 'menu', 'battle', 'repair', 'controls', 'shop']) el(s).classList.toggle('hidden', s !== id);
 }
 
 function enterGame() {
@@ -345,16 +420,19 @@ function updateTouchVisibility() {
 }
 
 el('btn-new').addEventListener('click', () => {
+  unlockAudio();
   resetState();
   showScreen(null);
   loadZone(START_ZONE);
   enterGame();
+  sfx('ui');
   UI.openDialog(INTRO_TEXT, () => {
-    UI.toast('Use WASD/Setas ou o joystick para explorar.', 3400);
+    UI.toast('Use WASD/Setas ou o joystick para explorar. N liga e desliga o som.', 3800);
   });
 });
 
 el('btn-continue').addEventListener('click', () => {
+  unlockAudio();
   if (!loadGame()) return;
   showScreen(null);
   const pos = state.pos && ZONES[state.zone] ? state.pos : null;
@@ -364,6 +442,10 @@ el('btn-continue').addEventListener('click', () => {
 
 el('btn-controls').addEventListener('click', () => showScreen('controls'));
 el('btn-controls-back').addEventListener('click', () => showScreen('title'));
+
+// Desbloqueia o áudio no primeiro gesto (exigência dos navegadores)
+window.addEventListener('pointerdown', () => unlockAudio(), { once: true });
+window.addEventListener('keydown', () => unlockAudio(), { once: true });
 
 // Mostra os botões de título e atualiza o aviso de save
 function refreshTitle() {
@@ -410,23 +492,24 @@ function frame(now) {
     const wz = input.moveX * rz + input.moveY * fz;
     const prev = { c: lastTile.c, r: lastTile.r };
     player.update(dt, { moveX: wx, moveY: wz }, zone, now);
+    if (player.moving && player.consumeStep()) sfx('step');
 
     const tile = player.tile();
     if (tile.c !== lastTile.c || tile.r !== lastTile.r) {
       const portal = zone.portals.find((p) => p.c === tile.c && p.r === tile.r);
       lastTile = tile;
-      if (portal) {
-        tryPortal(portal, prev);
-      }
+      if (portal) tryPortal(portal, prev);
     }
 
     // Glitches que perseguem
     const hits = updateRoamers(roamers, zone, { x: player.x, z: player.z }, dt, now);
-    if (hits.length && !isBattleOpen()) {
+    if (hits.length && !isBattleOpen() && !battlePending) {
       const rm = hits[0];
       rm.alive = false;
       scene.remove(rm.obj);
-      beginBattle(rm.enemy, null);
+      battlePending = true;
+      player.play('attack');
+      setTimeout(() => { battlePending = false; beginBattle(rm.enemy, null); }, 380);
     }
   } else {
     player.update(dt, { moveX: 0, moveY: 0 }, zone, now);
@@ -457,7 +540,12 @@ function frame(now) {
 window.__anelZero = {
   scene, camera, state, loadZone, beginBattle, interact, nearestEntity, repairDebug,
   get zone() { return zone; }, get player() { return player; }, get entities() { return entities; },
+  get transitioning() { return transitioning; },
 };
+
+// Ajustes salvos, aplicados antes de desenhar a tela
+loadSettings();
+applySettings();
 
 // Carrega o fundo do título e inicia o laço
 loadZone(START_ZONE, null, null, true);

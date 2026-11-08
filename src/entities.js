@@ -28,23 +28,85 @@ function glowMat(color, intensity = 1.2) {
   return new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: intensity, roughness: 0.35, metalness: 0.2 });
 }
 
-function makeNpc(def) {
+// Acessório marcante de cada NPC: facilita reconhecer personagens de longe.
+const NPC_LOOK = {
+  sementa: 'leaf', bigorna: 'anvil', rebite: 'goggles', ponteiro: 'pointer',
+  arquivista: 'books', correio: 'satchel', lojista: 'apron', arquivista_final: 'books',
+};
+
+function makeNpc(def, id) {
   const g = new THREE.Group();
   const col = new THREE.Color(def.color || '#7dfff0');
-  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.55, 1.2, 14), new THREE.MeshStandardMaterial({ color: col.clone().multiplyScalar(0.5), roughness: 0.5 }));
+  const cloth = new THREE.MeshStandardMaterial({ color: col.clone().multiplyScalar(0.45), roughness: 0.55 });
+  const metal = new THREE.MeshStandardMaterial({ color: 0x8fa2ad, roughness: 0.3, metalness: 0.8 });
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.55, 1.2, 14), cloth);
   body.position.y = 0.8;
+  const belt = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.05, 6, 20), metal);
+  belt.rotation.x = Math.PI / 2; belt.position.y = 0.36;
   const head = new THREE.Mesh(new THREE.SphereGeometry(0.38, 18, 14), glowMat(col, 0.35));
   head.position.y = 1.8;
   const visor = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.14, 0.08), new THREE.MeshBasicMaterial({ color: 0x0a0a12 }));
   visor.position.set(0, 1.84, 0.33);
   const ring = new THREE.Mesh(new THREE.TorusGeometry(0.72, 0.04, 8, 28), glowMat(col, 2));
   ring.rotation.x = Math.PI / 2; ring.position.y = 0.05;
-  g.add(body, head, visor, ring);
+  g.add(body, belt, head, visor, ring);
   g.userData.ring = ring;
+  g.userData.head = head;
+  g.userData.look = NPC_LOOK[id] || 'plain';
+  addLook(g, g.userData.look, col, metal, cloth);
   const label = nameSprite(def.name, def.color || '#7dfff0');
   label.position.y = 2.6;
   g.add(label);
   return g;
+}
+
+function addLook(g, look, col, metal, cloth) {
+  const glow = glowMat(col, 1.2);
+  if (look === 'leaf') {
+    for (const s of [-1, 1]) {
+      const leaf = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.42, 6), glow);
+      leaf.position.set(s * 0.16, 2.2, 0); leaf.rotation.z = -s * 0.5;
+      g.add(leaf);
+    }
+  } else if (look === 'anvil') {
+    const pad = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.22, 0.6), metal);
+    pad.position.set(0, 1.45, 0);
+    const hammer = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.9, 0.2), metal);
+    hammer.position.set(0.5, 1.2, -0.42); hammer.rotation.z = 0.4;
+    g.add(pad, hammer);
+  } else if (look === 'goggles') {
+    for (const s of [-1, 1]) {
+      const lens = new THREE.Mesh(new THREE.TorusGeometry(0.12, 0.035, 8, 16), metal);
+      lens.position.set(s * 0.15, 1.9, 0.34);
+      g.add(lens);
+    }
+    const strap = new THREE.Mesh(new THREE.TorusGeometry(0.4, 0.02, 6, 24, Math.PI), metal);
+    strap.position.set(0, 1.9, 0.02); strap.rotation.y = Math.PI / 2;
+    g.add(strap);
+  } else if (look === 'pointer') {
+    const hand = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.9, 0.06), metal);
+    hand.position.set(0.6, 1.4, 0.1);
+    hand.rotation.z = -0.5;
+    g.add(hand);
+  } else if (look === 'books') {
+    for (let i = 0; i < 3; i++) {
+      const b = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.12, 0.36), cloth);
+      b.position.set(0, 1.0 + i * 0.13, -0.5);
+      g.add(b);
+    }
+  } else if (look === 'satchel') {
+    const bag = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.42, 0.22), cloth);
+    bag.position.set(-0.5, 0.7, 0.1);
+    const strapBag = new THREE.Mesh(new THREE.BoxGeometry(0.06, 1.2, 0.06), cloth);
+    strapBag.position.set(-0.1, 1.2, 0.3); strapBag.rotation.z = 0.5;
+    g.add(bag, strapBag);
+  } else if (look === 'apron') {
+    const apron = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.9, 0.06), new THREE.MeshStandardMaterial({ color: 0xf0e6c8, roughness: 0.8 }));
+    apron.position.set(0, 0.8, 0.5);
+    const till = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.14, 0.3), metal);
+    till.position.set(0.7, 0.4, 0.2);
+    g.add(apron, till);
+  }
 }
 
 function makeChest(id) {
@@ -122,6 +184,26 @@ function makeRoamer(def) {
   return g;
 }
 
+// Bancada de criação: mesa com painel de circuito e ferramentas
+function makeBench(id) {
+  const g = new THREE.Group();
+  const top = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.14, 0.9), new THREE.MeshStandardMaterial({ color: 0x4a3a2a, roughness: 0.7 }));
+  top.position.y = 0.95;
+  const panel = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.06, 0.7), glowMat(0x7CFC9A, 0.9));
+  panel.position.y = 1.04;
+  for (const x of [-0.8, 0.8]) {
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.95, 0.8), new THREE.MeshStandardMaterial({ color: 0x2b2118, roughness: 0.8 }));
+    leg.position.set(x, 0.47, 0);
+    g.add(leg);
+  }
+  const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.18, 12, 10), glowMat(0xffd166, 2));
+  lamp.position.set(0.6, 1.5, -0.2);
+  g.add(top, panel, lamp);
+  g.userData.lamp = lamp;
+  g.userData.id = id;
+  return g;
+}
+
 // Cria entidades a partir dos marcadores da zona.
 export function createMarkerEntities(layout, scene) {
   const list = [];
@@ -132,10 +214,12 @@ export function createMarkerEntities(layout, scene) {
     if (m.type === 'npc') {
       const def = NPCS[m.id];
       if (!def) continue;
-      obj = makeNpc(def);
+      obj = makeNpc(def, m.id);
       entity.name = def.name;
     } else if (m.type === 'chest') {
       obj = makeChest(m.id);
+    } else if (m.type === 'bench') {
+      obj = makeBench(m.id);
     } else if (m.type === 'repair') {
       obj = makeRepair(m.id);
     } else if (m.type === 'boss') {
@@ -253,7 +337,11 @@ export function updateRoamers(roamers, layout, playerPos, dt, t) {
 export function animateEntities(entities, t) {
   for (const e of entities) {
     if (!e.obj) continue;
-    if (e.type === 'npc') e.obj.userData.ring.rotation.z = t * 0.002;
+    if (e.type === 'npc') {
+      e.obj.userData.ring.rotation.z = t * 0.002;
+      e.obj.userData.head.position.y = 1.8 + Math.sin(t * 0.002 + e.c) * 0.03;
+    }
+    if (e.type === 'bench') e.obj.userData.lamp.material.emissiveIntensity = 1.6 + Math.sin(t * 0.005) * 0.6;
     if (e.type === 'repair') {
       e.obj.userData.core.rotation.y = t * 0.002;
       e.obj.userData.core.position.y = 0.9 + Math.sin(t * 0.003) * 0.08;

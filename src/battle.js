@@ -1,10 +1,13 @@
 // Batalha por turnos: Ataque, Habilidades, Itens, Defender e Fugir.
+// Inimigos mostram a intenção do próximo golpe. Chefes ganham uma segunda fase ao cair a 50% de vida.
 import { ENEMIES, SKILLS, ITEMS, RARITY } from './data/content.js';
 import {
-  state, atk, def, maxHp, maxEn, clampVitals, gainXp, addItem,
+  state, atk, def, maxHp, maxEn, clampVitals, gainXp, addItem, skillCost, skillLevel,
   useConsumable, bump, discoverEnemy, setFlag, checkQuests,
 } from './state.js';
 import { drawEnemyArt } from './textures.js';
+import { sfx } from './audio.js';
+import { vibrate } from './settings.js';
 
 const el = (id) => document.getElementById(id);
 let active = null;
@@ -23,9 +26,39 @@ function log(text, cls = '') {
 
 function bars() {
   const b = active;
-  el('en-hp').style.width = `${Math.max(0, (b.eHp / b.def.hp) * 100)}%`;
+  if (b) el('en-hp').style.width = `${Math.max(0, (b.eHp / b.def.hp) * 100)}%`;
   el('pl-hp').style.width = `${Math.max(0, (state.hp / maxHp()) * 100)}%`;
   el('pl-en').style.width = `${Math.max(0, (state.en / maxEn()) * 100)}%`;
+}
+
+// Números flutuantes sobre o inimigo (side='enemy') ou sobre o jogador (side='player')
+function popup(text, kind = '', side = 'enemy') {
+  const layer = el('dmg-layer');
+  if (!layer) return;
+  const d = document.createElement('div');
+  d.className = `dmg ${kind}`;
+  d.textContent = text;
+  d.style.left = `${40 + rand(-12, 12)}%`;
+  d.style.top = side === 'enemy' ? `${18 + rand(-4, 4)}%` : `${62 + rand(-4, 4)}%`;
+  layer.appendChild(d);
+  setTimeout(() => d.remove(), 950);
+}
+
+function shakeBattle(heavy = false) {
+  const w = el('battle-wrap');
+  w.classList.remove('shake', 'flash');
+  void w.offsetWidth; // reinicia a animação
+  w.classList.add('shake');
+  if (heavy) w.classList.add('flash');
+  setTimeout(() => w.classList.remove('shake', 'flash'), 450);
+}
+
+function hitEnemyArt() {
+  const c = el('enemy-art');
+  c.classList.remove('hit');
+  void c.offsetWidth;
+  c.classList.add('hit');
+  setTimeout(() => c.classList.remove('hit'), 380);
 }
 
 function drawLoop(t) {
@@ -43,6 +76,26 @@ function cmd(label, onClick, disabled = false, title = '') {
   return b;
 }
 
+// ---- Intenção do inimigo ----
+// Escolhe o próximo golpe e mostra ao jogador antes da sua escolha.
+const INTENTS = {
+  normal: { text: 'Vai atacar.', mult: 1 },
+  pesado: { text: '⚠ Prepara um golpe pesado!', mult: 1.8 },
+  reparar: { text: 'Vai se reparar (+15 HP).', mult: 0 },
+};
+
+function pickIntent() {
+  const e = active.def;
+  if (active.phase2 && Math.random() < 0.4) return 'pesado';
+  if (e.boss && active.eHp < e.hp * 0.3 && Math.random() < 0.35) return 'reparar';
+  return Math.random() < 0.22 ? 'pesado' : 'normal';
+}
+
+function showIntent() {
+  const i = INTENTS[active.intent];
+  el('en-intent').textContent = i.text;
+}
+
 function renderCmds() {
   const box = el('battle-cmds');
   box.innerHTML = '';
@@ -50,8 +103,9 @@ function renderCmds() {
   if (active.menu === 'skills') {
     for (const s of SKILLS) {
       const ok = state.level >= s.level;
-      const can = ok && state.en >= s.cost;
-      const label = ok ? `${s.name} (${s.cost} EN)` : `${s.name} (Nv ${s.level})`;
+      const cost = skillCost(s);
+      const can = ok && state.en >= cost;
+      const label = ok ? `${s.name} (${cost} EN)` : `${s.name} (Nv ${s.level})`;
       box.appendChild(cmd(label, () => playerSkill(s), !can, s.desc));
     }
     box.appendChild(cmd('← Voltar', () => { active.menu = 'main'; renderCmds(); }));
@@ -79,26 +133,39 @@ function dmgFrom(attack, defense, mult = 1) {
   return Math.max(1, Math.round(base * rand(0.9, 1.1)));
 }
 
+function damageEnemy(d, label, kind = '') {
+  active.eHp -= d;
+  hitEnemyArt();
+  popup(`-${d}`, kind, 'enemy');
+  sfx(kind === 'crit' ? 'heavy' : 'hit');
+  bars();
+  return d;
+}
+
 function playerAttack() {
   active.menu = 'main';
   const d = dmgFrom(atk(), active.def.def, 1);
-  active.eHp -= d;
   log(`Você ataca e causa ${d} de dano.`);
+  damageEnemy(d, 'ataque');
   afterPlayerAction();
 }
 
 function playerSkill(s) {
   active.menu = 'main';
-  state.en -= s.cost;
+  state.en -= skillCost(s);
   if (s.heal) {
     const before = state.hp;
     state.hp = Math.min(maxHp(), state.hp + s.heal);
-    log(`${s.name}: você recupera ${state.hp - before} HP.`, 'good');
+    const gained = state.hp - before;
+    log(`${s.name}: você recupera ${gained} HP.`, 'good');
+    popup(`+${gained}`, 'heal', 'player');
+    sfx('heal');
   } else {
-    let defn = active.def.def * (1 - (s.pierce || 0));
+    const defn = active.def.def * (1 - (s.pierce || 0));
     const d = dmgFrom(atk(), defn, s.mult);
-    active.eHp -= d;
     log(`${s.name} causa ${d} de dano!`, 'hit');
+    damageEnemy(d, s.id, s.mult >= 2 ? 'crit' : '');
+    if (s.mult >= 2) shakeBattle(false);
   }
   afterPlayerAction();
 }
@@ -108,6 +175,8 @@ function playerItem(id) {
   const res = useConsumable(id);
   if (res === null) { log('Item indisponível.', 'muted'); renderCmds(); return; }
   log(`Você usa ${ITEMS[id].name}: ${res}.`, 'good');
+  popup('✚', 'heal', 'player');
+  sfx('heal');
   afterPlayerAction();
 }
 
@@ -116,6 +185,7 @@ function playerDefend() {
   active.guard = true;
   state.en = Math.min(maxEn(), state.en + 5);
   log('Você se protege. O próximo golpe será reduzido.', 'muted');
+  sfx('ui');
   afterPlayerAction();
 }
 
@@ -134,6 +204,15 @@ function playerFlee() {
 function afterPlayerAction() {
   bars();
   if (active.eHp <= 0) return victory();
+  // Segunda fase: chefe com menos da metade da vida
+  if (active.def.boss && !active.phase2 && active.eHp <= active.def.hp * 0.5) {
+    active.phase2 = true;
+    el('enemy-art').classList.add('phase2');
+    log(`${active.def.name} entra na FASE 2! Ataque aumentado.`, 'hit');
+    sfx('heavy');
+    shakeBattle(true);
+    vibrate([60, 40, 60]);
+  }
   active.busy = true;
   renderCmds();
   setTimeout(enemyTurn, 650);
@@ -142,13 +221,32 @@ function afterPlayerAction() {
 function enemyTurn() {
   if (!active || active.over) return;
   const e = active.def;
-  let d = dmgFrom(e.atk, def(), 1);
-  if (active.guard) { d = Math.max(1, Math.round(d * 0.45)); active.guard = false; }
-  state.hp -= d;
-  log(`${e.name} ataca e causa ${d} de dano.`, 'hurt');
-  clampVitals();
-  bars();
-  if (state.hp <= 0) return defeat();
+  const intent = active.intent;
+  if (intent === 'reparar') {
+    const heal = Math.min(15, e.hp - active.eHp);
+    active.eHp += heal;
+    log(`${e.name} se repara (+${heal} de vida).`, 'muted');
+    popup(`+${heal}`, 'heal', 'enemy');
+    sfx('heal');
+    bars();
+  } else {
+    const mult = INTENTS[intent].mult * (active.phase2 ? 1.15 : 1);
+    let d = dmgFrom(e.atk, def(), mult);
+    if (active.guard) { d = Math.max(1, Math.round(d * 0.45)); active.guard = false; }
+    state.hp -= d;
+    const heavy = intent === 'pesado';
+    log(heavy ? `${e.name} acerta um golpe pesado: ${d} de dano!` : `${e.name} ataca e causa ${d} de dano.`, 'hurt');
+    popup(`-${d}`, heavy ? 'crit' : 'hurt', 'player');
+    sfx(heavy ? 'heavy' : 'hurt');
+    shakeBattle(heavy);
+    vibrate(heavy ? [80, 40, 80] : 40);
+    clampVitals();
+    bars();
+    if (state.hp <= 0) return defeat();
+  }
+  // Próxima intenção
+  active.intent = pickIntent();
+  showIntent();
   active.busy = false;
   renderCmds();
 }
@@ -156,6 +254,7 @@ function enemyTurn() {
 function victory() {
   const e = active.def;
   active.over = true;
+  el('en-intent').textContent = '';
   log(`${e.name} foi derrotado!`, 'good');
   const ups = gainXp(e.xp);
   state.gold += e.gold;
@@ -176,12 +275,15 @@ function victory() {
   if (e.boss) setFlag(`boss_${active.enemyId}`);
   discoverEnemy(active.enemyId);
   const done = checkQuests();
+  sfx('win');
   endBattle('win', { ups, drops, done });
 }
 
 function defeat() {
   active.over = true;
+  el('en-intent').textContent = '';
   log('Seus sistemas caíram...', 'hurt');
+  sfx('lose');
   endBattle('lose');
 }
 
@@ -191,6 +293,7 @@ function endBattle(result, extra = {}) {
   cancelAnimationFrame(raf);
   bars(); // atualiza as barras enquanto "active" ainda existe
   active = null;
+  el('enemy-art').classList.remove('phase2');
   const box = el('battle-cmds');
   box.innerHTML = '';
   if (result === 'flee') {
@@ -213,15 +316,22 @@ export function startBattle(enemyId, onEnd) {
   discoverEnemy(enemyId);
   active = {
     enemyId, def, eHp: def.hp, menu: 'main', busy: false, guard: false, over: false, onEnd,
+    phase2: false, intent: 'normal',
   };
+  active.intent = pickIntent();
   el('battle-log').innerHTML = '';
   el('en-name').textContent = def.name;
   el('battle-log').setAttribute('aria-label', `Batalha contra ${def.name}`);
+  el('en-hp').style.width = '100%';
   log(`${def.name} bloqueia o caminho!`, 'hit');
   log(def.lore, 'muted');
+  if (def.boss) log(`Chefe: ${def.name}. Ao cair a 50% de vida, ele entra na fase 2.`, 'muted');
+  if (skillLevel('eficiencia') > 0) log(`Eficiência: habilidades custam ${skillLevel('eficiencia')} EN a menos.`, 'muted');
+  showIntent();
   bars();
   renderCmds();
   el('battle').classList.remove('hidden');
+  sfx('ui');
   raf = requestAnimationFrame(drawLoop);
 }
 

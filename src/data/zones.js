@@ -12,7 +12,7 @@
 
 export const ZONES = {
   cache: {
-    id: 'cache', name: 'Jardim da Cache L1', music: 'calm', encounter: 0.02,
+    id: 'cache', name: 'Jardim da Cache L1', music: 'calm', decor: 'cells', encounter: 0.02,
     theme: { ground: '#0c2b2a', trace: '#1fe6d0', fog: '#06181b', sky: '#071f22', accent: '#7dfff0' },
     enemies: ['pulga'],
     map: [
@@ -30,11 +30,12 @@ export const ZONES = {
       '#.......=.....===......#',
       '#......=====...=.......#',
       '#...........6..........#',
-      '#......................#',
+      '#.V....................#',
       '########################',
     ],
     markers: {
       '1': { type: 'npc', id: 'sementa' },
+      'V': { type: 'npc', id: 'lojista' },
       '2': { type: 'chest', id: 'cache_c1' },
       '3': { type: 'chest', id: 'cache_c2' },
       '4': { type: 'chest', id: 'cache_c3' },
@@ -45,7 +46,7 @@ export const ZONES = {
   },
 
   regs: {
-    id: 'regs', name: 'Planície de Registradores', music: 'wind', encounter: 0.06,
+    id: 'regs', name: 'Planície de Registradores', music: 'wind', decor: 'pins', encounter: 0.06,
     theme: { ground: '#1a2a12', trace: '#b6ff6a', fog: '#0d1a09', sky: '#122410', accent: '#d9ff9f' },
     enemies: ['pulga', 'ruido'],
     map: [
@@ -61,13 +62,14 @@ export const ZONES = {
       '#..==.....#......#.....#',
       '#..==......######.....A#',
       '#..........__________...#',
-      '#...................=..#',
+      '#.K.................=..#',
       '#.....=======.........=#',
       '#......................#',
       '########################',
     ],
     markers: {
       '1': { type: 'npc', id: 'bigorna' },
+      'K': { type: 'bench', id: 'bancada' },
       '2': { type: 'chest', id: 'regs_c1' },
       '3': { type: 'chest', id: 'regs_c2' },
       '4': { type: 'repair', id: 'regs_r1' },
@@ -77,7 +79,7 @@ export const ZONES = {
   },
 
   alu: {
-    id: 'alu', name: 'Forja da ULA', music: 'forge', encounter: 0.08,
+    id: 'alu', name: 'Forja da ULA', music: 'forge', decor: 'gears', encounter: 0.08,
     theme: { ground: '#2a1410', trace: '#ff7a3d', fog: '#1a0b08', sky: '#240e0a', accent: '#ffb07a' },
     enemies: ['ruido', 'bloco'],
     map: [
@@ -111,7 +113,7 @@ export const ZONES = {
   },
 
   pipeline: {
-    id: 'pipeline', name: 'Canyon do Pipeline', music: 'canyon', encounter: 0.07,
+    id: 'pipeline', name: 'Canyon do Pipeline', music: 'canyon', decor: 'pipes', encounter: 0.07,
     theme: { ground: '#10202e', trace: '#4fd3ff', fog: '#070f18', sky: '#0a1a26', accent: '#9be7ff' },
     enemies: ['ruido', 'bloco'],
     map: [
@@ -144,7 +146,7 @@ export const ZONES = {
   },
 
   memory: {
-    id: 'memory', name: 'Cidade dos Bancos de Memória', music: 'city', encounter: 0.03,
+    id: 'memory', name: 'Cidade dos Bancos de Memória', music: 'city', decor: 'towers', encounter: 0.03,
     theme: { ground: '#1c1a2e', trace: '#c084fc', fog: '#0c0a18', sky: '#15122a', accent: '#e1c6ff' },
     enemies: ['bloco'],
     map: [
@@ -179,7 +181,7 @@ export const ZONES = {
   },
 
   bus: {
-    id: 'bus', name: 'Barramento Principal', music: 'boss', encounter: 0.05,
+    id: 'bus', name: 'Barramento Principal', music: 'boss', decor: 'lanes', encounter: 0.05,
     theme: { ground: '#241a12', trace: '#ffd166', fog: '#120c08', sky: '#1d140c', accent: '#ffe39a' },
     enemies: ['bloco', 'ruido'],
     map: [
@@ -213,7 +215,7 @@ export const ZONES = {
   },
 
   core: {
-    id: 'core', name: 'Anel Zero — Núcleo', music: 'final', encounter: 0,
+    id: 'core', name: 'Anel Zero — Núcleo', music: 'final', decor: 'rings', encounter: 0,
     theme: { ground: '#101018', trace: '#ff3ea5', fog: '#06040b', sky: '#0b0814', accent: '#ff9fd2' },
     enemies: [],
     map: [

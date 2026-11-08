@@ -1,7 +1,13 @@
-// Interface: HUD, diálogos com efeito de digitação, notificações e menus.
-import { state, maxHp, maxEn, atk, def, xpForLevel, questStatus, questStage, useConsumable, equip, activeQuestId } from './state.js';
-import { ITEMS, RARITY, QUESTS, QUEST_ORDER, CODEX } from './data/content.js';
+// Interface: HUD, diálogos com escolhas, notificações, menus, loja, bancada e ajustes.
+import {
+  state, maxHp, maxEn, atk, def, xpForLevel, questStatus, questStage, useConsumable, equip,
+  activeQuestId, skillLevel, spendSkillPoint, skillCost, buyPrice, buyItem, sellPrice, sellItem,
+  canCraft, craft,
+} from './state.js';
+import { ITEMS, RARITY, QUESTS, QUEST_ORDER, CODEX, SKILL_TREE, SKILLS, RECIPES, SHOP } from './data/content.js';
 import { drawItemIcon } from './textures.js';
+import { settings, saveSettings, applySettings, TEXT_SIZES, announce } from './settings.js';
+import { setSoundEnabled, sfx } from './audio.js';
 
 const el = (id) => document.getElementById(id);
 
@@ -15,7 +21,7 @@ export function updateHud() {
   el('txt-hp').textContent = `${Math.ceil(state.hp)}/${hp}`;
   el('txt-en').textContent = `${Math.floor(state.en)}/${en}`;
   el('txt-xp').textContent = `${state.xp}/${need}`;
-  el('txt-lvl').textContent = `Nv ${state.level} · ${state.gold} cr`;
+  el('txt-lvl').textContent = `Nv ${state.level} · ${state.gold} cr${state.skillPoints ? ` · ◆${state.skillPoints}` : ''}`;
 }
 
 export function setZoneName(name) {
@@ -31,7 +37,7 @@ export function updateQuestBox() {
   }
   const q = QUESTS[id];
   const idx = questStage(id);
-  el('quest-title').textContent = q.title;
+  el('quest-title').textContent = q.side ? `${q.title} (extra)` : q.title;
   el('quest-obj').textContent = q.stages[Math.min(idx, q.stages.length - 1)].text;
 }
 
@@ -42,6 +48,20 @@ export function toast(msg, ms = 2600) {
   t.classList.remove('hidden');
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => t.classList.add('hidden'), ms);
+  announce(msg);
+}
+
+// Transição: escurece, executa a troca (ex.: carregar zona) e clareia
+export function fadeTo(fn) {
+  const f = el('fade');
+  f.classList.add('on');
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      try { fn(); } finally {
+        setTimeout(() => { f.classList.remove('on'); resolve(); }, 60);
+      }
+    }, 300);
+  });
 }
 
 // ---------- Diálogo ----------
@@ -51,9 +71,10 @@ export function isDialogOpen() {
   return !!dlg;
 }
 
-// Abre diálogo: lines = [{s, t}], onDone chamado ao terminar.
-export function openDialog(lines, onDone) {
-  dlg = { lines, i: 0, typing: null, onDone, full: false };
+// Abre diálogo: lines = [{s, t}]. Se "choices" for dado, ao fim aparecem as opções
+// [{ label, value }] e onDone(value) é chamado com a escolha.
+export function openDialog(lines, onDone, choices = null) {
+  dlg = { lines, i: 0, typing: null, onDone, full: false, choices };
   el('dialog').classList.remove('hidden');
   showLine();
 }
@@ -61,6 +82,9 @@ export function openDialog(lines, onDone) {
 function showLine() {
   const line = dlg.lines[dlg.i];
   el('dlg-name').textContent = line.s;
+  el('dlg-choices').classList.add('hidden');
+  el('dlg-choices').innerHTML = '';
+  el('dlg-next').classList.remove('hidden');
   const text = el('dlg-text');
   text.textContent = '';
   const full = line.t;
@@ -70,8 +94,46 @@ function showLine() {
   dlg.typing = setInterval(() => {
     k += 2;
     text.textContent = full.slice(0, k);
-    if (k >= full.length) { clearInterval(dlg.typing); dlg.full = true; }
+    if (k >= full.length) { clearInterval(dlg.typing); dlg.full = true; onLineDone(); }
   }, 22);
+}
+
+// Ao terminar de digitar a última linha de um diálogo com escolhas, mostra os botões
+function onLineDone() {
+  if (!dlg || !dlg.choices || dlg.i < dlg.lines.length - 1) return;
+  showChoices();
+}
+
+function showChoices() {
+  const box = el('dlg-choices');
+  box.innerHTML = '';
+  dlg.choices.forEach((c, idx) => {
+    const b = document.createElement('button');
+    b.textContent = `${idx + 1}. ${c.label}`;
+    b.addEventListener('click', (e) => { e.stopPropagation(); pickChoice(c.value); });
+    box.appendChild(b);
+  });
+  box.classList.remove('hidden');
+  el('dlg-next').classList.add('hidden');
+  box.firstChild && box.firstChild.focus();
+  sfx('choice');
+}
+
+function pickChoice(value) {
+  if (!dlg) return;
+  const cb = dlg.onDone;
+  dlg = null;
+  el('dialog').classList.add('hidden');
+  cb && cb(value);
+}
+
+// Tecla numérica escolhe uma opção quando o diálogo está em modo de escolha
+export function chooseByIndex(n) {
+  if (!dlg || !dlg.choices || !dlg.full) return false;
+  const c = dlg.choices[n - 1];
+  if (!c) return false;
+  pickChoice(c.value);
+  return true;
 }
 
 export function advanceDialog() {
@@ -80,8 +142,11 @@ export function advanceDialog() {
     clearInterval(dlg.typing);
     el('dlg-text').textContent = dlg.lines[dlg.i].t;
     dlg.full = true;
+    onLineDone();
     return;
   }
+  // Com escolhas na tela, avançar não escolhe por você
+  if (dlg.choices && dlg.i === dlg.lines.length - 1) return;
   dlg.i++;
   if (dlg.i >= dlg.lines.length) {
     const cb = dlg.onDone;
@@ -129,13 +194,18 @@ function iconCanvas(id) {
 }
 
 function renderMenu() {
-  document.querySelectorAll('.tab').forEach((b) => b.classList.toggle('active', b.dataset.tab === menuTab));
+  document.querySelectorAll('.tab[data-tab]').forEach((b) => {
+    b.classList.toggle('active', b.dataset.tab === menuTab);
+    b.setAttribute('aria-selected', String(b.dataset.tab === menuTab));
+  });
   const body = el('menu-body');
   body.innerHTML = '';
   if (menuTab === 'status') renderStatus(body);
   if (menuTab === 'inv') renderInventory(body);
+  if (menuTab === 'skills') renderSkills(body);
   if (menuTab === 'quests') renderQuests(body);
   if (menuTab === 'codex') renderCodex(body);
+  if (menuTab === 'config') renderConfig(body);
 }
 
 function row(label, value) {
@@ -158,6 +228,7 @@ function renderStatus(body) {
     row('Ataque', atk()),
     row('Defesa', def()),
     row('Créditos', state.gold),
+    row('Pontos de habilidade', state.skillPoints),
     row('Missões concluídas', QUEST_ORDER.filter((id) => questStatus(id) === 'done').length),
   );
   body.appendChild(g);
@@ -209,6 +280,49 @@ function renderInventory(body) {
   }
 }
 
+function renderSkills(body) {
+  const p = document.createElement('p');
+  p.className = 'hint';
+  p.style.textAlign = 'left';
+  p.textContent = `Pontos disponíveis: ${state.skillPoints}. Cada nível concede 1 ponto.`;
+  body.appendChild(p);
+  for (const node of SKILL_TREE) {
+    const lv = skillLevel(node.id);
+    const r = document.createElement('div');
+    r.className = 'skill-row';
+    r.innerHTML = '<div class="grow"><div></div><div class="desc"></div><div class="pips"></div></div>';
+    r.querySelector('.grow > div').textContent = `${node.name} (${lv}/${node.max})`;
+    r.querySelector('.desc').textContent = node.desc;
+    r.querySelector('.pips').textContent = '◆'.repeat(lv) + '◇'.repeat(node.max - lv);
+    const b = document.createElement('button');
+    b.textContent = '+1';
+    b.disabled = state.skillPoints <= 0 || lv >= node.max;
+    b.addEventListener('click', () => {
+      if (spendSkillPoint(node.id)) {
+        toast(`${node.name} aumentou.`);
+        sfx('ui');
+        renderMenu();
+        menuActions.refresh && menuActions.refresh();
+      }
+    });
+    r.appendChild(b);
+    body.appendChild(r);
+  }
+  const s = document.createElement('p');
+  s.className = 'hint';
+  s.style.textAlign = 'left';
+  s.textContent = 'Habilidades de combate:';
+  body.appendChild(s);
+  for (const sk of SKILLS) {
+    const d = document.createElement('div');
+    d.className = 'codex-entry';
+    d.innerHTML = '<b></b>';
+    d.querySelector('b').textContent = `${sk.name}`;
+    d.append(` — Nv ${sk.level}, custo ${skillCost(sk)} EN. ${sk.desc}`);
+    body.appendChild(d);
+  }
+}
+
 function renderQuests(body) {
   for (const id of QUEST_ORDER) {
     const q = QUESTS[id];
@@ -228,7 +342,7 @@ function renderQuests(body) {
       const mark = i < idx || st === 'done' ? '✔' : i === idx ? '▶' : '·';
       return `${mark} ${s.text}`;
     }).join('<br>');
-    e.innerHTML = `<b></b><small>${st === 'done' ? 'Concluída' : 'Em andamento'}</small><div style="margin-top:6px;font-size:13px;line-height:1.5"></div>`;
+    e.innerHTML = `<b></b><small>${q.side ? 'Extra · ' : ''}${st === 'done' ? 'Concluída' : 'Em andamento'}</small><div style="margin-top:6px;font-size:13px;line-height:1.5"></div>`;
     e.querySelector('b').textContent = q.title;
     e.querySelector('div').innerHTML = lines;
     body.appendChild(e);
@@ -256,10 +370,186 @@ function renderCodex(body) {
   }
 }
 
+function setting(label, desc, buttonLabel, onClick) {
+  const r = document.createElement('div');
+  r.className = 'setting-row';
+  r.innerHTML = '<div class="grow"><div></div><div class="desc"></div></div>';
+  r.querySelector('.grow > div').textContent = label;
+  r.querySelector('.desc').textContent = desc;
+  const b = document.createElement('button');
+  b.textContent = buttonLabel;
+  b.addEventListener('click', onClick);
+  r.appendChild(b);
+  return r;
+}
+
+function renderConfig(body) {
+  const textName = { normal: 'Normal', lg: 'Grande', xl: 'Muito grande' };
+  body.appendChild(setting('Som', 'Efeitos e trilha procedural. Atalho: N.', settings.sound ? 'Ligado' : 'Desligado', () => {
+    settings.sound = !settings.sound;
+    setSoundEnabled(settings.sound);
+    saveSettings();
+    renderMenu();
+  }));
+  body.appendChild(setting('Vibração', 'Pulsos em golpes e reparos (celulares).', settings.vibe ? 'Ligada' : 'Desligada', () => {
+    settings.vibe = !settings.vibe;
+    saveSettings();
+    renderMenu();
+  }));
+  body.appendChild(setting('Tamanho do texto', 'Aumenta diálogos, painéis e batalhas.', textName[settings.text], () => {
+    const i = TEXT_SIZES.indexOf(settings.text);
+    settings.text = TEXT_SIZES[(i + 1) % TEXT_SIZES.length];
+    applySettings();
+    saveSettings();
+    renderMenu();
+  }));
+  body.appendChild(setting('Alto contraste', 'Fundo preto, bordas e textos de alto contraste.', settings.hc ? 'Ligado' : 'Desligado', () => {
+    settings.hc = !settings.hc;
+    applySettings();
+    saveSettings();
+    renderMenu();
+  }));
+  const p = document.createElement('p');
+  p.className = 'hint';
+  p.style.textAlign = 'left';
+  p.textContent = 'Atalhos: M/Esc menu · N som · E/Espaço ação · 1, 2, 3 escolhas nos diálogos.';
+  body.appendChild(p);
+}
+
 // Ligações de abas
 export function bindMenuUI() {
-  document.querySelectorAll('.tab').forEach((b) => {
+  document.querySelectorAll('.tab[data-tab]').forEach((b) => {
     b.addEventListener('click', () => { menuTab = b.dataset.tab; renderMenu(); });
   });
 }
 
+// ---------- Loja e bancada ----------
+let shopMode = 'buy';
+let shopActions = {};
+
+export function openShop(mode, { title = 'Caixa de Peças', onChange } = {}) {
+  shopMode = mode || 'buy';
+  shopActions = { onChange };
+  el('shop-title').textContent = title;
+  el('shop').classList.remove('hidden');
+  renderShop();
+}
+
+export function closeShop() {
+  el('shop').classList.add('hidden');
+}
+
+export function isShopOpen() {
+  return !el('shop').classList.contains('hidden');
+}
+
+function renderShop() {
+  document.querySelectorAll('.tab[data-shop]').forEach((b) => {
+    b.classList.toggle('active', b.dataset.shop === shopMode);
+  });
+  el('shop-gold').textContent = `Seus créditos: ${state.gold} cr`;
+  const body = el('shop-body');
+  body.innerHTML = '';
+  const refresh = () => { renderShop(); shopActions.onChange && shopActions.onChange(); };
+
+  if (shopMode === 'buy') {
+    for (const [id, price] of Object.entries(SHOP)) {
+      const it = ITEMS[id];
+      const r = document.createElement('div');
+      r.className = 'item-row';
+      r.appendChild(iconCanvas(id));
+      const info = document.createElement('div');
+      info.className = 'grow';
+      info.innerHTML = '<div></div><div class="desc"></div>';
+      info.firstChild.textContent = it.name;
+      info.lastChild.textContent = it.desc;
+      r.appendChild(info);
+      const pr = document.createElement('div');
+      pr.className = 'shop-price';
+      pr.textContent = `${buyPrice(id) ?? price} cr`;
+      r.appendChild(pr);
+      const b = document.createElement('button');
+      b.textContent = 'Comprar';
+      b.disabled = state.gold < price;
+      b.addEventListener('click', () => {
+        if (buyItem(id)) { toast(`Comprado: ${it.name}`); sfx('chest'); } else { sfx('locked'); }
+        refresh();
+      });
+      r.appendChild(b);
+      body.appendChild(r);
+    }
+    return;
+  }
+
+  if (shopMode === 'sell') {
+    const ids = Object.keys(state.inv).filter((id) => sellPrice(id) > 0);
+    if (!ids.length) { body.innerHTML = '<p class="hint">Nada para vender.</p>'; return; }
+    for (const id of ids) {
+      const it = ITEMS[id];
+      const r = document.createElement('div');
+      r.className = 'item-row';
+      r.appendChild(iconCanvas(id));
+      const info = document.createElement('div');
+      info.className = 'grow';
+      info.innerHTML = '<div></div><div class="desc"></div>';
+      info.firstChild.textContent = `${it.name} ×${state.inv[id]}`;
+      info.lastChild.textContent = RARITY[it.rarity].label;
+      r.appendChild(info);
+      const pr = document.createElement('div');
+      pr.className = 'shop-price';
+      pr.textContent = `+${sellPrice(id)} cr`;
+      r.appendChild(pr);
+      const b = document.createElement('button');
+      b.textContent = 'Vender 1';
+      b.addEventListener('click', () => {
+        const got = sellItem(id);
+        if (got) toast(`Vendido: ${it.name} (+${got} cr)`);
+        refresh();
+      });
+      r.appendChild(b);
+      body.appendChild(r);
+    }
+    return;
+  }
+
+  // Bancada de criação
+  for (const rec of RECIPES) {
+    const it = ITEMS[rec.id];
+    const r = document.createElement('div');
+    r.className = 'item-row';
+    r.appendChild(iconCanvas(rec.id));
+    const info = document.createElement('div');
+    info.className = 'grow';
+    info.innerHTML = '<div></div><div class="desc"></div><div class="recipe-need"></div>';
+    info.firstChild.textContent = `${it.name}${rec.qty > 1 ? ` ×${rec.qty}` : ''}`;
+    info.children[1].textContent = it.desc;
+    const need = info.children[2];
+    need.innerHTML = Object.entries(rec.need).map(([mid, n]) => {
+      const have = state.inv[mid] || 0;
+      return `<span class="${have >= n ? 'ok' : 'miss'}">${ITEMS[mid].name} ${have}/${n}</span>`;
+    }).join(' · ');
+    r.appendChild(info);
+    const b = document.createElement('button');
+    b.textContent = 'Criar';
+    b.disabled = !canCraft(rec);
+    b.addEventListener('click', () => {
+      if (craft(rec)) { toast(`Criado: ${it.name}`); sfx('repair'); }
+      refresh();
+    });
+    r.appendChild(b);
+    body.appendChild(r);
+  }
+}
+
+export function bindShopUI() {
+  document.querySelectorAll('.tab[data-shop]').forEach((b) => {
+    b.addEventListener('click', () => { shopMode = b.dataset.shop; renderShop(); });
+  });
+}
+
+// Uso de outras partes do jogo
+export function sellableCount() {
+  return Object.keys(state.inv).filter((id) => sellPrice(id) > 0).length;
+}
+
+export { SHOP, skillLevel, def };

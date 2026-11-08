@@ -13,6 +13,12 @@
 <body>
 <canvas id="game" aria-label="Mundo do jogo"></canvas>
 
+<!-- Anúncios para leitores de tela (ações importantes) -->
+<div id="sr" class="sr-only" aria-live="polite" role="status"></div>
+
+<!-- Transição entre zonas -->
+<div id="fade" aria-hidden="true"></div>
+
 <!-- Tela de título -->
 <section id="title" class="screen">
   <div class="title-card">
@@ -66,7 +72,8 @@
   <div class="dlg-box">
     <div class="dlg-name" id="dlg-name"></div>
     <div class="dlg-text" id="dlg-text"></div>
-    <div class="dlg-next">▼ toque / Espaço</div>
+    <div class="dlg-choices hidden" id="dlg-choices"></div>
+    <div class="dlg-next" id="dlg-next">▼ toque / Espaço</div>
   </div>
 </section>
 
@@ -77,8 +84,10 @@
     <div class="tabs">
       <button data-tab="status" class="tab active">Status</button>
       <button data-tab="inv" class="tab">Inventário</button>
+      <button data-tab="skills" class="tab">Árvore</button>
       <button data-tab="quests" class="tab">Missões</button>
       <button data-tab="codex" class="tab">Códex</button>
+      <button data-tab="config" class="tab">Ajustes</button>
     </div>
     <div id="menu-body"></div>
     <div class="menu-foot">
@@ -88,13 +97,31 @@
   </div>
 </section>
 
+<!-- Loja e bancada de criação -->
+<section id="shop" class="screen hidden">
+  <div class="panel">
+    <h2 id="shop-title">Caixa de Peças</h2>
+    <div class="tabs">
+      <button data-shop="buy" class="tab active">Comprar</button>
+      <button data-shop="sell" class="tab">Vender</button>
+      <button data-shop="craft" class="tab">Criar</button>
+    </div>
+    <p class="hint" id="shop-gold"></p>
+    <div id="shop-body"></div>
+    <div class="menu-foot">
+      <button id="shop-close">Fechar</button>
+    </div>
+  </div>
+</section>
+
 <!-- Batalha -->
 <section id="battle" class="screen hidden">
-  <div class="battle-wrap">
+  <div class="battle-wrap" id="battle-wrap">
     <div class="battle-enemy">
       <canvas id="enemy-art" width="256" height="256"></canvas>
       <div class="enemy-name" id="en-name"></div>
       <div class="track"><div class="fill hp" id="en-hp"></div></div>
+      <div class="intent" id="en-intent" aria-live="polite"></div>
     </div>
     <div class="battle-log" id="battle-log"></div>
     <div class="battle-party">
@@ -103,6 +130,7 @@
       <div class="track"><div class="fill en" id="pl-en"></div></div>
     </div>
     <div class="battle-cmds" id="battle-cmds"></div>
+    <div class="dmg-layer" id="dmg-layer" aria-hidden="true"></div>
   </div>
 </section>
 
@@ -110,6 +138,11 @@
 <section id="repair" class="screen hidden">
   <div class="panel repair-panel">
     <h2 id="rp-title">Reparo de Trilha</h2>
+    <div class="rp-stats">
+      <span id="rp-timer" class="hidden"></span>
+      <span id="rp-moves"></span>
+      <span id="rp-score"></span>
+    </div>
     <p class="hint" id="rp-help"></p>
     <canvas id="rp-canvas" width="480" height="480"></canvas>
     <div class="menu-foot">
@@ -125,9 +158,10 @@
     <ul class="ctrl-list">
       <li><b>Mover:</b> WASD / Setas (PC) · Joystick (celular)</li>
       <li><b>Interagir / Atacar:</b> E / Espaço · botão AÇÃO</li>
-      <li><b>Câmera:</b> arraste o mouse com botão direito · arraste a tela</li>
+      <li><b>Câmera:</b> arraste com o botão direito · arraste a metade direita da tela</li>
       <li><b>Menu:</b> M / Esc · botão MENU</li>
-      <li><b>Reparo:</b> clique nos nós da trilha na ordem numérica</li>
+      <li><b>Som:</b> N liga e desliga o som</li>
+      <li><b>Reparo:</b> clique nos segmentos para girá-los. Fusíveis queimam ao ser energizados.</li>
     </ul>
     <div class="menu-foot"><button id="btn-controls-back">Voltar</button></div>
   </div>

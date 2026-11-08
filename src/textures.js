@@ -145,6 +145,20 @@ export function drawItemIcon(canvas, glyph, color) {
     case 'frag': // fragmento de memória (losango partido)
       path(() => { g.moveTo(0, -15); g.lineTo(12, 0); g.lineTo(2, 4); g.lineTo(6, 15); g.lineTo(-12, 3); g.lineTo(-3, -2); g.closePath(); });
       break;
+    case 'wire': // fio enrolado
+      g.beginPath();
+      for (let i = 0; i < 3; i++) g.ellipse(0, -10 + i * 10, 13 - i * 2, 4, 0, 0, Math.PI * 2);
+      g.stroke();
+      g.beginPath(); g.moveTo(-13, -10); g.lineTo(-13, 10); g.stroke();
+      break;
+    case 'crystal': // cristal hexagonal
+      path(() => { g.moveTo(0, -16); g.lineTo(11, -6); g.lineTo(11, 8); g.lineTo(0, 16); g.lineTo(-11, 8); g.lineTo(-11, -6); g.closePath(); });
+      g.beginPath(); g.moveTo(0, -16); g.lineTo(0, 16); g.moveTo(-11, -6); g.lineTo(11, 8); g.stroke();
+      break;
+    case 'alloy': // lingote de liga
+      path(() => { g.moveTo(-15, 4); g.lineTo(-9, -8); g.lineTo(15, -8); g.lineTo(9, 4); g.closePath(); });
+      path(() => { g.moveTo(-15, 4); g.lineTo(9, 4); g.lineTo(15, 12); g.lineTo(-9, 12); g.closePath(); });
+      break;
     default:
       path(() => { g.arc(0, 0, 13, 0, Math.PI * 2); });
   }

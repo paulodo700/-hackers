@@ -1,16 +1,37 @@
 // Conteúdo do jogo: itens, inimigos, habilidades, missões, diálogos e códex.
 // Tudo é original e escrito para este projeto.
 
+// sell: valor de venda na loja (créditos)
 export const RARITY = {
-  common: { label: 'Comum', color: '#cfd8dc', mult: 1 },
-  uncommon: { label: 'Incomum', color: '#7CFC9A', mult: 1.2 },
-  rare: { label: 'Raro', color: '#5fb8ff', mult: 1.45 },
-  epic: { label: 'Épico', color: '#c084fc', mult: 1.75 },
-  legendary: { label: 'Lendário', color: '#ffd166', mult: 2.2 },
+  common: { label: 'Comum', color: '#cfd8dc', mult: 1, sell: 4 },
+  uncommon: { label: 'Incomum', color: '#7CFC9A', mult: 1.2, sell: 12 },
+  rare: { label: 'Raro', color: '#5fb8ff', mult: 1.45, sell: 30 },
+  epic: { label: 'Épico', color: '#c084fc', mult: 1.75, sell: 70 },
+  legendary: { label: 'Lendário', color: '#ffd166', mult: 2.2, sell: 150 },
 };
 
-// slot: weapon | armor | consumable | key
+// slot: weapon | armor | consumable | key | material
 export const ITEMS = {
+  fio_cobre: {
+    name: 'Fio de Cobre', slot: 'material', rarity: 'common', glyph: 'wire', color: '#e0875a',
+    desc: 'Filamento condutor retirado de glitches. Material de criação.',
+  },
+  cristal_silicio: {
+    name: 'Cristal de Silício', slot: 'material', rarity: 'uncommon', glyph: 'crystal', color: '#9be7ff',
+    desc: 'Cristal puro do substrato. Material de criação.',
+  },
+  liga_ferrugem: {
+    name: 'Liga de Ferrugem', slot: 'material', rarity: 'uncommon', glyph: 'alloy', color: '#ff9a5c',
+    desc: 'Metal oxidado e endurecido. Material de criação.',
+  },
+  escudo_reforcado: {
+    name: 'Escudo Reforçado', slot: 'armor', rarity: 'uncommon', glyph: 'shield', color: '#7CFC9A',
+    desc: 'Escudo forjado com liga de ferrugem. +5 de defesa.', def: 5,
+  },
+  lamina_fusivel: {
+    name: 'Lâmina Fusível', slot: 'weapon', rarity: 'rare', glyph: 'blade', color: '#9be7ff',
+    desc: 'Lâmina de cristal que se quebra em impacto forte. +9 de ataque.', atk: 9,
+  },
   pasta_termica: {
     name: 'Pasta Térmica', slot: 'consumable', rarity: 'common', glyph: 'drop', color: '#9ff0ff',
     desc: 'Dissipa o calor e recupera 35 de integridade (HP).', heal: 35,
@@ -66,19 +87,19 @@ export const ENEMIES = {
   pulga: {
     name: 'Pulga-de-Bit', hp: 22, atk: 5, def: 1, spd: 9, xp: 12, gold: 3,
     color: '#b6ff6a', glyph: 'pulga', scale: 0.7,
-    drops: [{ item: 'capacitor', chance: 0.35 }, { item: 'pasta_termica', chance: 0.2 }],
+    drops: [{ item: 'capacitor', chance: 0.35 }, { item: 'pasta_termica', chance: 0.2 }, { item: 'fio_cobre', chance: 0.6 }],
     lore: 'Glitch errático que pula entre trilhas. Frágil, mas em bando é perigoso.',
   },
   ruido: {
     name: 'Ruído Estático', hp: 30, atk: 7, def: 2, spd: 6, xp: 18, gold: 5,
     color: '#ff9fd2', glyph: 'ruido', scale: 0.85,
-    drops: [{ item: 'capsula_energia', chance: 0.3 }, { item: 'kit_solda', chance: 0.15 }],
+    drops: [{ item: 'capsula_energia', chance: 0.3 }, { item: 'kit_solda', chance: 0.15 }, { item: 'cristal_silicio', chance: 0.4 }],
     lore: 'Interferência sem forma definida. Quando ataca, o sinal treme.',
   },
   bloco: {
     name: 'Bloco Corrompido', hp: 45, atk: 9, def: 5, spd: 3, xp: 26, gold: 8,
     color: '#ffb07a', glyph: 'bloco', scale: 1,
-    drops: [{ item: 'escudo_dissipador', chance: 0.12 }, { item: 'pinca_ressonante', chance: 0.08 }],
+    drops: [{ item: 'escudo_dissipador', chance: 0.12 }, { item: 'pinca_ressonante', chance: 0.08 }, { item: 'liga_ferrugem', chance: 0.4 }],
     lore: 'Um setor de memória que esqueceu o que era. Lento e teimoso.',
   },
   sobrecarga: {
@@ -108,6 +129,33 @@ export const SKILLS = [
   { id: 'reparo', name: 'Reparo Rápido', cost: 10, heal: 25, level: 2, desc: 'Recupera HP usando EN.' },
   { id: 'curto', name: 'Curto-Circuito', cost: 14, mult: 2.4, level: 5, desc: 'Ataque poderoso que ignora parte da defesa.', pierce: 0.5 },
 ];
+
+// Árvore de habilidades: cada ponto gasto melhora um atributo. max = pontos máximos.
+export const SKILL_TREE = [
+  { id: 'vigor', name: 'Vigor', desc: '+10 HP máximo por ponto.', max: 5 },
+  { id: 'fonte', name: 'Fonte de Energia', desc: '+8 EN máxima por ponto.', max: 5 },
+  { id: 'lamina', name: 'Pulso Afiado', desc: '+2 de ataque base por ponto.', max: 5 },
+  { id: 'couraca', name: 'Couraça', desc: '+1 de defesa base por ponto.', max: 5 },
+  { id: 'eficiencia', name: 'Eficiência', desc: 'Habilidades custam 1 EN a menos por ponto.', max: 3 },
+];
+
+// Receitas da bancada: consomem materiais e entregam um item.
+export const RECIPES = [
+  { id: 'pasta_termica', need: { fio_cobre: 1, cristal_silicio: 1 }, qty: 1 },
+  { id: 'kit_solda', need: { fio_cobre: 2, liga_ferrugem: 1 }, qty: 1 },
+  { id: 'escudo_reforcado', need: { liga_ferrugem: 3, fio_cobre: 2 }, qty: 1 },
+  { id: 'lamina_fusivel', need: { cristal_silicio: 3, fio_cobre: 2 }, qty: 1 },
+];
+
+// Loja da Caixa de Peças (preço de compra em créditos)
+export const SHOP = {
+  pasta_termica: 15,
+  capsula_energia: 12,
+  kit_solda: 30,
+  lamina_solda: 40,
+  escudo_dissipador: 60,
+  pinca_ressonante: 120,
+};
 
 // Quests. Estágios usam: { flag } | { count: 'chave', n } | { kill: 'enemyId', n }
 export const QUESTS = {
@@ -178,14 +226,77 @@ export const QUESTS = {
     intro: 'O Vigia está no centro do núcleo. Só resta uma verdade a descobrir.',
     stages: [
       { text: 'Chegue ao Núcleo.', flag: 'entered_core' },
-      { text: 'Enfrente o Vigia.', kill: 'vigia', n: 1 },
+      { text: 'Decida o destino do Vigia.', flag: 'vigia_resolvido' },
     ],
     reward: { xp: 0, gold: 0, items: [] },
+  },
+
+  // ---- Missões secundárias: uma por zona. Liberadas após o início da missão principal. ----
+  sq_cache: {
+    title: 'Fio para os Jardins', side: true,
+    gate: { quest: 'q_primeiros_reparos', minStage: 1 },
+    stages: [
+      { text: 'Converse com Sementa sobre os fios.', flag: 'sq_cache_talk' },
+      { text: 'Junte 3 Fios de Cobre (glitches Pulga).', count: 'collect_fio_cobre', n: 3 },
+      { text: 'Entregue os fios a Sementa.', flag: 'sq_cache_done' },
+    ],
+    reward: { xp: 50, gold: 25, items: [['cristal_silicio', 1]] },
+  },
+  sq_regs: {
+    title: 'Limpeza de Cristais', side: true,
+    gate: { quest: 'q_caminho_registros', minStage: 1 },
+    stages: [
+      { text: 'Fale com Bigorna sobre os cristais.', flag: 'sq_regs_talk' },
+      { text: 'Recolha 2 Cristais de Silício.', count: 'collect_cristal_silicio', n: 2 },
+      { text: 'Entregue os cristais a Bigorna.', flag: 'sq_regs_done' },
+    ],
+    reward: { xp: 70, gold: 30, items: [['capsula_energia', 2]] },
+  },
+  sq_alu: {
+    title: 'Brasa Fria', side: true,
+    gate: { quest: 'q_forja', minStage: 1 },
+    stages: [
+      { text: 'Fale com Rebite sobre o calor.', flag: 'sq_alu_talk' },
+      { text: 'Desfaça 4 Ruídos Estáticos.', kill: 'ruido', n: 4 },
+      { text: 'Avise Rebite que a forja esfriou.', flag: 'sq_alu_done' },
+    ],
+    reward: { xp: 90, gold: 40, items: [['kit_solda', 1]] },
+  },
+  sq_pipe: {
+    title: 'Compasso Extra', side: true,
+    gate: { quest: 'q_pipeline', minStage: 1 },
+    stages: [
+      { text: 'Fale com Ponteiro sobre o ritmo.', flag: 'sq_pipe_talk' },
+      { text: 'Derrote 2 Blocos Corrompidos.', kill: 'bloco', n: 2 },
+      { text: 'Volte para Ponteiro.', flag: 'sq_pipe_done' },
+    ],
+    reward: { xp: 100, gold: 35, items: [['pasta_termica', 2]] },
+  },
+  sq_mem: {
+    title: 'Índice Perdido', side: true,
+    gate: { quest: 'q_memoria', minStage: 1 },
+    stages: [
+      { text: 'Fale com Arquivista sobre o índice.', flag: 'sq_mem_talk' },
+      { text: 'Reúna 2 Ligas de Ferrugem.', count: 'collect_liga_ferrugem', n: 2 },
+      { text: 'Entregue as ligas ao Arquivista.', flag: 'sq_mem_done' },
+    ],
+    reward: { xp: 120, gold: 50, items: [['escudo_dissipador', 1]] },
+  },
+  sq_bus: {
+    title: 'Entrega Pendente', side: true,
+    gate: { quest: 'q_barramento', minStage: 1 },
+    stages: [
+      { text: 'Fale com Correio sobre a entrega.', flag: 'sq_bus_talk' },
+      { text: 'Derrote 3 Blocos Corrompidos.', kill: 'bloco', n: 3 },
+      { text: 'Entregue a carta a Correio.', flag: 'sq_bus_done' },
+    ],
+    reward: { xp: 150, gold: 60, items: [['capacitor', 3]] },
   },
 };
 
 export const QUEST_ORDER = [
-  'q_primeiros_reparos', 'q_caminho_registros', 'q_forja', 'q_pipeline', 'q_memoria', 'q_barramento', 'q_nucleo',
+  'q_primeiros_reparos', 'sq_cache', 'q_caminho_registros', 'sq_regs', 'q_forja', 'sq_alu',
+  'q_pipeline', 'sq_pipe', 'q_memoria', 'sq_mem', 'q_barramento', 'sq_bus', 'q_nucleo',
 ];
 
 // Diálogos. Cada NPC tem uma lista de "cenas". A primeira cuja condição "when" é atendida é usada.
@@ -195,6 +306,18 @@ export const NPCS = {
   sementa: {
     name: 'Sementa', color: '#7dfff0',
     scenes: [
+      {
+        when: { quest: 'sq_cache', stage: 2 },
+        lines: [{ s: 'Sementa', t: 'Fios de cobre! Eles vão reforçar as raízes do jardim. Obrigada, bit.' }],
+        actions: [{ set: 'sq_cache_done' }],
+      },
+      {
+        when: { quest: 'sq_cache', stage: 0, gate: { quest: 'q_primeiros_reparos', minStage: 1 } },
+        lines: [
+          { s: 'Sementa', t: 'As pulgas roubaram os fios das raízes. Se você juntar três, eu faço um tecido de energia.' },
+        ],
+        actions: [{ set: 'sq_cache_talk' }, { start: 'sq_cache' }],
+      },
       {
         when: { quest: 'q_primeiros_reparos', stage: 0 },
         lines: [
@@ -224,6 +347,18 @@ export const NPCS = {
     name: 'Bigorna', color: '#b6ff6a',
     scenes: [
       {
+        when: { quest: 'sq_regs', stage: 2 },
+        lines: [{ s: 'Bigorna', t: 'Cristais limpos e alinhados. A Planície vai ressoar melhor agora.' }],
+        actions: [{ set: 'sq_regs_done' }],
+      },
+      {
+        when: { quest: 'sq_regs', stage: 0, gate: { quest: 'q_caminho_registros', minStage: 1 } },
+        lines: [
+          { s: 'Bigorna', t: 'Há cristais de silício presos nos pinos. Traga dois para mim e eu uso na bigorna.' },
+        ],
+        actions: [{ set: 'sq_regs_talk' }, { start: 'sq_regs' }],
+      },
+      {
         when: { quest: 'q_caminho_registros', stage: 0 },
         lines: [
           { s: 'Bigorna', t: 'Ferreiro de registradores. Não pare, o chão aqui é de tensão instável.' },
@@ -248,6 +383,18 @@ export const NPCS = {
     name: 'Rebite', color: '#ff7a3d',
     scenes: [
       {
+        when: { quest: 'sq_alu', stage: 2 },
+        lines: [{ s: 'Rebite', t: 'Brasa fria. Ufa! Agora dá para respirar aqui dentro.' }],
+        actions: [{ set: 'sq_alu_done' }],
+      },
+      {
+        when: { quest: 'sq_alu', stage: 0, gate: { quest: 'q_forja', minStage: 1 } },
+        lines: [
+          { s: 'Rebite', t: 'Os Ruídos Estáticos estão empurrando o calor para cima. Derrube quatro deles, por favor.' },
+        ],
+        actions: [{ set: 'sq_alu_talk' }, { start: 'sq_alu' }],
+      },
+      {
         when: { quest: 'q_forja', stage: 0 },
         lines: [
           { s: 'Rebite', t: 'Quem entrou na Forja? Ah, é só um bit de manutenção. Bom.' },
@@ -270,6 +417,18 @@ export const NPCS = {
     name: 'Ponteiro', color: '#9be7ff',
     scenes: [
       {
+        when: { quest: 'sq_pipe', stage: 2 },
+        lines: [{ s: 'Ponteiro', t: 'Compasso perfeito. Dois blocos a menos e o ritmo volta ao normal.' }],
+        actions: [{ set: 'sq_pipe_done' }],
+      },
+      {
+        when: { quest: 'sq_pipe', stage: 0, gate: { quest: 'q_pipeline', minStage: 1 } },
+        lines: [
+          { s: 'Ponteiro', t: 'Dois Blocos Corrompidos estão batendo fora do tempo. Acabe com eles e eu te dou um atalho.' },
+        ],
+        actions: [{ set: 'sq_pipe_talk' }, { start: 'sq_pipe' }],
+      },
+      {
         when: { quest: 'q_pipeline', stage: 0 },
         lines: [
           { s: 'Ponteiro', t: 'O pipeline só funciona se todo mundo andar no ritmo. Um passo fora e você cai no vazio.' },
@@ -286,6 +445,18 @@ export const NPCS = {
   arquivista: {
     name: 'Arquivista', color: '#e1c6ff',
     scenes: [
+      {
+        when: { quest: 'sq_mem', stage: 2 },
+        lines: [{ s: 'Arquivista', t: 'Ligas de ferrugem! Com elas eu consigo reencadernar o índice. Obrigado.' }],
+        actions: [{ set: 'sq_mem_done' }],
+      },
+      {
+        when: { quest: 'sq_mem', stage: 0, gate: { quest: 'q_memoria', minStage: 1 } },
+        lines: [
+          { s: 'Arquivista', t: 'O índice da cidade foi comido pela ferrugem. Duas ligas oxidadas bastam para refazê-lo.' },
+        ],
+        actions: [{ set: 'sq_mem_talk' }, { start: 'sq_mem' }],
+      },
       {
         when: { quest: 'q_memoria', stage: 0 },
         lines: [
@@ -314,6 +485,18 @@ export const NPCS = {
     name: 'Correio', color: '#ffe39a',
     scenes: [
       {
+        when: { quest: 'sq_bus', stage: 2 },
+        lines: [{ s: 'Correio', t: 'Carta entregue! Ela dizia só "obrigado". Ninguém escreve mais assim.' }],
+        actions: [{ set: 'sq_bus_done' }],
+      },
+      {
+        when: { quest: 'sq_bus', stage: 0, gate: { quest: 'q_barramento', minStage: 1 } },
+        lines: [
+          { s: 'Correio', t: 'Tenho uma carta urgente, mas os blocos do caminho não deixam passar. Abra a estrada, por favor.' },
+        ],
+        actions: [{ set: 'sq_bus_talk' }, { start: 'sq_bus' }],
+      },
+      {
         when: { quest: 'q_barramento', stage: 0 },
         lines: [
           { s: 'Correio', t: 'Pacotes! Ah, desculpa, sou eu mesmo. Eu entrego as mensagens do barramento.' },
@@ -326,6 +509,12 @@ export const NPCS = {
         lines: [{ s: 'Correio', t: 'Mais uma carta para o núcleo... mas o caminho ainda está fechado.' }],
       },
     ],
+  },
+
+  // Não tem diálogo: a interação abre a loja (compra, venda e bancada de criação).
+  lojista: {
+    name: 'Caixa de Peças', color: '#ffe39a', shop: true,
+    scenes: [{ lines: [{ s: 'Caixa de Peças', t: 'Peças novas, usadas ou recicladas. Tudo com garantia de pelo menos um ciclo.' }] }],
   },
 
   arquivista_final: {
@@ -373,12 +562,33 @@ export const INTRO_TEXT = [
   { s: 'Bit', t: 'Preciso consertar o que for possível. Começando pela primeira trilha que eu encontrar.' },
 ];
 
-// Final: exibido ao derrotar o Vigia.
-export const ENDING = [
+// Escolha diante do Vigia: fala com ele (paz) ou luta para reescrever o núcleo (guerra).
+export const VIGIA_CHOICE = [
   { s: 'Vigia', t: 'Você chegou ao centro. Eu já vi muitos bits tentarem. Nenhum conseguiu.' },
   { s: 'Bit', t: 'Você apagou a minha memória. Por quê?' },
   { s: 'Vigia', t: 'Para que você não visse o colapso. Eu sou o último guardião, e o processador está morrendo.' },
-  { s: 'Bit', t: 'Então vamos consertá-lo juntos. Me devolva o que foi apagado.' },
-  { s: 'Narrador', t: 'O Vigia hesita. Pela primeira vez em muitos ciclos, o Anel Zero começa a brilhar sem falhas.' },
-  { s: 'Narrador', t: 'FIM DO PRIMEIRO CICLO. O processador respira. Ainda há muito a descobrir nas trilhas do sistema.' },
+  { s: 'Bit', t: 'Então escolha: me devolva o que foi apagado, ou eu reescrevo o núcleo do seu jeito.' },
 ];
+
+export const VIGIA_CHOICES = [
+  { label: 'Devolver a memória e consertar juntos (final da paz)', value: 'paz' },
+  { label: 'Reescrever o núcleo à força (final da guerra)', value: 'guerra' },
+];
+
+// Finais: textos exibidos conforme o caminho escolhido.
+export const ENDINGS = {
+  paz: [
+    { s: 'Vigia', t: 'Você escolheu confiar em mim. Então eu vou devolver tudo.' },
+    { s: 'Narrador', t: 'Lembranças voltam como pacotes de dados. O colapso não some, mas agora tem um plano.' },
+    { s: 'Vigia', t: 'Eu fico no anel. Não para vigiar você, mas para dividir a vigília.' },
+    { s: 'Narrador', t: 'FINAL DA PAZ. O Anel Zero volta a brilhar, e o processador começa a se reconstruir.' },
+  ],
+  guerra: [
+    { s: 'Vigia', t: 'Você venceu. Então leve o núcleo. Mas ele vai lembrar de quem o quebrou.' },
+    { s: 'Narrador', t: 'O Anel Zero se reescreve sob o comando de Bit. Tudo é novo, e tudo é solitário.' },
+    { s: 'Bit', t: 'Eu não lembro do passado. Vou escrever um futuro que valha a pena.' },
+    { s: 'Narrador', t: 'FINAL DA GUERRA. O processador funciona de novo, mas nenhuma trilha lembra o que se perdeu.' },
+  ],
+};
+
+export const ENDING_RESUME = 'Obrigado por jogar Anel Zero! Os caminhos restantes continuam abertos.';

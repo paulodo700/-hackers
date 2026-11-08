@@ -1,7 +1,9 @@
-// Estado do jogo: atributos, inventário, bandeiras, contadores, missões, códex e salvamento.
-import { ITEMS, QUESTS, QUEST_ORDER } from './data/content.js';
+// Estado do jogo: atributos, inventário, bandeiras, contadores, missões, habilidades,
+// loja, criação, códex e salvamento versionado.
+import { ITEMS, QUESTS, QUEST_ORDER, RARITY, RECIPES, SHOP, SKILL_TREE, SKILLS } from './data/content.js';
 
-const SAVE_KEY = 'anel-zero-save-v1';
+export const SAVE_VERSION = 2;
+const SAVE_KEY = 'anel-zero-save-v1'; // a chave é a mesma; o campo "version" controla a migração
 
 export function xpForLevel(lvl) {
   return Math.round(40 * Math.pow(lvl, 1.5));
@@ -9,7 +11,9 @@ export function xpForLevel(lvl) {
 
 function freshState() {
   return {
-    level: 1, xp: 0,
+    version: SAVE_VERSION,
+    level: 1, xp: 0, skillPoints: 0,
+    skills: {},
     baseHp: 60, hp: 60, baseEn: 30, en: 30,
     baseAtk: 6, baseDef: 2,
     equip: { weapon: null, armor: null },
@@ -18,6 +22,7 @@ function freshState() {
     flags: {}, counters: {},
     quests: {},
     codex: { zones: {}, enemies: {} },
+    repairBest: {},
     zone: 'cache',
     pos: null,
     playTime: 0,
@@ -30,21 +35,38 @@ export function resetState() {
   Object.assign(state, freshState());
 }
 
+// ---- Árvore de habilidades ----
+export function skillLevel(id) {
+  return state.skills[id] || 0;
+}
+export function spendSkillPoint(id) {
+  const node = SKILL_TREE.find((n) => n.id === id);
+  if (!node || state.skillPoints <= 0 || skillLevel(id) >= node.max) return false;
+  state.skillPoints -= 1;
+  state.skills[id] = skillLevel(id) + 1;
+  clampVitals();
+  return true;
+}
+// Custo real de uma habilidade (Eficiência reduz em 1 por ponto)
+export function skillCost(s) {
+  return Math.max(0, s.cost - skillLevel('eficiencia'));
+}
+
 // ---- Atributos derivados ----
 export function maxHp() {
   const armor = ITEMS[state.equip.armor];
-  return state.baseHp + (state.level - 1) * 10 + (armor?.maxHp || 0);
+  return state.baseHp + (state.level - 1) * 10 + skillLevel('vigor') * 10 + (armor?.maxHp || 0);
 }
 export function maxEn() {
-  return state.baseEn + (state.level - 1) * 5;
+  return state.baseEn + (state.level - 1) * 5 + skillLevel('fonte') * 8;
 }
 export function atk() {
   const w = ITEMS[state.equip.weapon];
-  return state.baseAtk + (state.level - 1) * 2 + (w?.atk || 0);
+  return state.baseAtk + (state.level - 1) * 2 + skillLevel('lamina') * 2 + (w?.atk || 0);
 }
 export function def() {
   const a = ITEMS[state.equip.armor];
-  return state.baseDef + Math.floor((state.level - 1) * 0.8) + (a?.def || 0);
+  return state.baseDef + Math.floor((state.level - 1) * 0.8) + skillLevel('couraca') + (a?.def || 0);
 }
 
 export function clampVitals() {
@@ -92,6 +114,40 @@ export function equip(id) {
   return true;
 }
 
+// ---- Loja e criação ----
+export function buyPrice(id) {
+  return SHOP[id] ?? null;
+}
+export function sellPrice(id) {
+  const it = ITEMS[id];
+  if (!it || it.slot === 'key') return 0;
+  return RARITY[it.rarity].sell;
+}
+export function buyItem(id) {
+  const price = buyPrice(id);
+  if (price === null || state.gold < price) return false;
+  state.gold -= price;
+  addItem(id, 1);
+  return true;
+}
+export function sellItem(id) {
+  const price = sellPrice(id);
+  if (!price || !hasItem(id)) return 0;
+  removeItem(id, 1);
+  state.gold += price;
+  return price;
+}
+export function canCraft(recipe) {
+  return Object.entries(recipe.need).every(([id, n]) => (state.inv[id] || 0) >= n);
+}
+export function craft(recipe) {
+  if (!canCraft(recipe)) return false;
+  for (const [id, n] of Object.entries(recipe.need)) removeItem(id, n);
+  addItem(recipe.id, recipe.qty || 1);
+  return true;
+}
+export { RECIPES, SKILLS };
+
 // ---- Flags e contadores ----
 export function setFlag(key) {
   state.flags[key] = true;
@@ -112,6 +168,19 @@ export function meets(cond) {
   if (typeof cond === 'string') return hasFlag(cond);
   if (cond.count) return counter(cond.count) >= cond.n;
   return false;
+}
+
+// Condição de cena de diálogo:
+//   { quest, stage } | { quest, done: true } | { flag } | { gate: { quest, minStage } } (combinável)
+export function sceneMatches(w) {
+  if (!w) return true;
+  if (w.quest) {
+    const ok = w.done ? questStatus(w.quest) === 'done' : questStage(w.quest) === w.stage;
+    if (!ok) return false;
+  }
+  if (w.flag && !hasFlag(w.flag)) return false;
+  if (w.gate && questStage(w.gate.quest) < w.gate.minStage) return false;
+  return true;
 }
 
 // ---- Missões ----
@@ -156,30 +225,38 @@ export function checkQuests() {
       state.quests[id] = { status: 'done' };
       if (q.reward.gold) state.gold += q.reward.gold;
       for (const [item, n] of q.reward.items || []) addItem(item, n);
+      if (q.reward.xp) gainXp(q.reward.xp);
       done.push({ id, reward: q.reward });
     }
   }
   return done;
 }
 
-// Quem começa uma missão nova, se a anterior estiver concluída, etc.
 export function questCompletedCount() {
   return QUEST_ORDER.filter((id) => questStatus(id) === 'done').length;
 }
 
 // ---- Experiência ----
-// Retorna quantos níveis subiram.
+// Retorna quantos níveis subiram. Cada nível dá 1 ponto de habilidade.
 export function gainXp(n) {
   state.xp += n;
   let ups = 0;
   while (state.xp >= xpForLevel(state.level)) {
     state.xp -= xpForLevel(state.level);
     state.level += 1;
+    state.skillPoints += 1;
     ups += 1;
     state.hp = maxHp();
     state.en = maxEn();
   }
   return ups;
+}
+
+// ---- Reparo: melhor pontuação por zona ----
+export function recordRepairScore(zone, score) {
+  const prev = state.repairBest[zone] || 0;
+  if (score > prev) state.repairBest[zone] = score;
+  return score > prev;
 }
 
 // ---- Códex ----
@@ -190,7 +267,21 @@ export function discoverEnemy(id) {
   state.codex.enemies[id] = true;
 }
 
-// ---- Salvamento ----
+// ---- Salvamento (versionado) ----
+// v1 (sem "version"): ganha campos novos com valores padrão.
+// v2: formato atual.
+function migrate(data) {
+  const v = data.version || 1;
+  const out = { ...freshState(), ...data };
+  if (v < 2) {
+    out.skills = {};
+    out.repairBest = {};
+    out.skillPoints = Math.max(0, (out.level || 1) - 1);
+  }
+  out.version = SAVE_VERSION;
+  return out;
+}
+
 export function saveGame() {
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify(state));
@@ -200,9 +291,13 @@ export function saveGame() {
   }
 }
 
+// Só considera "existe save" se o conteúdo for um objeto JSON válido
 export function hasSave() {
   try {
-    return !!localStorage.getItem(SAVE_KEY);
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (!raw) return false;
+    const data = JSON.parse(raw);
+    return !!data && typeof data === 'object';
   } catch (e) {
     return false;
   }
@@ -213,7 +308,8 @@ export function loadGame() {
     const raw = localStorage.getItem(SAVE_KEY);
     if (!raw) return false;
     const data = JSON.parse(raw);
-    Object.assign(state, freshState(), data);
+    if (!data || typeof data !== 'object') return false;
+    Object.assign(state, migrate(data));
     clampVitals();
     return true;
   } catch (e) {

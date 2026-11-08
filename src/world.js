@@ -5,7 +5,88 @@ import { circuitFloorTexture, chipTopTexture } from './textures.js';
 export const TILE = 2;
 const COLS = 24;
 const SOLID_TERRAIN = new Set(['#', '~', '_']);
-const OBJECT_TYPES = new Set(['npc', 'chest', 'repair', 'boss']);
+const OBJECT_TYPES = new Set(['npc', 'chest', 'repair', 'boss', 'bench']);
+
+// Decorações visuais por tipo de zona. Só usam peças finas ou baixas, para não bloquear o caminho.
+// Retorna objetos animados em `animated` ({ obj, speed }).
+function addZoneDecor(kind, cells, group, theme, rand, animated) {
+  if (!kind || !cells.length) return;
+  const pick = cells.filter((_, i) => i % 3 === 0);
+  const glow = (color, em) => new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: em, roughness: 0.4, metalness: 0.4 });
+  const m = new THREE.Matrix4();
+  if (kind === 'cells') {
+    // Células de memória: cubos baixos com topo luminoso
+    const body = new THREE.InstancedMesh(new THREE.BoxGeometry(0.6, 0.8, 0.6), new THREE.MeshStandardMaterial({ color: 0x223344, roughness: 0.6, metalness: 0.5 }), pick.length);
+    const tops = new THREE.InstancedMesh(new THREE.BoxGeometry(0.5, 0.04, 0.5), glow(theme.trace, 1.4), pick.length);
+    pick.forEach(([c, r], i) => {
+      const x = c * TILE + (rand() - 0.5) * 0.5, z = r * TILE + (rand() - 0.5) * 0.5;
+      m.makeTranslation(x, 0.4, z); body.setMatrixAt(i, m);
+      m.makeTranslation(x, 0.82, z); tops.setMatrixAt(i, m);
+    });
+    group.add(body, tops);
+  } else if (kind === 'pins') {
+    // Pinos de registrador: hastes finas com cúpula brilhante
+    const shaft = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.06, 0.06, 1.3, 6), new THREE.MeshStandardMaterial({ color: 0xc9b26a, metalness: 0.9, roughness: 0.3 }), pick.length);
+    const dome = new THREE.InstancedMesh(new THREE.SphereGeometry(0.12, 8, 6), glow(theme.accent, 1.6), pick.length);
+    pick.forEach(([c, r], i) => {
+      const x = c * TILE + (rand() - 0.5) * 0.6, z = r * TILE + (rand() - 0.5) * 0.6;
+      m.makeTranslation(x, 0.65, z); shaft.setMatrixAt(i, m);
+      m.makeTranslation(x, 1.3, z); dome.setMatrixAt(i, m);
+    });
+    group.add(shaft, dome);
+  } else if (kind === 'gears') {
+    // Engrenagens girando no piso
+    for (const [c, r] of pick.slice(0, 4)) {
+      const gear = new THREE.Group();
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.7, 0.12, 6, 20), new THREE.MeshStandardMaterial({ color: 0x7a5a3a, metalness: 0.7, roughness: 0.4 }));
+      gear.add(ring);
+      for (let k = 0; k < 8; k++) {
+        const tooth = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.14, 0.22), glow(theme.trace, 0.6));
+        const a = (k / 8) * Math.PI * 2;
+        tooth.position.set(Math.cos(a) * 0.82, 0, Math.sin(a) * 0.82);
+        gear.add(tooth);
+      }
+      gear.rotation.x = -Math.PI / 2;
+      gear.position.set(c * TILE, 0.14, r * TILE);
+      group.add(gear);
+      animated.push({ obj: gear, speed: 0.6, axis: 'z' });
+    }
+  } else if (kind === 'pipes') {
+    // Tubos horizontais de refrigeração
+    for (const [c, r] of pick.slice(0, 6)) {
+      const pipe = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, TILE * 1.6, 10), new THREE.MeshStandardMaterial({ color: 0x5b7a8a, metalness: 0.8, roughness: 0.25 }));
+      pipe.rotation.z = Math.PI / 2;
+      pipe.position.set(c * TILE, 0.22, r * TILE);
+      group.add(pipe);
+    }
+  } else if (kind === 'towers') {
+    // Torres baixas de memória com faixas de LED
+    for (const [c, r] of pick.slice(0, 8)) {
+      const tower = new THREE.Mesh(new THREE.BoxGeometry(0.7, 1.1, 0.7), new THREE.MeshStandardMaterial({ color: 0x2c2446, roughness: 0.5, metalness: 0.5 }));
+      tower.position.set(c * TILE + 0.2, 0.55, r * TILE);
+      const led = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.06, 0.72), glow(theme.accent, 2));
+      led.position.set(0, 0.56, 0);
+      tower.add(led);
+      group.add(tower);
+    }
+  } else if (kind === 'lanes') {
+    // Faixas de barramento: trilhas largas e luminosas no piso
+    for (const [c, r] of pick.slice(0, 10)) {
+      const lane = new THREE.Mesh(new THREE.BoxGeometry(TILE * 0.9, 0.03, 0.18), glow(theme.trace, 0.9));
+      lane.position.set(c * TILE, 0.03, r * TILE);
+      group.add(lane);
+    }
+  } else if (kind === 'rings') {
+    // Anéis flutuantes em volta do núcleo
+    for (let i = 0; i < 3; i++) {
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(2.4 + i * 1.2, 0.06, 6, 48), glow(theme.trace, 1.5));
+      ring.position.y = 2.6 + i * 0.5;
+      ring.rotation.x = Math.PI / 2 + i * 0.4;
+      group.add(ring);
+      animated.push({ obj: ring, speed: 0.25 * (i % 2 ? -1 : 1), axis: 'y' });
+    }
+  }
+}
 
 // Padroniza larguras: linhas curtas ganham "." antes do último caractere,
 // linhas longas perdem "." internos. Mapas podem ter alturas diferentes.
@@ -186,6 +267,10 @@ export function buildZone(def, scene) {
     portalMeshes.push({ group: pg, ring, beam });
   }
 
+  // Decoração específica da zona (tipo definido em zones.js)
+  const animated = [];
+  addZoneDecor(def.decor, decor, group, theme, rand, animated);
+
   // Luzes pontuais coloridas
   for (let i = 0; i < 3; i++) {
     const light = new THREE.PointLight(theme.accent, 1.3, 14, 2);
@@ -246,6 +331,8 @@ export function buildZone(def, scene) {
   };
 
   const update = (t) => {
+    // Engrenagens e anéis giram em torno do próprio eixo normal
+    for (const a of animated) a.obj.rotation.z = t * 0.001 * a.speed * 10;
     for (const pm of portalMeshes) {
       pm.ring.rotation.z = t * 0.0015;
       pm.beam.material.opacity = 0.14 + Math.sin(t * 0.003) * 0.05;
