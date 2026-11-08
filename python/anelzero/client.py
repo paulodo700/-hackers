@@ -13,6 +13,7 @@ Ajustes: setas escolhem e mudam, Enter alterna, Esc salva e volta.
 
 import math
 import random
+from pathlib import Path
 
 from panda3d.core import loadPrcFileData
 
@@ -34,6 +35,7 @@ from . import combat as K  # noqa: E402
 from . import content as C  # noqa: E402
 from . import dialog as D  # noqa: E402
 from . import icon_render as IR  # noqa: E402
+from . import layers as LY  # noqa: E402
 from . import menu as M  # noqa: E402
 from . import panels as P  # noqa: E402
 from . import repair as R  # noqa: E402
@@ -259,6 +261,10 @@ class Game(ShowBase):
 
     def _build_screens(self):
         ar = self.getAspectRatio()
+        self.layers_screen = P.LayersScreen(self.render2d, ar, self.tm)
+        self.layers_screen.hide()
+        self.layer_index = 0
+        self.layers_return = "title"
         self.battle_screen = P.BattleScreen(self.render2d, ar, self.tm)
         self.repair_screen = P.RepairScreen(self.render2d, ar, self.tm)
         self.shop_screen = P.ShopScreen(self.render2d, ar, self.tm)
@@ -280,7 +286,7 @@ class Game(ShowBase):
     def _bind_keys(self):
         self.accept("mouse1", self.on_mouse_click)
         names = ["w", "a", "s", "d", "arrow_up", "arrow_down", "arrow_left", "arrow_right",
-                 "e", "f", "v", "tab", "escape", "enter", "space", "f5", "o", "h", "p"]
+                 "e", "f", "v", "tab", "escape", "enter", "space", "f5", "o", "h", "p", "m"]
         names += list(DIGIT_KEYS)
         for name in names:
             self.accept(name, self.key_event, [name, True])
@@ -302,6 +308,7 @@ class Game(ShowBase):
             "repair": self._repair_key,
             "shop": self._shop_key,
             "settings": self._settings_key,
+            "layers": self._layers_key,
         }.get(self.mode)
         if handler is not None:
             handler(name)
@@ -310,7 +317,7 @@ class Game(ShowBase):
         opts = ["Novo jogo"]
         if self.slots.info(self.slot):
             opts.append("Continuar")
-        opts += ["Ajustes", "Sair"]
+        opts += ["Camadas", "Ajustes", "Sair"]
         return opts
 
     def _title_key(self, name):
@@ -329,6 +336,9 @@ class Game(ShowBase):
                 self.start_play(self.slots.load(self.slot) or S.new_state())
             elif choice == "Ajustes":
                 self.open_settings("title")
+                return
+            elif choice == "Camadas":
+                self.open_layers("title")
                 return
             elif choice == "Sair":
                 self.userExit()
@@ -382,6 +392,8 @@ class Game(ShowBase):
             self.open_menu()
         elif name == "o":
             self.open_settings("play")
+        elif name == "m":
+            self.open_layers("play")
         elif name == "f5":
             self.do_save()
         elif name == "escape":
@@ -1140,7 +1152,7 @@ class Game(ShowBase):
             if self.mode == "intro":
                 self._update_hub(dt)
             return
-        if self.mode in ("menu", "settings", "shop"):
+        if self.mode in ("menu", "settings", "shop", "layers"):
             return
         if self.mode == "battle":
             self._update_battle_fx(dt)
@@ -1326,6 +1338,48 @@ class Game(ShowBase):
             self.msg_left -= dt
             if self.msg_left <= 0:
                 self.msg.setText("")
+
+    def open_layers(self, return_to):
+        self.layers_return = return_to
+        self.mode = "layers"
+        self.panel.hide()
+        self._show_title(False)
+        self.layers_screen.image_key = None
+        self.layers_screen.show()
+        self._refresh_layers()
+
+    def close_layers(self):
+        self.layers_screen.hide()
+        if self.layers_return == "title":
+            self.mode = "title"
+            self._show_title(True)
+            self._refresh_title()
+        else:
+            self.mode = "play"
+
+    def _layers_key(self, name):
+        n = len(LY.LAYERS)
+        if name == "escape":
+            self.close_layers()
+            return
+        if name in ("arrow_right", "d", "arrow_down", "s"):
+            self.layer_index = (self.layer_index + 1) % n
+        elif name in ("arrow_left", "a", "arrow_up", "w"):
+            self.layer_index = (self.layer_index - 1) % n
+        self._refresh_layers()
+
+    def _layer_texture(self, layer_id):
+        """Textura da camada: a imagem renderizada no Blender, ou a grade própria se ela não existir."""
+        from panda3d.core import PNMImage, Texture
+        path = Path(__file__).resolve().parent / "assets" / "layers" / f"{layer_id}.png"
+        if path.exists():
+            return self.loader.loadTexture(str(path))
+        tex = Texture(f"layer-{layer_id}")
+        tex.load(LY.layer_image(layer_id, cell=8))
+        return tex
+
+    def _refresh_layers(self):
+        self.layers_screen.render(LY.LAYERS, self.layer_index, LY.legend(), self._layer_texture)
 
     def _refresh_settings(self):
         self.settings_screen.render(self.settings, self.settings_cursor)

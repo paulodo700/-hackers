@@ -38,3 +38,18 @@ class Layers(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Legend(unittest.TestCase):
+    def test_every_used_code_has_a_name(self):
+        for code, name in L.legend():
+            with self.subTest(code=code):
+                self.assertNotEqual(name, code, f"código {code} sem nome na legenda")
+
+    def test_legend_lists_each_code_once(self):
+        codes = [c for c, _ in L.legend()]
+        self.assertEqual(len(codes), len(set(codes)))
+
+    def test_layer_image_size(self):
+        img = L.layer_image("dissipador", cell=4)
+        self.assertEqual((img.getXSize(), img.getYSize()), (L.SIZE * 4, L.SIZE * 4))

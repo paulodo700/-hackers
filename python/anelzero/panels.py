@@ -402,3 +402,46 @@ def cell_at(ax, ay, n, size):
     if not (0 <= col < n and 0 <= row < n):
         return None
     return col, row
+
+
+class LayersScreen:
+    """Tela de camadas do processador: lista das dez camadas, imagem da atual e legenda dos códigos."""
+
+    def __init__(self, parent, ar, scale_mult=1.0):
+        self.panel = Panel(parent, 0, 0, ar, 1.0, alpha=1.0)
+        self.title = Text(parent, "Camadas do processador", -ar + 0.1, 0.9, 0.065, color=(0.6, 1, 0.95, 1))
+        self.list = ListView(-ar + 0.1, 0.8, row_h=0.085, icon=0.0, scale=0.04, width=60)
+        self.caption = Text(parent, "", -ar + 0.1, -0.5, 0.04, color=(1, 0.9, 0.5, 1), width=44)
+        self.legend = Text(parent, "", ar - 0.55, 0.78, 0.034, color=(0.85, 1, 0.95, 1), width=40)
+        self.help = Text(parent, "", -ar + 0.1, -0.92, 0.035, color=(0.6, 0.7, 0.7, 1))
+        self.image = None
+        self.image_key = None
+        self.ar = ar
+        self._all = [self.title, self.caption, self.legend, self.help]
+
+    def show(self):
+        self.panel.show()
+        self.list.show()
+        for t in self._all:
+            t.show()
+
+    def hide(self):
+        self.panel.hide()
+        for t in self._all:
+            t.hide()
+        self.list.hide()
+        if self.image is not None:
+            self.image.hide()
+
+    def render(self, layers, index, legend_rows, texture_for):
+        self.list.render([l["name"] for l in layers], index, [None] * len(layers))
+        layer = layers[index]
+        self.caption.set(f"{index + 1}/{len(layers)} - {layer['name']}")
+        self.legend.set("Legenda:\n" + "\n".join(f"{code}  {name}" for code, name in legend_rows))
+        if self.image_key != layer["id"]:
+            if self.image is not None:
+                self.image.destroy()
+            from direct.gui.OnscreenImage import OnscreenImage
+            self.image = OnscreenImage(image=texture_for(layer["id"]), pos=(0.1, 0, -0.02), scale=0.5)
+            self.image_key = layer["id"]
+        self.help.set("Setas trocam de camada | Esc volta")

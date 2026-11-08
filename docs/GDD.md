@@ -368,3 +368,19 @@ Os dois motores não se comparam entre si. As variações em relação à rodada
 |---|---|---|
 | `tools/bench_shadows.py` | Panda3D, Xvfb, CPU; sombra desligada / ligada | 6,44 / 13,62 ms por quadro (+7,18 ms, +111%) |
 | `tests/perf.mjs` | Chromium headless, 360×740, software; cena inteira / só o jogador | 32,1 FPS (52 chamadas, 10 560 triângulos) / 60,2 FPS |
+
+## Rodada 14: tela de camadas, renderização no Blender e medições
+
+- **Tela de camadas:** acessível pelo título (opção Camadas) e pela tecla M durante o jogo. Mostra a lista das dez camadas, a imagem da camada atual, uma legenda com cada código e a navegação pelas setas (com volta ao início no fim da lista). Teste pelo caminho real da tecla.
+- **Renderização no Blender:** `tools/blender/render_layers.py` gera as dez imagens com o Cycles (CPU), a partir da mesma grade do jogo. Materiais por código: cobre, ouro, prata, silício por tipo de bloco, substrato, emissão nas trilhas de anel e nas esferas de força. Câmera em perspectiva inclinada, sol e luz de preenchimento, céu procedural como ambiente. As imagens ficam em `python/anelzero/assets/layers/`.
+- **Limite:** as renderizações ainda têm reflexos brancos nos pinos e nas partes metálicas, porque o ajuste de luz não foi refinado. Não é o nível de detalhe pedido.
+- **Não feito:** as zonas jogáveis a partir das camadas. Cada camada precisaria de regras de jogo próprias (paredes, objetivos, inimigos), e isso fica para uma rodada própria.
+
+### Desempenho medido nesta rodada
+
+| Robô | Motor e condição | Resultado |
+|---|---|---|
+| `tools/bench_shadows.py` | Panda3D, Xvfb, CPU; sombra desligada / ligada | 7,24 / 14,29 ms por quadro (+7,04 ms, +97%) |
+| `tests/perf.mjs` | Chromium headless, 360×740, software; cena inteira / só o jogador | 28,3 FPS (54 chamadas, 10 584 triângulos) / 60,3 FPS |
+
+A tela de camadas não aparece durante a exploração, então as medições de exploração não mudam por causa dela. Os números variam dentro do ruído da máquina.

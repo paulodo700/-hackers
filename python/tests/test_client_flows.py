@@ -405,3 +405,53 @@ class LiveTextScale(unittest.TestCase):
         g.key_event("escape", True)
         g.settings.set("text_scale", 1.0)
         textscale.apply(1.0)
+
+
+@unittest.skipUnless(HAS_DISPLAY, "precisa de display (use xvfb-run)")
+class LayersScreenFlow(unittest.TestCase):
+    def test_open_navigate_and_close(self):
+        from anelzero import layers as LY
+        g = get_game()
+        _reset(g)
+        g.mode = "title"
+        g.open_layers("title")
+        self.assertEqual(g.mode, "layers")
+        self.assertEqual(g.layer_index, 0)
+        g.key_event("arrow_right", True)
+        g.key_event("arrow_right", True)
+        self.assertEqual(g.layer_index, 2)
+        g.key_event("arrow_left", True)
+        self.assertEqual(g.layer_index, 1)
+        self.assertEqual(LY.LAYERS[g.layer_index]["id"], "metal_m1")
+        g.key_event("escape", True)
+        self.assertEqual(g.mode, "title")
+
+    def test_wraps_around(self):
+        from anelzero import layers as LY
+        g = get_game()
+        _reset(g)
+        g.open_layers("title")
+        g.layer_index = len(LY.LAYERS) - 1
+        g.key_event("arrow_right", True)
+        self.assertEqual(g.layer_index, 0)
+        g.key_event("escape", True)
+
+    def test_opens_from_play_with_m(self):
+        g = get_game()
+        _reset(g)
+        g.key_event("m", True)
+        self.assertEqual(g.mode, "layers")
+        g.key_event("escape", True)
+        self.assertEqual(g.mode, "play")
+
+
+@unittest.skipUnless(HAS_DISPLAY, "precisa de display (use xvfb-run)")
+class LayersKeyBinding(unittest.TestCase):
+    def test_m_key_is_bound_to_layers(self):
+        import panda3d.core as core  # noqa: F401
+        g = get_game()
+        _reset(g)
+        g.messenger.send("m")  # o evento de teclado passa pelo mesmo caminho que o jogador usa
+        self.assertEqual(g.mode, "layers")
+        g.messenger.send("escape")
+        self.assertEqual(g.mode, "play")

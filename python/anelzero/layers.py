@@ -12,16 +12,16 @@ from . import mapgen as MG
 SIZE = 32
 
 LAYERS = [
-    {"id": "dissipador", "name": "Camada 1 · Dissipador térmico", "seed": 101, "kind": "heat"},
-    {"id": "metal_m1", "name": "Camada 2 · Metal superior M1 (fiação)", "seed": 102, "kind": "wiring"},
-    {"id": "metal_m2", "name": "Camada 3 · Metal intermediário M2 (roteamento)", "seed": 103, "kind": "routing"},
-    {"id": "llc", "name": "Camada 4 · Cache de último nível (LLC) e anel", "seed": 104, "kind": "cache"},
-    {"id": "predicao", "name": "Camada 5 · Núcleo: predição de desvio", "seed": 105, "kind": "frontend"},
-    {"id": "execucao", "name": "Camada 6 · Núcleo: unidades de execução", "seed": 106, "kind": "execution"},
-    {"id": "memoria", "name": "Camada 7 · Controlador de memória e gráficos", "seed": 107, "kind": "memory"},
-    {"id": "energia", "name": "Camada 8 · Gerenciamento de energia", "seed": 108, "kind": "power"},
-    {"id": "interposer", "name": "Camada 9 · Interposer e TSVs", "seed": 109, "kind": "interposer"},
-    {"id": "substrato", "name": "Camada 10 · Substrato e esferas BGA", "seed": 110, "kind": "substrate"},
+    {"id": "dissipador", "name": "Camada 1 - Dissipador térmico", "seed": 101, "kind": "heat"},
+    {"id": "metal_m1", "name": "Camada 2 - Metal superior M1 (fiação)", "seed": 102, "kind": "wiring"},
+    {"id": "metal_m2", "name": "Camada 3 - Metal intermediário M2 (roteamento)", "seed": 103, "kind": "routing"},
+    {"id": "llc", "name": "Camada 4 - Cache de último nível (LLC) e anel", "seed": 104, "kind": "cache"},
+    {"id": "predicao", "name": "Camada 5 - Núcleo: predição de desvio", "seed": 105, "kind": "frontend"},
+    {"id": "execucao", "name": "Camada 6 - Núcleo: unidades de execução", "seed": 106, "kind": "execution"},
+    {"id": "memoria", "name": "Camada 7 - Controlador de memória e gráficos", "seed": 107, "kind": "memory"},
+    {"id": "energia", "name": "Camada 8 - Gerenciamento de energia", "seed": 108, "kind": "power"},
+    {"id": "interposer", "name": "Camada 9 - Interposer e TSVs", "seed": 109, "kind": "interposer"},
+    {"id": "substrato", "name": "Camada 10 - Substrato e esferas BGA", "seed": 110, "kind": "substrate"},
 ]
 
 PALETTE = {
@@ -206,3 +206,39 @@ def render_png(path, cell=12):
                         img.setXel(ox + x * cell + dx, oy + y * cell + dy, r, g, b)
     img.write(Filename.from_os_specific(str(path)))
     return path
+
+
+CODE_NAMES = {
+    "H": "dissipador (metal)", "h": "tampa polida", "R": "aro / anel do barramento",
+    "B": "trilha de sinal", "v": "via entre camadas", "T": "pino ou esfera de solda",
+    "t": "esfera de força", "C": "célula de cache", "c": "célula de bit", "x": "banco de cache",
+    "L": "bloco de lógica", "d": "bloco escuro", "E": "unidade de execução", "M": "controlador de memória",
+    "P": "gerenciamento de energia", "I": "TSV / ponte de silício", "G": "substrato vazio",
+}
+
+
+def legend():
+    """Lista (código, nome) de todos os códigos usados nas camadas, na ordem da paleta."""
+    used = set()
+    for layer in LAYERS:
+        for row in _layer_grid(layer):
+            used |= set(row)
+    return [(code, CODE_NAMES.get(code, code)) for code in PALETTE if code in used]
+
+
+def layer_image(layer_id, cell=10):
+    """Imagem (PNMImage) de uma camada, para a tela de camadas."""
+    from panda3d.core import PNMImage
+    layer = next((l for l in LAYERS if l["id"] == layer_id), None)
+    if layer is None:
+        raise KeyError(layer_id)
+    rows = _layer_grid(layer)
+    img = PNMImage(SIZE * cell, SIZE * cell, 3)
+    for y, row in enumerate(rows):
+        for x, ch in enumerate(row):
+            r, g, b = PALETTE[ch]
+            for dy in range(cell - 1):
+                for dx in range(cell - 1):
+                    img.setXel(x * cell + dx, y * cell + dy, r, g, b)
+    return img
+
