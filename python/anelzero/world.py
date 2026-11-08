@@ -134,3 +134,39 @@ def move(zone, x, z, dx, dz, rad=0.3):
     if not blocked(zone, x, z + dz, rad):
         z += dz
     return x, z
+
+
+# ---- Minimapa e revelação de áreas (para o cliente desenhar) ----
+
+def reveal(zone, state, cx, cz, radius=4):
+    """Marca as células em volta de (cx, cz) como visitadas no estado do jogo."""
+    c0, r0 = round(cx), round(cz)
+    for r in range(r0 - radius, r0 + radius + 1):
+        for c in range(c0 - radius, c0 + radius + 1):
+            if zone.inside(c, r) and (c - cx) ** 2 + (r - cz) ** 2 <= radius * radius:
+                state.mark_visited(zone.id, c, r)
+
+
+def minimap_grid(zone, state, cx, cz, radius=12):
+    """Linhas de caracteres centradas no jogador: '#' parede, '.' piso, '?' não visitado,
+    '@' jogador, letras para marcadores (pickups '*', baús 'C', NPCs 'N', reparos 'R', portais 'P')."""
+    kinds = {"pickup": "*", "chest": "C", "npc": "N", "repair": "R", "portal": "P", "boss": "B", "bench": "K"}
+    c0, r0 = round(cx), round(cz)
+    rows = []
+    for r in range(r0 - radius, r0 + radius + 1):
+        line = []
+        for c in range(c0 - radius, c0 + radius + 1):
+            if not zone.inside(c, r):
+                line.append(" ")
+            elif (c, r) == (c0, r0):
+                line.append("@")
+            elif not state.is_visited(zone.id, c, r):
+                line.append("?")
+            else:
+                m = zone.marker_at(c, r)
+                if m and m.get("type") in kinds:
+                    line.append(kinds[m["type"]])
+                else:
+                    line.append(zone.char(c, r) if zone.char(c, r) == WALL else ".")
+        rows.append("".join(line))
+    return rows
