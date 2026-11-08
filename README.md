@@ -59,6 +59,7 @@ src/
   combat.js         regras de combate puras (dano, intenção, fase 2), usadas também pelo simulador
   mapgen.js         gerador determinístico de mapas extensos (salas, corredores, objetos espalhados)
   fx.js              efeitos de partículas (faíscas de vitória e de coleta)
+  action.js          luta em tempo real: golpe, alcance, dano de contato (regras puras)
   face.js           rostos procedurais (olhos, boca, expressões)
   nav.js            navegação por teclado nos menus
   tests/            testes unitários, simulador de balanceamento e ponta a ponta

@@ -249,6 +249,30 @@ t('baús extras têm saque determinístico pela posição', async () => {
   for (const [item] of a) assert.ok(content.ITEMS[item], `item inválido no saque: ${item}`);
 });
 
+t('golpe atinge o que está à frente e não o que está atrás', async () => {
+  const { inSwingArc } = await import('../src/action.js');
+  assert.equal(inSwingArc(0, 0, 0, 0, 1.2), true);     // à frente (facing 0 = +z)
+  assert.equal(inSwingArc(0, 0, 0, 0, -1.2), false);   // atrás
+  assert.equal(inSwingArc(0, 0, 0, 0, 3), false);      // longe demais
+  assert.equal(inSwingArc(0, 0, 0, 0.2, 0.2), true);   // colado sempre conta
+});
+t('dano de golpe e de contato nunca é menor que 1', async () => {
+  const { swingDamage, contactDamage } = await import('../src/action.js');
+  assert.ok(swingDamage(1, 999, () => 0.5) >= 1);
+  assert.ok(contactDamage(1, 999, () => 0.5) >= 1);
+  assert.ok(swingDamage(20, 2, () => 0.5) > swingDamage(6, 2, () => 0.5));
+});
+t('golpe só escolhe bytes vivos', async () => {
+  const { swingTargets } = await import('../src/action.js');
+  const player = { x: 0, z: 0 };
+  const roamers = [
+    { alive: true, x: 0, z: 1 },
+    { alive: false, x: 0, z: 1 },
+    { alive: true, x: 0, z: -1 },
+  ];
+  assert.equal(swingTargets(player, roamers, 0).length, 1);
+});
+
 export async function runUnit() {
   let pass = 0;
   const failures = [];

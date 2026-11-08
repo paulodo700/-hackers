@@ -36,6 +36,7 @@ export function createInput(canvas) {
     if (e.code === 'KeyE' || e.code === 'Space' || e.code === 'Enter') {
       if (!e.repeat && input.onInteract) input.onInteract();
     }
+    if (e.code === 'KeyF' && !e.repeat && input.onAttack) input.onAttack();
     if (e.code === 'KeyM' || e.code === 'Escape') {
       if (!e.repeat && input.onMenu) input.onMenu();
     }

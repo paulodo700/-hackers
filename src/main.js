@@ -21,7 +21,9 @@ import { startBattle, closeBattleScreen, isBattleOpen } from './battle.js';
 import { startRepair, isRepairOpen, bindRepairUI, repairDebug, REPAIR_TUTORIAL } from './repair.js';
 import { initNav, focusFirst } from './nav.js';
 import { moodForLine, moodForVitals } from './expression.js';
-import { burst, updateFx } from './fx.js';
+import { burst, updateFx, floatText } from './fx.js';
+import { SWING, CONTACT, contactDamage, swingDamage, swingTargets } from './action.js';
+import { def as playerDefense, atk, discoverEnemy } from './state.js';
 import { lootFor, requirementText } from './loot.js';
 import { settings, loadSettings, applySettings, saveSettings, vibrate } from './settings.js';
 import { unlockAudio, sfx, setMusicZone, setSoundEnabled, setVolume, outputPeak, MAX_OUT } from './audio.js';
@@ -325,6 +327,74 @@ function collectNearbyPickups() {
   }
 }
 
+// ---------- Luta em tempo real ----------
+let swingCd = 0;
+let playerIframes = 0;
+
+// Golpe do Bit: atinge os bytes em frente, empurra e pode derrotá-los
+function playerSwing() {
+  if (swingCd > 0 || !running || busy()) return;
+  swingCd = SWING.cooldown;
+  player.play('attack');
+  sfx('ui');
+  const tip = { x: player.x + Math.sin(player.facing) * 1.1, y: 0.8, z: player.z + Math.cos(player.facing) * 1.1 };
+  burst(scene, tip, '#7dfff0', { count: 10, size: 0.1, speed: 2, life: 0.35 });
+  for (const rm of swingTargets(player, roamers, player.facing)) {
+    const dmg = swingDamage(atk(), ENEMIES[rm.enemy].def);
+    rm.hp -= dmg;
+    const dx = rm.x - player.x, dz = rm.z - player.z;
+    const d = Math.hypot(dx, dz) || 1;
+    rm.x += (dx / d) * SWING.knockback;
+    rm.z += (dz / d) * SWING.knockback;
+    floatText(scene, rm.obj.position, `-${dmg}`, '#ffffff');
+    burst(scene, rm.obj.position, ENEMIES[rm.enemy].color, { count: 12, size: 0.12 });
+    sfx('hit');
+    if (rm.hp <= 0) killRoamer(rm);
+  }
+}
+
+// Byte derrotado: recompensas, efeito e progresso de missões
+function killRoamer(rm) {
+  rm.alive = false;
+  const e = ENEMIES[rm.enemy];
+  burst(scene, rm.obj.position, e.color, { count: 40, size: 0.18, life: 1.0 });
+  scene.remove(rm.obj);
+  bump(`kill_${rm.enemy}`);
+  discoverEnemy(rm.enemy);
+  const ups = gainXp(e.xp);
+  state.gold += e.gold;
+  const got = [];
+  for (const dr of e.drops || []) {
+    if (Math.random() < dr.chance) { addItem(dr.item, 1); got.push(ITEMS[dr.item].name); }
+  }
+  UI.toast(`${e.name} desfeito! +${e.xp} XP${got.length ? ' · ' + got.join(', ') : ''}${ups ? ' · Nível ' + state.level : ''}`, 3200);
+  sfx('win');
+  afterProgress();
+}
+
+// Barras de vida dos bytes: encolhem com o dano e somem com a vida cheia
+function updateRoamerBars() {
+  for (const rm of roamers) {
+    if (!rm.alive) continue;
+    rm.bar.scale.x = Math.max(0.001, 0.9 * rm.hp / rm.maxHp);
+    rm.bar.visible = rm.hp < rm.maxHp;
+  }
+}
+
+// Volta ao ponto seguro depois de cair na luta
+function respawnPlayer() {
+  state.hp = Math.max(1, Math.ceil(maxHp() * 0.3));
+  state.en = maxEn();
+  state.gold = Math.floor(state.gold * 0.9);
+  const sp = zone.spawn;
+  player.setTile(sp.c, sp.r);
+  lastTile = { c: sp.c, r: sp.r };
+  player.play('hurt');
+  UI.toast('Você foi restaurado no ponto seguro. Perdeu 10% dos créditos.', 3800);
+  UI.updateHud();
+  autosave();
+}
+
 // ---------- Batalhas ----------
 function beginBattle(enemyId, entity) {
   setMusicZone('battle');
@@ -420,7 +490,9 @@ input.onInteract = () => {
   if (!running || busy()) return;
   const e = nearestEntity();
   if (e) interact(e);
+  else playerSwing(); // sem nada por perto, o golpe vai para os bytes
 };
+input.onAttack = () => playerSwing();
 input.onMenu = () => {
   if (UI.isShopOpen()) return UI.closeShop();
   if (UI.isMenuOpen()) return UI.closeMenu();
@@ -603,15 +675,29 @@ function frame(now) {
 
     // Glitches que perseguem
     const hits = updateRoamers(roamers, zone, { x: player.x, z: player.z }, dt, now);
-    if (hits.length && !isBattleOpen() && !battlePending && !debugFlags.noEncounters) {
-      const rm = hits[0];
-      rm.alive = false;
-      scene.remove(rm.obj);
-      battlePending = true;
-      player.play('attack');
-      battleSpot = { x: rm.x, y: 0, z: rm.z };
-      setTimeout(() => { battlePending = false; beginBattle(rm.enemy, null); }, 380);
+    // Cooldowns dos bytes e do jogador
+    for (const rm of roamers) if (rm.alive) rm.attackCd = Math.max(0, rm.attackCd - dt);
+    playerIframes = Math.max(0, playerIframes - dt);
+    swingCd = Math.max(0, swingCd - dt);
+    // Contato: cada byte encostado ataca no seu ritmo
+    if (!debugFlags.noEncounters) {
+      for (const rm of hits) {
+        if (rm.attackCd > 0 || playerIframes > 0) continue;
+        rm.attackCd = CONTACT.cooldown;
+        playerIframes = CONTACT.iframes;
+        const dmg = contactDamage(ENEMIES[rm.enemy].atk, playerDefense());
+        state.hp -= dmg;
+        clampVitals();
+        player.play('hurt');
+        floatText(scene, player, `-${dmg}`, '#ff8fa3');
+        sfx('hurt');
+        vibrate(40);
+        if (state.hp <= 0) respawnPlayer();
+        UI.updateHud();
+        break; // um golpe recebido por quadro
+      }
     }
+    updateRoamerBars();
   } else {
     player.update(dt, { moveX: 0, moveY: 0 }, zone, now);
     updateRoamers(roamers, zone, { x: player.x, z: player.z }, 0, now);
@@ -658,6 +744,7 @@ window.__anelZero = {
   scene, camera, state, loadZone, beginBattle, interact, nearestEntity, repairDebug,
   get zone() { return zone; }, get player() { return player; }, get entities() { return entities; },
   get transitioning() { return transitioning; },
+  get roamers() { return roamers; },
   flags: debugFlags,
   audioPeak: () => outputPeak(),
   setVolume: (kind, v) => setVolume(kind, v),

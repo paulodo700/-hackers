@@ -870,6 +870,31 @@ export default [
     },
   },
   {
+    name: 'luta: o golpe do Bit derruba um byte à frente e conta no progresso',
+    async run({ page, base }) {
+      await newGame(page, base, 1);
+      await page.evaluate(() => {
+        const g = window.__anelZero;
+        g.loadZone('cache', null, null, true);
+        g.player.setTile(g.zone.spawn.c, g.zone.spawn.r);
+        g.player.facing = 0;
+        const rm = g.roamers.find((x) => x.alive);
+        rm.hp = 2;
+        rm.x = g.player.x; rm.z = g.player.z + 1.2;
+      });
+      for (let i = 0; i < 3; i++) {
+        await page.keyboard.press('KeyF');
+        await page.waitForTimeout(480);
+      }
+      const r = await state(page, () => {
+        const g = window.__anelZero;
+        return { dead: g.roamers.filter((x) => !x.alive).length, kills: Object.keys(g.state.counters).filter((k) => k.startsWith('kill_')).length };
+      });
+      if (r.dead < 1) throw new Error('nenhum byte foi derrotado pelo golpe');
+      if (r.kills < 1) throw new Error('derrota não contou no progresso');
+    },
+  },
+  {
     name: 'FPS medido em 360 px (informativo, com renderização por software)',
     async run({ browser, base, report }) {
       const ctx = await browser.newContext({ viewport: { width: 360, height: 740 }, isMobile: true, hasTouch: true });

@@ -306,8 +306,15 @@ export function createRoamers(layout, scene, count, rand) {
     const p = layout.toWorld(c, r);
     obj.position.copy(p);
     scene.add(obj);
+    // Barra de vida que sempre fica virada para a câmera
+    const bar = new THREE.Sprite(new THREE.SpriteMaterial({ color: 0x5ec985, depthTest: false, transparent: true }));
+    bar.scale.set(0.9, 0.09, 1);
+    bar.position.y = 1.5;
+    bar.renderOrder = 10;
+    obj.add(bar);
     roamers.push({
-      enemy: id, obj, c, r,
+      enemy: id, obj, c, r, bar,
+      hp: def.hp, maxHp: def.hp, attackCd: 0, iframes: 0, hurtT: 0,
       x: p.x, z: p.z,
       tx: p.x, tz: p.z,
       timer: rand() * 2,

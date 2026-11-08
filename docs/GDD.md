@@ -131,6 +131,25 @@ Testes: um teste unitário confirma que todo objeto e portal é alcançável a p
 
 **Ainda não feito neste ciclo:** efeitos de estado em batalha, sistema de reputação com as NPCs e novas zonas. Esses são os próximos itens.
 
+## Rodada 7: luta em tempo real
+
+- **Luta direto no mapa.** Os bytes (glitches comuns) agora lutam com o Bit ali mesmo, sem trocar de tela. Encostar num byte causa dano no seu ritmo (cada byte ataca a cada 1,2 s, e o Bit tem um curto período de invulnerabilidade depois de cada golpe).
+- **Golpe:** F ataca (ou E/Espaço quando não há nada por perto para interagir; no celular, o botão AÇÃO). Atinge os bytes num arco à frente, empurra e tem um intervalo de 0,42 s. O golpe mostra uma explosão de faíscas e o número de dano sobre o byte.
+- **Barra de vida** sobre cada byte ferido. Ao derrotar um byte: XP, créditos, saques, faíscas e progresso de missões (os contadores de abate valem igual para luta em tempo real e por turnos).
+- **Batalha por turnos** continua para os chefes e para o Vigia, com a mesma tela e as mesmas regras de antes.
+- **Derrota:** se o Bit cair na luta, volta ao ponto seguro com 30% de vida e perde 10% dos créditos, como na batalha por turnos.
+- **Regras** em `src/action.js`, sem dependência de navegador, com testes unitários para alcance, arco e danos mínimos.
+
+### O que ficou de fora desta rodada
+
+O pedido desta rodada era muito amplo, e não cabe com qualidade verificável numa só entrega. Ficam para decisão e para ciclos próprios:
+
+- **Reescrita em Python.** O jogo roda no navegador, que é o único alvo que funciona no PC e no celular com um link. Uma reescrita em Python exigiria escolher uma engine (por exemplo, Panda3D ou Pygame), e perderia o link compartilhável e os 61 testes atuais. Precisa de uma decisão sua antes de começar.
+- **Mundo como um processador em todas as camadas** (núcleo, cache, registradores, ULA, barramento, memória), com mapa-mundo próprio. O conceito já existe nas zonas; falta a estrutura de camadas e a navegação entre elas.
+- **História nova, cenas de abertura e encerramento, e tela inicial própria.**
+- **Sistemas novos de peso:** efeitos de estado em batalha, reputação com as NPCs, novas zonas e uma progressão de talentos ampliada.
+- **Mais mobs e NPCs** além dos já existentes.
+
 ## Balanceamento
 
 Os números vêm do simulador `tests/sim/sim.mjs`, que roda batalhas sem navegador com sementes fixas. O jogador simulado ataca sempre, usa poção abaixo de 35% de vida e usa o equipamento típico de cada faixa de nível. Não usa habilidades.
