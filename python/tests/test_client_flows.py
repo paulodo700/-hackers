@@ -350,3 +350,58 @@ class IconRendering(unittest.TestCase):
                 center = mean(w // 4, h // 4, 3 * w // 4, 3 * h // 4)
                 corner = mean(0, 0, w // 8, h // 8)
                 self.assertGreater(abs(center - corner), 0.05, "ícone sem modelo visível")
+
+
+@unittest.skipUnless(HAS_DISPLAY, "precisa de display (use xvfb-run)")
+class IconsInBattle(unittest.TestCase):
+    def setUp(self):
+        from anelzero import state as S
+        self.g = get_game()
+        _reset(self.g, S.new_state())
+        self.g.load_zone("cache", None)
+        self.g.fight.roamers = []
+
+    def test_battle_item_submenu_uses_icons(self):
+        from anelzero import rt
+        import random
+        rm = rt.Roamer("pulga", self.g.px, self.g.py + 0.1, random.Random(1))
+        self.g.start_roamer_battle(rm)
+        self.g.battle.act("itens")
+        self.g._refresh_battle()
+        rows = self.g.battle_screen.cmds.rows
+        has_icon = [slot.node is not None for _text, slot in rows if _text.node.getText()]
+        self.assertTrue(any(has_icon), "nenhum item da batalha ganhou ícone")
+        self.g.battle = None
+        self.g.battle_screen.hide()
+        self.g.mode = "play"
+
+    def test_roamer_has_world_icon_card(self):
+        from anelzero import rt
+        import random
+        rm = rt.Roamer("pulga", self.g.px + 2, self.g.py + 2, random.Random(1))
+        self.g.fight.roamers = [rm]
+        self.g._add_roamer_node(rm)
+        root, _bar = self.g.roamer_nodes[id(rm)]
+        self.assertFalse(root.find("**/roamer-icon").isEmpty())
+        self.g.fight.roamers = []
+
+
+@unittest.skipUnless(HAS_DISPLAY, "precisa de display (use xvfb-run)")
+class LiveTextScale(unittest.TestCase):
+    def test_text_scale_changes_without_restart(self):
+        from anelzero import textscale
+        from anelzero import panels as P
+        g = get_game()
+        _reset(g)
+        g.mode = "title"
+        g.open_settings("play")
+        g.settings.set("text_scale", 1.0)
+        textscale.apply(1.0)
+        before = g.hud.getScale()[0]
+        g.settings_cursor = P.SETTINGS_ROWS.index("text_scale")
+        g.key_event("arrow_right", True)
+        after = g.hud.getScale()[0]
+        self.assertGreater(after, before)
+        g.key_event("escape", True)
+        g.settings.set("text_scale", 1.0)
+        textscale.apply(1.0)

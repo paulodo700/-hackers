@@ -116,6 +116,13 @@ class VisualRegression(unittest.TestCase):
         for node in (g.menu_list, g.menu_preview, g.menu_detail, g.menu_footer):
             node.hide()
         g.sfx.stop_music()
+        g.sun.setColor((0.95, 0.97, 1, 1))  # a abertura pulsa a luz: restaura antes de cada captura
+        g.setBackgroundColor(0.03, 0.04, 0.06, 1)  # o fundo e o céu vêm da última zona carregada
+        from anelzero import textscale
+        textscale.apply(1.0)  # texto no tamanho normal (outros testes podem ter mudado o tamanho)
+        g.tm = 1.0
+        g.slots.delete(g.slot)  # sem save: o título não pode mostrar 'Continuar' por causa de outro teste
+        g._set_sky("#0b0f14", "#122410")
         # Títulos, faixas, painéis e menus de outras telas: todos escondidos antes de cada captura
         g._show_title(mode == "title")
         g.letter_top.hide()
@@ -195,6 +202,36 @@ class VisualRegression(unittest.TestCase):
         self._check("abertura")
         self.g.fade = None
         self.g.fade_card.hide()
+
+    def test_battle_on_contact(self):
+        import random
+        from anelzero import rt
+        self._reset()
+        self.g.load_zone("cache", None)
+        _clear_roamers(self.g)
+        rm = rt.Roamer("pulga", self.g.px, self.g.py + 0.1, random.Random(1))
+        self.g.time = 1.0
+        self.g.start_roamer_battle(rm)
+        self._check("batalha_ao_toque")
+        self.g.battle = None
+        self.g.battle_screen.hide()
+        self.g.mode = "play"
+
+    def test_skills_menu_with_icons(self):
+        from anelzero import state as S
+        self._reset()
+        self.g.start_play(S.new_state())
+        _clear_roamers(self.g)
+        self.g.dialog = None
+        self.g.panel.hide()
+        self.g.px, self.g.py = 9.0, 9.0
+        for _ in range(3):
+            self.g.step(1 / 30)
+        self.g.open_menu()
+        self.g.menu.next_tab(2)  # aba Habilidades
+        self.g._refresh_menu()
+        self._check("habilidades_icones")
+        self.g.close_menu()
 
     def test_settings(self):
         self._reset("title")

@@ -13,6 +13,7 @@ from panda3d.core import LineSegs, NodePath, TextNode, TransparencyAttrib
 from . import content as C
 from . import repair as R
 from . import settings as T
+from . import textscale
 from . import scene as SC
 
 BAR_CELLS = 16
@@ -41,8 +42,9 @@ class Text:
     def __init__(self, _parent, text="", x=0.0, y=0.0, scale=0.05, align=TextNode.ALeft, color=(1, 1, 1, 1),
                  scale_mult=1.0, width=None):
         self.width = width
-        self.node = OnscreenText(text=self._fit(text), pos=(x, y), scale=scale * scale_mult, align=align,
+        self.node = OnscreenText(text=self._fit(text), pos=(x, y), scale=scale, align=align,
                                  fg=color, shadow=(0, 0, 0, 1), mayChange=True, parent=aspect2d)
+        textscale.register(self.node, scale)  # tamanho do texto ao vivo (ajustes)
 
     def _fit(self, text):
         return wrap(text, self.width) if self.width else str(text)
@@ -83,7 +85,7 @@ class BattleScreen:
                            scale_mult=scale_mult)
         self.log = Text(parent, "", -ar + 0.1, 0.55, 0.04, color=(0.95, 0.95, 0.9, 1), scale_mult=scale_mult,
                         width=70)
-        self.cmds = Text(parent, "", -ar + 0.1, -0.25, 0.05, color=(1, 1, 1, 1), scale_mult=scale_mult)
+        self.cmds = ListView(-ar + 0.1, -0.25, row_h=0.1, icon=0.045, scale=0.05, width=60)
         self.help = Text(parent, "", -ar + 0.1, -0.92, 0.035, color=(0.6, 0.7, 0.7, 1), scale_mult=scale_mult)
         self.diff = Text(parent, "", ar - 0.1, -0.92, 0.035, align=TextNode.ARight, color=(0.9, 0.8, 0.5, 1),
                          scale_mult=scale_mult)
@@ -99,9 +101,10 @@ class BattleScreen:
         self.panel.hide()
         for t in self._all:
             t.hide()
+        self.cmds.hide()
         self.portrait.hide()
 
-    def render(self, battle, cursor, difficulty_label):
+    def render(self, battle, cursor, difficulty_label, icon_for=None):
         self.name.set(battle.name)
         self.intent.set(battle.intent_text() if not battle.over else "")
         self.enemy_hp.set(f"{battle.name}  {bar(battle.hp_ratio())}  {battle.e_hp}/{battle.d['hp']}")
@@ -112,9 +115,10 @@ class BattleScreen:
         cmds = battle.commands()
         labels = {"atacar": "Atacar", "habilidades": "Habilidades", "itens": "Itens", "defender": "Defender",
                   "fugir": "Fugir", "voltar": "Voltar"}
-        lines = []
-        for i, cmd in enumerate(cmds):
+        names, icons = [], []
+        for cmd in cmds:
             label = labels.get(cmd)
+            icon = None
             if label is None and cmd.startswith("skill:"):
                 sid = cmd.split(":", 1)[1]
                 s = next(x for x in battle.skills() if x["id"] == sid)
@@ -123,12 +127,14 @@ class BattleScreen:
                 iid = cmd.split(":", 1)[1]
                 it = next(x for x in battle.items() if x["id"] == iid)
                 label = f"{it['name']} x{it['n']}"
-            label = label or cmd
-            mark = ">" if i == cursor % max(1, len(cmds)) else " "
-            lines.append(f"{mark} {i + 1}) {label}")
+                icon = icon_for("item", iid) if icon_for else None
+            names.append(label or cmd)
+            icons.append(icon)
         if battle.over:
-            lines = ["Enter continua"]
-        self.cmds.set("\n".join(lines))
+            self.cmds.render(["Enter continua"], 0, [None])
+        else:
+            numbered = [f"{i + 1}) {n}" for i, n in enumerate(names)]
+            self.cmds.render(numbered, cursor % max(1, len(cmds)), icons)
         self.help.set("Setas escolhem | 1-9 escolhem direto | Enter confirma")
         self.diff.set(f"Dificuldade: {difficulty_label}")
 
@@ -373,6 +379,11 @@ class ListView:
         for text, slot in self.rows[len(labels):]:
             text.hide()
             slot.hide()
+
+    def show(self):
+        """As linhas aparecem de novo na próxima render(); aqui só garante o estado visível."""
+        for text, slot in self.rows:
+            text.show()
 
     def hide(self):
         for text, slot in self.rows:

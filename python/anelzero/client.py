@@ -40,6 +40,7 @@ from . import repair as R  # noqa: E402
 from . import rt  # noqa: E402
 from . import scene as SC  # noqa: E402
 from . import settings as T  # noqa: E402
+from . import textscale  # noqa: E402
 from . import shop as SH  # noqa: E402
 from . import state as S  # noqa: E402
 from . import world as W  # noqa: E402
@@ -89,6 +90,7 @@ class Game(ShowBase):
         self.camLens.setFov(68)
         self.settings = T.Settings().load()
         self.tm = self.settings.get("text_scale")
+        textscale.apply(self.tm)
         self.sfx = A.SoundBank(self.loader, self.settings)
         self.slots = S.SaveSlots()
         self.slot = slot
@@ -194,13 +196,15 @@ class Game(ShowBase):
 
     def _ot(self, text, x, y, scale, align=TextNode.ALeft, color=(1, 1, 1, 1), wordwrap=None, parent=None):
         """Texto de tela no tamanho escolhido nos ajustes."""
-        kw = {"text": text, "pos": (x, y), "scale": scale * self.tm, "align": align, "fg": color,
+        kw = {"text": text, "pos": (x, y), "scale": scale, "align": align, "fg": color,
               "shadow": (0, 0, 0, 1), "mayChange": True}
         if wordwrap:
             kw["wordwrap"] = wordwrap
         if parent is not None:
             kw["parent"] = parent
-        return OnscreenText(**kw)
+        node = OnscreenText(**kw)
+        textscale.register(node, scale)  # tamanho do texto ao vivo (ajustes)
+        return node
 
     def _build_hud(self):
         ar = self.getAspectRatio()
@@ -534,6 +538,8 @@ class Game(ShowBase):
             opts = T.TEXT_SCALES
             cur = opts.index(st.get("text_scale"))
             st.set("text_scale", opts[(cur + step) % len(opts)])
+            self.tm = st.get("text_scale")
+            textscale.apply(self.tm)  # aplica já, sem reiniciar
         elif key == "difficulty":
             order = K.DIFFICULTY_ORDER
             cur = order.index(st.get("difficulty"))
@@ -736,7 +742,8 @@ class Game(ShowBase):
             return
         self.battle_screen.portrait.set(self.icon_for("enemy", self.battle.enemy_id))
         self.battle_screen.render(self.battle, self.battle_cursor,
-                                  P.DIFF_LABEL.get(self.settings.get("difficulty"), "Normal"))
+                                  P.DIFF_LABEL.get(self.settings.get("difficulty"), "Normal"),
+                                  icon_for=self.icon_for)
 
     def _end_battle(self):
         b = self.battle
@@ -916,7 +923,23 @@ class Game(ShowBase):
         body.reparentTo(root)
         SC.blob_shadow(root, 0.35 * rm.scale)
         bar = SC.hp_bar(root, 1.25 * rm.scale, 1.0)
+        self._add_roamer_icon(root, rm)
         self.roamer_nodes[id(rm)] = (root, bar)
+
+    def _add_roamer_icon(self, root, rm):
+        """Ícone pequeno do inimigo sobre a barra de vida (cartão de frente para a câmera)."""
+        path = self.icon_for("enemy", rm.id)
+        if not path:
+            return
+        from panda3d.core import CardMaker, TransparencyAttrib as TA
+        cm = CardMaker("roamer-icon")
+        cm.setFrame(-0.5, 0.5, -0.5, 0.5)
+        card = root.attachNewNode(cm.generate())
+        card.setTexture(self.loader.loadTexture(path))
+        card.setTransparency(TA.MAlpha)
+        card.setBillboardPointEye()
+        card.setPos(0, 0, 1.75 * rm.scale)
+        card.setScale(0.3)
 
     # ---- Ações ----
     def sound(self, name):
@@ -1139,6 +1162,9 @@ class Game(ShowBase):
             dist = INTRO_FAR + (INTRO_NEAR - INTRO_FAR) * k
             self.camera.setPos(1.6 + math.cos(a * 0.2) * 0.2, -dist, 1.7 + 0.2 * k)
             self.camera.lookAt(0, 0, 1.45)
+            # O Vigia respira (ciclo de 3,2 s), mais forte no começo; com movimento reduzido, fica parado
+            breath = 0.0 if self.settings.get("reduced_motion") else 0.02 * (1 - k * 0.5)
+            self.vigia.setScale(1 + breath * math.sin(2 * math.pi * t / 3.2))
             pulse = 0.85 + 0.15 * math.sin(2 * math.pi * t / 2.4)
             self.sun.setColor((0.95 * pulse, 0.97 * pulse, 1.0 * pulse, 1))
             self.intro_t = t + dt

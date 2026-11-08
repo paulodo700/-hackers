@@ -236,10 +236,8 @@ Os testes de ponta a ponta cobrem: título e slots, migração do save antigo, s
 **Regressão visual:** `tests/test_visual.py` captura seis telas (título, zona, batalha, reparo, loja e ajustes) em estado fixo e compara com `tests/visual/refs`. Limites: diferença média acima de 2,0 por canal, ou mais de 1,5% dos pixels amostrados com mudança clara. As referências foram geradas neste ambiente; se a renderização mudar em outra máquina, regere-as com `ANELZERO_UPDATE_REFS=1`.
 
 **Limites conhecidos do cliente Python (rodada 9):**
-- O áudio é sintetizado e verificado por medição (pico, duração e RMS, em `python/audio_samples/`, via `tools/verify_audio.py`), mas não foi ouvido: este ambiente não tem dispositivo de som.
-- O tamanho do texto é aplicado ao iniciar o jogo (não ao vivo).
-- Os ícones 3D aparecem no inventário, nas habilidades, na prévia da loja, na bancada e no retrato do inimigo na batalha. Os itens dentro da lista de comandos da batalha ainda são só texto.
-- As barras de vida dos inimigos errantes (no mundo) continuam sem ícone; o retrato aparece só na batalha por turnos.
+- O áudio é sintetizado e verificado por medição (pico, duração e RMS, em `python/audio_samples/`, via `tools/verify_audio.py`), mas não foi ouvido: este ambiente não tem dispositivo de som. O ajuste de volume pelo que se ouve está pendente (ver Rodada 10).
+- Os ícones 3D aparecem no inventário, nas habilidades, na prévia da loja, na bancada, no retrato do inimigo na batalha, nos itens da lista de comandos da batalha e num cartão pequeno sobre a barra de vida de cada inimigo errante.
 - A abertura tem aproximação de câmera, pulso de luz, trilha sintetizada e texto na faixa inferior. Não há animação própria de personagens.
 - O céu em gradiente é visível no topo da tela com a câmera atual (medido: as faixas de cima sobem de 38 para 43 de brilho, em vez de ficarem praticamente iguais).
 - Os inimigos errantes podem iniciar batalha por turnos (ajuste "Inimigos errantes: batalha"); desligado, o contato continua em tempo real.
@@ -284,3 +282,45 @@ Os testes de ponta a ponta cobrem: título e slots, migração do save antigo, s
 - **Vibração** depende do navegador; no PC não tem efeito.
 - **Dependência de ambiente.** O Playwright está declarado em `devDependencies` na versão 1.63.0, mas o Chromium precisa ser instalado com `npm run install:browser` em outra máquina. No ambiente de desenvolvimento deste projeto, ele já estava disponível.
 - **Cliente Python incompleto.** Faltam a arte 2D (sprites e ícones), a verificação do áudio em aparelho com som, as cenas de história além da abertura e a batalha por turnos para os inimigos errantes. Cada uma está descrita em Plataformas.
+
+## Rodada 10: texto ao vivo, Vigia que respira, ícones na batalha e medições
+
+- **Tamanho do texto ao vivo:** todo texto de tela registra a escala base (`anelzero/textscale.py`) e muda na hora ao escolher outro tamanho nos ajustes. Teste: o HUD muda de escala sem reiniciar.
+- **Vigia respirando:** durante a aproximação da abertura, o modelo inteiro cresce e diminui 2% em ciclo de 3,2 s, com menos força no fim da aproximação. Com movimento reduzido, fica parado.
+- **Ícones na batalha:** cada item da lista de comandos ganha o ícone do cache, e cada inimigo errante ganha um cartão pequeno sobre a barra de vida, sempre de frente para a câmera.
+- **Regressão visual:** duas capturas novas, a batalha ao toque (`batalha_ao_toque`) e o menu de habilidades com ícones (`habilidades_icones`). Dez referências no total.
+- **Correções de isolamento dos testes:** a cor do sol (pulsada pela abertura), o céu e o fundo (vindos da última zona carregada), o tamanho do texto e o slot de save agora são restaurados antes de cada captura. Sem isso, as capturas dependiam da ordem dos testes.
+
+### Desempenho medido nesta rodada
+
+Dois robôs, dois motores. Os números de cada um só se comparam entre as partes de um mesmo motor, não entre eles.
+
+| Robô | Motor | Configuração | Resultado |
+|---|---|---|---|
+| `tools/bench_shadows.py` (Panda3D) | Panda3D, Xvfb, CPU | sombra desligada | mediana 5,40 ms/quadro |
+| `tools/bench_shadows.py` (Panda3D) | Panda3D, Xvfb, CPU | sombra ligada | mediana 12,97 ms/quadro (+7,57 ms, +140%) |
+| `tests/perf.mjs` (Playwright, robô do jogo web) | Chromium headless, renderização por software, 360×740 | cena inteira | 27,4 FPS, 52 chamadas, 10 560 triângulos |
+| `tests/perf.mjs` (Playwright, robô do jogo web) | idem | só o jogador | 60,2 FPS, 43 chamadas, 2 448 triângulos |
+
+A medição da sombra subiu de 6,0 e 12,1 ms (rodada 9) para 5,4 e 13,0 ms: a diferença está no ruído da máquina e na câmera nova, e a conclusão não muda. A sombra custa mais do que dobra o tempo por quadro na renderização por software; em placa de vídeo real, o custo tende a ser bem menor. O robô da versão web continua medindo a parte de cada elemento do cenário (paredes, itens, decoração), que é a base para decidir o que otimizar no jogo web.
+
+### Áudio: o que foi verificado e o que falta
+
+`tools/verify_audio.py` gera um WAV de cada efeito e da trilha em `python/audio_samples/` e mede os arquivos gravados. Medições desta rodada (pico, duração e RMS):
+
+| Som | Pico | Duração | RMS |
+|---|---|---|---|
+| passo | 0,54 | 0,06 s | 0,196 |
+| golpe | 0,65 | 0,14 s | 0,302 |
+| pesado | 0,79 | 0,35 s | 0,254 |
+| coleta | 0,40 | 0,26 s | 0,224 |
+| reparo | 0,73 | 0,40 s | 0,248 |
+| cura | 0,35 | 0,44 s | 0,199 |
+| ui | 0,30 | 0,04 s | 0,229 |
+| vitoria | 0,35 | 0,71 s | 0,199 |
+| derrota | 0,30 | 0,76 s | 0,140 |
+| dano | 0,50 | 0,22 s | 0,251 |
+| abertura (trilha) | 0,39 | 8,00 s | 0,161 |
+
+Todos estão entre os limites de pico (0,2 a 0,95) e de duração (0,03 s a 9 s). **O ajuste de volume de cada som pelo que se ouve não foi feito**: este ambiente não tem dispositivo de som, e a decisão de volume depende de escuta. Os arquivos em `python/audio_samples/` podem ser ouvidos num computador com som para esse ajuste; os valores ajustados devem ser registrados aqui depois.
+
