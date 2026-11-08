@@ -3,7 +3,7 @@
 // O gerador só aceita um mapa se: a saída continua alcançável com os bloqueios abertos,
 // os materiais e falhas ficam alcançáveis antes de qualquer bloqueio, e o técnico não corta o caminho.
 import { mulberry32 } from './rng.js';
-import { FLOOR, TRACE, WALL, DAMAGED, GATE, SOCKET, NPC, UP, DOWN, GOAL, SPAWN } from './grid.js';
+import { FLOOR, TRACE, WALL, DAMAGED, GATE, SOCKET, NPC, UP, DOWN, GOAL, SPAWN, FOE_CHARS } from './grid.js';
 
 export const MAP_W = 19;
 export const MAP_H = 11;
@@ -11,7 +11,7 @@ export const START = [1, 1];
 export const EXIT = [MAP_W - 2, MAP_H - 2];
 const BLOCKER_CHARS = new Set([DAMAGED, GATE, SOCKET]);
 const FLOORS = new Set([FLOOR, TRACE]);
-const FOE_CHAR_OF = { pulga_corrente: 'f', rasgo_trilha: 'F', ruido_termico: 'Q' };
+const FOE_CHAR_OF = Object.fromEntries(Object.entries(FOE_CHARS).map(([ch, id]) => [id, ch]));
 const MATERIAL_CHARS = new Set(['a', 'w', 'k']);
 
 const key = (c, r) => `${c},${r}`;

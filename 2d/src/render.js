@@ -1,13 +1,16 @@
-// Renderização em canvas 2D. Só lê o estado do jogo (game.js) e não altera regras.
+// Renderização em canvas 2D. Só lê o estado (game.js) e o progresso (progress.js); não altera regras.
 import { LAYERS } from './layers.js';
 import { FOES, RECIPES, MATERIAL_NOMES, TOOL_NOMES } from './content.js';
-import { DOWN, UP, GOAL, NPC, SOCKET, GATE, DAMAGED, TRACE, FLOOR, WALL, PICKUP_ITEMS, FOE_CHARS } from './grid.js';
+import {
+  DOWN, UP, GOAL, NPC, SOCKET, GATE, DAMAGED, TRACE, FLOOR, WALL, PICKUP_ITEMS, FOE_CHARS, cellKey,
+} from './grid.js';
+import { chipOverview, overallPercent } from './progress.js';
 
 export const TILE = 34;
 export const MAP_X = 20;
 export const MAP_Y = 44;
 const PICK_COLOR = { a: '#e3a54a', w: '#ff9f5a', k: '#7dd3fc' };
-const FOE_COLOR = { f: '#ff6b6b', F: '#ffb020', Q: '#d66bff' };
+const FOE_COLOR = { f: '#ff6b6b', F: '#ffb020', Q: '#d66bff', V: '#7ef0c9' };
 
 const COLOR = {
   bg: '#07090d',
@@ -19,20 +22,18 @@ const COLOR = {
   gate: '#7a6a14',
   socket: '#0f4f57',
   up: '#4fd1c5',
-  down: '#4fd1c5',
   goal: '#ffd166',
   npc: '#f5e6a8',
   player: '#e8f1ff',
   fog: 'rgba(3, 5, 8, 0.82)',
   text: '#dfe9f3',
   dim: '#7b8a99',
+  ok: '#7dd3a0',
+  debug: '#78dcff',
 };
 
 function drawTile(ctx, ch, x, y) {
-  let fill = COLOR.floor;
-  if (ch === '#') fill = COLOR.wall;
-  else if (ch === '=') fill = COLOR.floor;
-  ctx.fillStyle = fill;
+  ctx.fillStyle = ch === '#' ? COLOR.wall : COLOR.floor;
   ctx.fillRect(x, y, TILE, TILE);
   if (ch === '#') {
     ctx.strokeStyle = COLOR.wallEdge;
@@ -56,8 +57,7 @@ function drawTile(ctx, ch, x, y) {
     ctx.strokeRect(x + 6, y + 6, TILE - 12, TILE - 12);
     ctx.lineWidth = 1;
   } else if (ch === UP || ch === DOWN || ch === GOAL) {
-    const color = ch === GOAL ? COLOR.goal : COLOR.up;
-    ctx.fillStyle = color;
+    ctx.fillStyle = ch === GOAL ? COLOR.goal : COLOR.up;
     ctx.font = 'bold 20px monospace';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
@@ -66,7 +66,7 @@ function drawTile(ctx, ch, x, y) {
     ctx.fillStyle = PICK_COLOR[ch];
     ctx.beginPath(); ctx.arc(x + TILE / 2, y + TILE / 2, 6, 0, Math.PI * 2); ctx.fill();
   } else if (FOE_CHARS[ch]) {
-    ctx.fillStyle = FOE_COLOR[ch];
+    ctx.fillStyle = FOE_COLOR[ch] || '#ff6b6b';
     ctx.beginPath();
     ctx.moveTo(x + TILE / 2, y + 5);
     ctx.lineTo(x + TILE - 5, y + TILE - 6);
@@ -96,42 +96,45 @@ function bar(ctx, x, y, w, h, value, max, color) {
   ctx.fillStyle = '#1a222c';
   ctx.fillRect(x, y, w, h);
   ctx.fillStyle = color;
-  ctx.fillRect(x, y, Math.max(0, (w * value) / max), h);
+  ctx.fillRect(x, y, Math.max(0, Math.min(w, (w * value) / (max || 1))), h);
 }
 
-function panel(ctx, x, y, w, h) {
+function panel(ctx, x, y, w, h, border = '#34495e') {
   ctx.fillStyle = 'rgba(8, 12, 18, 0.94)';
   ctx.fillRect(x, y, w, h);
-  ctx.strokeStyle = '#34495e';
+  ctx.strokeStyle = border;
   ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
 }
 
-function text(ctx, s, x, y, color = COLOR.text, size = 13) {
+function text(ctx, s, x, y, color = COLOR.text, size = 13, align = 'left') {
   ctx.fillStyle = color;
   ctx.font = `${size}px monospace`;
-  ctx.textAlign = 'left';
+  ctx.textAlign = align;
   ctx.textBaseline = 'top';
   ctx.fillText(s, x, y);
 }
 
-export function draw(ctx, game) {
-  const { width, height } = ctx.canvas;
+// Tela de jogo normal, ou o mapa do chip quando ele está aberto.
+export function draw(ctx, game, ui = {}) {
+  if (game.mapOpen) {
+    drawChipMap(ctx, game);
+    return;
+  }
+  const { width } = ctx.canvas;
   ctx.fillStyle = COLOR.bg;
-  ctx.fillRect(0, 0, width, height);
-  const layer = game.layer;
+  ctx.fillRect(0, 0, width, ctx.canvas.height);
   const grid = game.grid;
   const p = game.player;
+  const order = Object.keys(game.world);
 
-  // Cabeçalho
-  text(ctx, `${LAYERS[p.layer].nome}`, MAP_X, 12, COLOR.text, 16);
-  text(ctx, `camada ${game.world && (Object.keys(game.world).indexOf(p.layer) + 1)} de ${Object.keys(game.world).length}`, width - 150, 14, COLOR.dim, 12);
+  text(ctx, LAYERS[p.layer].nome, MAP_X, 12, COLOR.text, 16);
+  text(ctx, `camada ${order.indexOf(p.layer) + 1} de ${order.length}`, width - 20, 14, COLOR.dim, 12, 'right');
 
-  // Mapa
   for (let r = 0; r < grid.h; r++) {
     for (let c = 0; c < grid.rows[r].length; c++) {
       const x = MAP_X + c * TILE, y = MAP_Y + r * TILE;
       drawTile(ctx, grid.rows[r][c], x, y);
-      if (!game.debug && !layer.visited.has(`${c},${r}`)) {
+      if (!game.debug && !game.layer.visited.has(cellKey(c, r))) {
         ctx.fillStyle = COLOR.fog;
         ctx.fillRect(x, y, TILE, TILE);
       }
@@ -139,7 +142,6 @@ export function draw(ctx, game) {
   }
   drawPlayer(ctx, p, MAP_X + p.c * TILE, MAP_Y + p.r * TILE);
 
-  // Depuração: grade, coordenadas e células visitadas
   if (game.debug) {
     const view = game.debugView();
     ctx.strokeStyle = 'rgba(120, 220, 255, 0.25)';
@@ -147,7 +149,7 @@ export function draw(ctx, game) {
       for (let c = 0; c < grid.rows[r].length; c++) {
         const x = MAP_X + c * TILE, y = MAP_Y + r * TILE;
         ctx.strokeRect(x + 0.5, y + 0.5, TILE - 1, TILE - 1);
-        if (layer.visited.has(`${c},${r}`)) {
+        if (game.layer.visited.has(cellKey(c, r))) {
           ctx.fillStyle = 'rgba(80, 200, 120, 0.12)';
           ctx.fillRect(x, y, TILE, TILE);
         }
@@ -158,10 +160,9 @@ export function draw(ctx, game) {
         ctx.fillText(`${c},${r}`, x + 2, y + 2);
       }
     }
-    text(ctx, `DEBUG  visitadas ${view.visitedCount}  caminháveis ${view.walkableCount}  jogador ${view.player.c},${view.player.r}`, MAP_X, MAP_Y + grid.h * TILE + 6, '#78dcff', 12);
+    text(ctx, `DEBUG  visitadas ${view.visitedCount}  caminháveis ${view.walkableCount}  jogador ${view.player.c},${view.player.r}`, MAP_X, MAP_Y + grid.h * TILE + 6, COLOR.debug, 12);
   }
 
-  // Barra de estado
   const hy = MAP_Y + grid.h * TILE + 28;
   text(ctx, `Vida ${p.hp}/${p.maxHp}`, MAP_X, hy);
   bar(ctx, MAP_X + 120, hy + 3, 180, 10, p.hp, p.maxHp, '#e05d5d');
@@ -169,20 +170,18 @@ export function draw(ctx, game) {
   text(ctx, mats, MAP_X, hy + 20, COLOR.dim, 12);
   const tools = Object.entries(game.tools).map(([t, n]) => `${TOOL_NOMES[t]} ${n}`).join('   ');
   text(ctx, `Ferramentas: ${tools}`, MAP_X, hy + 38, COLOR.dim, 12);
-  text(ctx, 'Setas/WASD mover · E falar · R usar · C criar · F3 depurar', MAP_X, hy + 58, '#55657a', 11);
+  text(ctx, 'Setas/WASD mover · E falar · R usar · C criar · M mapa · F3 depurar', MAP_X, hy + 58, '#55657a', 11);
+  text(ctx, ui.saveStatus || '', MAP_X, hy + 74, '#55657a', 11);
 
-  // Registro de mensagens
-  const logY = hy + 76;
+  const logY = hy + 96;
   game.log.slice(-4).forEach((line, i) => text(ctx, `· ${line}`, MAP_X, logY + i * 16, COLOR.text, 12));
 
-  // Diálogo
   if (game.dialog) {
     panel(ctx, MAP_X, MAP_Y + 4, grid.w * TILE, 56);
     text(ctx, game.dialog.speaker, MAP_X + 10, MAP_Y + 10, COLOR.npc, 13);
     text(ctx, game.dialog.text, MAP_X + 10, MAP_Y + 30, COLOR.text, 13);
   }
 
-  // Combate
   if (game.battle) {
     const b = game.battle, foe = FOES[b.foe];
     const pw = 300, px = (width - pw) / 2, py = MAP_Y + 70;
@@ -194,7 +193,6 @@ export function draw(ctx, game) {
     text(ctx, game.log[game.log.length - 1] || '', px + 12, py + 116, COLOR.text, 12);
   }
 
-  // Criação de ferramentas
   if (game.craftOpen && !game.battle) {
     const pw = 320, px = (width - pw) / 2, py = MAP_Y + 70;
     panel(ctx, px, py, pw, 150);
@@ -203,13 +201,96 @@ export function draw(ctx, game) {
       const need = Object.entries(recipe).map(([m, n]) => `${n} ${MATERIAL_NOMES[m].split(' ')[0]}`).join(', ');
       text(ctx, `${i + 1}. ${TOOL_NOMES[tool]} (${need})`, px + 12, py + 36 + i * 24, COLOR.text, 12);
     });
-    text(ctx, 'C fecha', px + 12, py + 124, COLOR.dim, 12);
+    text(ctx, 'C ou Esc fecha', px + 12, py + 124, COLOR.dim, 12);
   }
 
-  // Fim
   if (game.won) {
     panel(ctx, MAP_X + 60, MAP_Y + 120, grid.w * TILE - 120, 90);
     text(ctx, 'Anel zero encontrado', MAP_X + 80, MAP_Y + 138, COLOR.goal, 18);
     text(ctx, 'O processador está funcionando de novo.', MAP_X + 80, MAP_Y + 168, COLOR.text, 13);
   }
+}
+
+// Cor de cada célula no mini-mapa do mapa do chip. Null = piso comum.
+function miniColor(ch) {
+  if (ch === WALL) return COLOR.wall;
+  if (ch === TRACE) return '#5a3a1d';
+  if (ch === DAMAGED) return COLOR.damaged;
+  if (ch === GATE) return COLOR.gate;
+  if (ch === SOCKET) return COLOR.socket;
+  if (ch === UP || ch === DOWN) return COLOR.up;
+  if (ch === GOAL) return COLOR.goal;
+  if (ch === NPC) return COLOR.npc;
+  if (PICKUP_ITEMS[ch]) return PICK_COLOR[ch];
+  if (FOE_CHARS[ch]) return FOE_COLOR[ch] || '#ff6b6b';
+  return null;
+}
+
+// Mapa do chip: oito camadas em duas colunas, da primeira (dissipador) à última (substrato).
+export function drawChipMap(ctx, game) {
+  const { width: W, height: H } = ctx.canvas;
+  ctx.fillStyle = COLOR.bg;
+  ctx.fillRect(0, 0, W, H);
+  const overview = chipOverview(game);
+  text(ctx, 'Mapa do chip', 20, 14, COLOR.text, 18);
+  text(ctx, `exploração total ${overallPercent(overview)}%   ·   M ou Esc fecha`, 20, 40, COLOR.dim, 12);
+  const gap = 14, cols = 2, top = 66, ch = 128;
+  const cw = (W - 40 - gap) / cols;
+  overview.forEach((p, i) => {
+    const x = 20 + (i % cols) * (cw + gap);
+    const y = top + Math.floor(i / cols) * (ch + 10);
+    drawLayerCard(ctx, game, p, x, y, cw, ch);
+  });
+}
+
+function drawLayerCard(ctx, game, p, x, y, w, h) {
+  const layer = game.world[p.id];
+  panel(ctx, x, y, w, h, p.current ? COLOR.goal : '#34495e');
+  text(ctx, `${p.index}`, x + 10, y + 9, COLOR.dim, 12);
+  text(ctx, p.nome, x + 26, y + 8, p.current ? COLOR.goal : COLOR.text, 14);
+  const statusColor = { 'você está aqui': COLOR.goal, 'concluída': COLOR.ok, 'não visitada': COLOR.dim }[p.status] || COLOR.text;
+  text(ctx, p.status, x + 26, y + 26, statusColor, 11);
+
+  // Mini-mapa: só o que foi visitado aparece; o resto segue em névoa.
+  const s = 5, mx = x + 10, my = y + 46;
+  for (let r = 0; r < layer.origin.length; r++) {
+    for (let c = 0; c < layer.origin[r].length; c++) {
+      const px = mx + c * s, py = my + r * s;
+      if (!layer.visited.has(cellKey(c, r))) {
+        ctx.fillStyle = '#0a0d12';
+        ctx.fillRect(px, py, s, s);
+        continue;
+      }
+      const ch = layer.grid.at(c, r);
+      ctx.fillStyle = miniColor(ch) || COLOR.floor;
+      ctx.fillRect(px, py, s, s);
+    }
+  }
+  ctx.strokeStyle = '#2a3642';
+  ctx.strokeRect(mx - 0.5, my - 0.5, layer.origin[0].length * s + 1, layer.origin.length * s + 1);
+  if (p.current) {
+    const px = mx + game.player.c * s, py = my + game.player.r * s;
+    ctx.fillStyle = COLOR.player;
+    ctx.fillRect(px + 1, py + 1, s - 2, s - 2);
+  }
+
+  // Barras de progresso à direita do mini-mapa.
+  const bx = x + 130, bw = w - 130 - 12;
+  const rows = [
+    ['exploração', `${p.percent}%`, p.visited, p.walkable],
+    ['reparos', countText(p.repaired, p.blockers), p.repaired, p.blockers],
+    ['falhas vencidas', countText(p.defeated, p.foes), p.defeated, p.foes],
+    ['materiais', countText(p.collected, p.pickups), p.collected, p.pickups],
+  ];
+  rows.forEach(([label, value, done, total], i) => {
+    const ty = y + 44 + i * 20;
+    text(ctx, label, bx, ty, COLOR.dim, 11);
+    text(ctx, value, bx + bw, ty, COLOR.text, 11, 'right');
+    const fill = total === 0 ? 1 : done / total;
+    bar(ctx, bx, ty + 13, bw, 5, fill, 1, COLOR.ok);
+  });
+}
+
+function countText(done, total) {
+  return total === 0 ? '—' : `${done}/${total}`;
 }

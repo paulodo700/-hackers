@@ -2,18 +2,41 @@
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Anel Zero 2D — Dentro do Processador</title>
   <style>
     html, body { margin: 0; background: #07090d; color: #dfe9f3; font-family: monospace; }
-    body { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; }
-    canvas { max-width: 100%; height: auto; border: 1px solid #1d2a36; image-rendering: pixelated; }
-    p { font-size: 12px; color: #7b8a99; }
+    body { display: flex; flex-direction: column; align-items: center; min-height: 100vh; padding: 8px; box-sizing: border-box; }
+    canvas { display: block; width: 100%; max-width: 720px; height: auto; border: 1px solid #1d2a36; touch-action: none; }
+    p.hint { font-size: 12px; color: #7b8a99; margin: 8px 0 0; }
+    .pad { display: none; width: 100%; max-width: 720px; margin-top: 10px; gap: 8px 10px; grid-template-columns: auto minmax(0, 1fr); align-items: start; user-select: none; -webkit-user-select: none; }
+    body.touch .pad { display: grid; }
+    .dpad { display: grid; grid-template-columns: repeat(3, 58px); grid-template-rows: repeat(3, 52px); gap: 6px; }
+    .ctx { grid-column: 2; grid-row: 1; display: flex; flex-direction: column; gap: 6px; justify-content: flex-start; }
+    .ctx[hidden] { display: none; }
+    .acts { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+    button {
+      font-family: monospace; font-size: 15px; color: #dfe9f3; background: #101820;
+      border: 1px solid #34495e; border-radius: 8px; padding: 8px 6px; min-height: 48px;
+      touch-action: manipulation; -webkit-tap-highlight-color: transparent; cursor: pointer;
+      min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    button:active, button.on { background: #1f3a4d; border-color: #78dcff; }
+    button[hidden] { display: none; }
+    .up { grid-column: 2; grid-row: 1; }
+    .left { grid-column: 1; grid-row: 2; }
+    .right { grid-column: 3; grid-row: 2; }
+    .down { grid-column: 2; grid-row: 3; }
   </style>
 </head>
 <body>
-  <canvas id="game" width="720" height="600"></canvas>
-  <p>Setas ou WASD para mover · E falar · R usar ferramenta · C criar · F3 depuração</p>
+  <canvas id="game" width="720" height="640"></canvas>
+  <div id="pad" class="pad" aria-label="Controles de toque">
+    <div id="dpad" class="dpad" aria-label="Mover"></div>
+    <div id="ctx" class="ctx" aria-label="Ação do combate ou da criação"></div>
+    <div id="acts" class="acts" aria-label="Ações"></div>
+  </div>
+  <p class="hint">Setas ou WASD mover · E falar · R usar · C criar · M mapa do chip · F3 depurar · N novo jogo</p>
   <script type="module" src="./src/main.js"></script>
 </body>
 </html>

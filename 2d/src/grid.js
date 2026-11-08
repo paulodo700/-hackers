@@ -11,10 +11,13 @@ export const DOWN = '>';        // saída para a próxima camada
 export const NPC = 'N';         // técnico: bloqueia, fala com E
 export const GOAL = 'A';        // o anel: vitória
 export const PICKUP_ITEMS = { a: 'liga_ferrugem', w: 'fio_cobre', k: 'cristal_silicio' };
-export const FOE_CHARS = { f: 'pulga_corrente', F: 'rasgo_trilha', Q: 'ruido_termico' };
+export const FOE_CHARS = { f: 'pulga_corrente', F: 'rasgo_trilha', Q: 'ruido_termico', V: 'vazamento_corrente' };
 export const TOOL_CELLS = { x: 'reparo_trilha', g: 'ajuste_energia', o: 'reforco_nucleo' };
 export const OPENED = { x: TRACE, g: TRACE, o: FLOOR };
 export const BLOCKING = new Set([WALL, DAMAGED, GATE, SOCKET, NPC]);
+
+// Chave de uma célula, usada nos conjuntos de visitadas e no salvamento.
+export const cellKey = (c, r) => `${c},${r}`;
 
 export class Grid {
   constructor(rows) {

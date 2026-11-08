@@ -84,13 +84,14 @@ export const LAYERS = {
     nome: 'Rede de energia',
     pickups: { w: 1, k: 1 },
     blockers: ['g'],
-    foes: ['rasgo_trilha', 'ruido_termico'],
+    foes: ['rasgo_trilha', 'vazamento_corrente', 'ruido_termico'],
     foeCount: 3,
     npc: true,
     loops: 5,
     dialogo: [
       'Técnico: a rede de energia alimenta tudo. Uma porta fechada segura a corrente.',
       'Técnico: o ajuste de energia destrava as portas. Junte cristais de silício.',
+      'Técnico: o vazamento de corrente é rápido e aguenta pancada. Derrube-o antes que sobreaqueça a rede.',
     ],
   },
   interposer: {

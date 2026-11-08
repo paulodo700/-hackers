@@ -1,46 +1,60 @@
 # Anel Zero 2D — Dentro do Processador
 
-Versão 2D do jogo. O personagem atravessa as oito camadas reais de um chip, do dissipador de calor
-ao substrato, consertando trilhas, abrindo portas de energia e reforçando o núcleo, até chegar ao anel zero.
+Um RPG 2D original. O personagem, Bit, é um robô de manutenção que desce pelas oito camadas de um processador,
+do dissipador de calor ao substrato, para conter a corrupção que ameaça o chip inteiro.
 
 ## Como jogar
 
-O jogo é um conjunto de módulos ES; por isso precisa de um servidor local (abrir o `index.html` direto
-do disco não funciona nos navegadores por causa dos módulos).
+O jogo usa módulos ES, então precisa de um servidor local (abrir o `index.html` direto do disco não funciona):
 
 ```
 cd 2d
 python -m http.server 8000
 ```
 
-Abra `http://localhost:8000` no navegador (Chrome, Edge ou Firefox, no PC ou no celular na mesma rede).
+Abra `http://localhost:8000` no navegador, no PC ou no celular na mesma rede.
 
 | Tecla | Ação |
 |---|---|
-| Setas ou W A S D | Mover |
+| Setas ou W A S D | Mover (segure para andar seguidamente) |
 | E | Falar com o técnico na frente |
-| R | Usar a ferramenta certa na célula da frente (trilha rompida, porta de energia, encaixe do núcleo) |
-| C | Abrir a criação de ferramentas; depois 1, 2 ou 3 para criar |
+| R | Usar a ferramenta certa na célula da frente |
+| C | Abrir ou fechar o menu de criação; depois 1, 2 ou 3 cria a ferramenta |
+| M | Abrir ou fechar o mapa do chip (oito camadas com o progresso de cada uma) |
+| Esc | Fechar mapa, menu de criação e diálogo |
 | 1 / 2 / 3 (em combate) | Atacar / Defender / Fugir |
 | F3 ou ` | Modo depuração: grade com coordenadas, névoa e células visitadas |
+| N | Novo jogo (pede confirmação e apaga o progresso salvo) |
 
-Semente: `?seed=123` na URL muda a partida (combates e drops).
+No celular, o painel de botões aparece abaixo do jogo. Os botões mandam os mesmos comandos do teclado.
+
+Semente: `?seed=123` na URL muda os combates e as quedas de material.
+
+## Progresso salvo
+
+O progresso fica no `localStorage` do navegador e é gravado a cada ação. Há uma chave para a partida
+(posição, materiais, ferramentas, estado do sorteio) e uma chave por camada (trilhas reparadas, falhas vencidas,
+materiais coletados, células visitadas, falas do técnico). Cada chave tem formato e versão. Se uma camada
+não bater com o mapa atual, ou se o dado estiver corrompido, só essa parte é descartada e o jogo segue.
+Sem armazenamento disponível (modo privado, por exemplo), o jogo avisa e roda só na memória.
 
 ## Estrutura
 
 | Pasta/arquivo | Papel |
 |---|---|
 | `src/grid.js` | Legenda das células e tipos de bloqueio. Sem DOM. |
+| `src/rng.js` | Gerador determinístico, com estado que pode ser salvo. |
 | `src/mapgen.js` | Gera o labirinto de cada camada a partir de uma semente, validando que o jogo continua solúvel. |
 | `src/layers.js` | As oito camadas: nome, bloqueios, materiais, falhas, técnicos. |
 | `src/content.js` | Materiais, ferramentas, receitas e falhas. |
-| `src/game.js` | Regras: movimento e colisão, troca de camada, combate, reparo, criação, depuração. Sem DOM. |
-| `src/render.js` | Desenho em canvas. Só lê o estado do jogo. |
-| `src/main.js` | Teclado e laço de tela. |
-| `test/` | Testes automatizados, uma pasta de regras por arquivo. |
-
-A lógica (`game.js`, `mapgen.js`, `grid.js`) não importa nada de navegador, então roda igual no navegador
-e nos testes. A renderização fica isolada em `render.js`.
+| `src/game.js` | Regras: movimento, colisão, troca de camada, combate, reparo, criação, mapa e depuração. Sem DOM. |
+| `src/progress.js` | Progresso de cada camada e do chip inteiro. |
+| `src/save.js` | Salvamento por camada, com validação e descarte seguro. |
+| `src/commands.js` | Comandos do jogador. Teclado e toque usam os mesmos. |
+| `src/render.js` | Desenho em canvas. Só lê o estado. |
+| `src/main.js` | Teclado, toque, salvamento automático e novo jogo. |
+| `test/` | Testes com `node:test`, um arquivo por regra. |
+| `docs/SPRITES.md` | Proposta de sprites 2D a partir dos modelos 3D. |
 
 ## Testes
 
@@ -49,13 +63,9 @@ cd 2d
 node --test test/*.test.mjs
 ```
 
-| Arquivo | Regras cobertas |
-|---|---|
-| `collision.test.mjs` | Paredes, trilha rompida, porta, encaixe e técnico bloqueiam; trilha metálica passa; falha inicia combate; coleta; combate trava o movimento |
-| `repair.test.mjs` | Falta de ferramenta; receita sem material não gasta nada; criação consome a receita; reparo, ajuste e reforço abrem a célula certa; cada ferramenta vale uma vez |
-| `combat.test.mjs` | Dano e vitória; drop; defender reduz o dano; fugir com e sem sucesso; derrota renasce no início com metade da vida |
-| `layers.test.mjs` | Entrada e saída de cada camada; troca de camada nos dois sentidos; mapas determinísticos; saída alcançável; materiais acumulados cobrem os bloqueios; anel dá a vitória |
-| `debug.test.mjs` | Névoa e células visitadas no modo depuração |
+Os testes cobrem colisão, reparo, combate, troca de camada, depuração, sorteio, salvamento (incluindo
+corrupção, versão, mapa diferente, falha de leitura e de escrita), progresso, mapa do chip, controles
+(teclado e toque) e a falha nova.
 
 ## Camadas
 
@@ -69,3 +79,5 @@ node --test test/*.test.mjs
 | 6 | Rede de energia | porta de energia | ajuste de energia |
 | 7 | Interposer | trilha rompida | reparo de trilha |
 | 8 | Substrato | — | anel zero (vitória) |
+
+Falhas do circuito: pulga de corrente, rasgo de trilha, ruído térmico e vazamento de corrente.

@@ -1,8 +1,8 @@
-// Regras do jogo, sem DOM: movimento e colisão, troca de camada, combate, reparo, ferramentas e depuração.
-// A renderização (render.js) só lê este estado; o mesmo código roda no navegador e nos testes.
+// Regras do jogo, sem DOM: movimento e colisão, troca de camada, combate, reparo, criação, mapa e depuração.
+// A renderização (render.js) só lê este estado. O salvamento (save.js) lê e restaura o mesmo estado.
 import { mulberry32 } from './rng.js';
 import {
-  Grid, FLOOR, BLOCKING, DOWN, UP, GOAL, SPAWN, NPC, PICKUP_ITEMS, FOE_CHARS, TOOL_CELLS, OPENED,
+  Grid, FLOOR, BLOCKING, DOWN, UP, GOAL, SPAWN, NPC, PICKUP_ITEMS, FOE_CHARS, TOOL_CELLS, OPENED, cellKey,
 } from './grid.js';
 import { LAYER_ORDER, LAYERS } from './layers.js';
 import { generateMap } from './mapgen.js';
@@ -11,7 +11,6 @@ import {
 } from './content.js';
 
 const LOG_MAX = 6;
-const key = (c, r) => `${c},${r}`;
 
 export class Game {
   constructor({ seed = 7 } = {}) {
@@ -21,11 +20,14 @@ export class Game {
     this.tools = { reparo_trilha: 0, ajuste_energia: 0, reforco_nucleo: 0 };
     this.world = {};
     LAYER_ORDER.forEach((id, i) => {
-      this.world[id] = { grid: new Grid(generateMap(LAYERS[id], 1000 + i * 101)), visited: new Set(), npc: 0 };
+      const rows = generateMap(LAYERS[id], 1000 + i * 101);
+      // origin é o mapa como foi gerado. Comparar com ele mostra o que o jogador mudou (reparos, vitórias, coletas).
+      this.world[id] = { grid: new Grid(rows), origin: rows.slice(), visited: new Set(), npc: 0 };
     });
     this.battle = null;
     this.dialog = null;
     this.craftOpen = false;
+    this.mapOpen = false;
     this.debug = false;
     this.won = false;
     this.log = [];
@@ -41,7 +43,7 @@ export class Game {
     if (this.log.length > LOG_MAX) this.log.shift();
   }
 
-  // Coloca o jogador numa célula do tipo ch (S ou < ou >) da camada; cai para outras entradas se faltar.
+  // Coloca o jogador numa célula do tipo ch (S, < ou >) da camada; cai para outras entradas se faltar.
   placeAt(layerId, ch) {
     const grid = this.world[layerId].grid;
     const found = grid.find(ch)[0] || grid.find(SPAWN)[0] || grid.find(UP)[0] || grid.find(DOWN)[0];
@@ -54,17 +56,23 @@ export class Game {
     const { c, r } = this.player;
     for (let dr = -1; dr <= 1; dr++) {
       for (let dc = -1; dc <= 1; dc++) {
-        if (this.grid.inside(c + dc, r + dr)) this.layer.visited.add(key(c + dc, r + dr));
+        if (this.grid.inside(c + dc, r + dr)) this.layer.visited.add(cellKey(c + dc, r + dr));
       }
     }
   }
 
-  // Movimento de uma célula. Bater numa parede vira virada; bater numa falha começa o combate.
+  // Com o mapa do chip aberto o jogo fica parado: nada anda, fala, usa ou cria.
+  paused() {
+    return { type: 'paused' };
+  }
+
+  // Movimento de uma célula. Bater numa parede vira a direção; bater numa falha começa o combate.
   move(dc, dr) {
     const p = this.player;
     p.fc = dc;
     p.fr = dr;
     if (this.won) return { type: 'won' };
+    if (this.mapOpen) return this.paused();
     if (this.battle) return { type: 'battle' };
     this.dialog = null;
     const nc = p.c + dc, nr = p.r + dr;
@@ -111,8 +119,9 @@ export class Game {
     return Math.floor(this.rng() * 3) - 1; // -1, 0 ou +1
   }
 
-  // Ações: 'atacar', 'defender', 'fugir'. Cada ação (que não vence) dá o turno à falha.
+  // Ações: 'atacar', 'defender', 'fugir'. Cada ação que não vence dá o turno à falha.
   battleAction(action) {
+    if (this.mapOpen) return this.paused();
     const b = this.battle;
     if (!b) return { type: 'none' };
     const p = this.player, foe = FOES[b.foe];
@@ -175,6 +184,7 @@ export class Game {
 
   // Fala com o técnico que está na frente do jogador.
   interact() {
+    if (this.mapOpen) return this.paused();
     if (this.battle) return { type: 'battle' };
     const [c, r] = this.front();
     if (this.grid.at(c, r) !== NPC) return { type: 'none' };
@@ -187,6 +197,7 @@ export class Game {
 
   // Usa a ferramenta certa na célula da frente: reparo (x), ajuste de energia (g) ou reforço (o).
   useTool() {
+    if (this.mapOpen) return this.paused();
     if (this.battle) return { type: 'battle' };
     const [c, r] = this.front();
     const ch = this.grid.at(c, r);
@@ -208,6 +219,7 @@ export class Game {
 
   // Cria uma ferramenta com os materiais. Nada é gasto se faltar algum material.
   craft(tool) {
+    if (this.mapOpen) return this.paused();
     if (this.battle) return { type: 'battle' };
     const recipe = RECIPES[tool];
     if (!recipe) return { type: 'none' };
@@ -222,8 +234,30 @@ export class Game {
     return { type: 'crafted', tool };
   }
 
-  toggleCraft() { this.craftOpen = !this.craftOpen; }
-  toggleDebug() { this.debug = !this.debug; }
+  toggleCraft() {
+    if (this.mapOpen) return this.paused();
+    this.craftOpen = !this.craftOpen;
+    return { type: 'craft', open: this.craftOpen };
+  }
+
+  toggleDebug() {
+    this.debug = !this.debug;
+    return { type: 'debug', on: this.debug };
+  }
+
+  // Abre ou fecha o mapa do chip. Abrir não gasta tempo nem muda o jogo.
+  toggleMap() {
+    this.mapOpen = !this.mapOpen;
+    return { type: 'map', open: this.mapOpen };
+  }
+
+  // Esc: fecha o mapa, o menu de criação e o diálogo.
+  closeAll() {
+    this.mapOpen = false;
+    this.craftOpen = false;
+    this.dialog = null;
+    return { type: 'closed' };
+  }
 
   // Visão de depuração: a grade com névoa (células não visitadas viram '?') e a posição do jogador.
   debugView() {
@@ -236,7 +270,7 @@ export class Game {
         const ch = g.rows[r][c];
         if (!BLOCKING.has(ch) && ch !== '#') walkable++;
         if (c === p.c && r === p.r) s += '@';
-        else s += visited.has(key(c, r)) ? ch : '?';
+        else s += visited.has(cellKey(c, r)) ? ch : '?';
       }
       lines.push(s);
     }
