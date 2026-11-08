@@ -1,0 +1,287 @@
+// Constrói o mundo 3D de uma zona a partir do mapa em texto.
+import * as THREE from 'three';
+import { circuitFloorTexture, chipTopTexture } from './textures.js';
+
+export const TILE = 2;
+const COLS = 24;
+const SOLID_TERRAIN = new Set(['#', '~', '_']);
+const OBJECT_TYPES = new Set(['npc', 'chest', 'repair', 'boss']);
+
+// Padroniza larguras: linhas curtas ganham "." antes do último caractere,
+// linhas longas perdem "." internos. Mapas podem ter alturas diferentes.
+export function normalizeMap(raw) {
+  return raw.map((row) => {
+    let r = row;
+    while (r.length < COLS) r = r.slice(0, -1) + '.' + r.slice(-1);
+    while (r.length > COLS) {
+      const idx = r.indexOf('.', 1);
+      if (idx === -1 || idx >= r.length - 1) break;
+      r = r.slice(0, idx) + r.slice(idx + 1);
+    }
+    return r.slice(0, COLS).padEnd(COLS, '#');
+  });
+}
+
+function hashStr(s) {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
+  return h >>> 0;
+}
+
+function rnd(seed) {
+  let s = seed >>> 0 || 1;
+  return () => {
+    s ^= s << 13; s >>>= 0; s ^= s >>> 17; s ^= s << 5; s >>>= 0;
+    return s / 4294967296;
+  };
+}
+
+export function buildZone(def, scene) {
+  const map = normalizeMap(def.map);
+  const rows = map.length;
+  const cols = COLS;
+  const theme = def.theme;
+  const group = new THREE.Group();
+  group.name = `zone:${def.id}`;
+  const rand = rnd(hashStr(def.id));
+
+  const cx = ((cols - 1) * TILE) / 2;
+  const cz = ((rows - 1) * TILE) / 2;
+
+  // Piso
+  const floorTex = circuitFloorTexture(theme, hashStr(def.id));
+  floorTex.repeat.set(cols / 4, rows / 4);
+  const floor = new THREE.Mesh(
+    new THREE.PlaneGeometry(cols * TILE, rows * TILE),
+    new THREE.MeshStandardMaterial({ map: floorTex, roughness: 0.85, metalness: 0.15 }),
+  );
+  floor.rotation.x = -Math.PI / 2;
+  floor.position.set(cx, 0, cz);
+  floor.receiveShadow = true;
+  group.add(floor);
+
+  // Coleta de células
+  const walls = [], traces = [], water = [], abyss = [], decor = [];
+  const markers = [];
+  const grid = [];
+  let spawn = null;
+  const portals = [];
+
+  for (let r = 0; r < rows; r++) {
+    grid.push([]);
+    for (let c = 0; c < cols; c++) {
+      const ch = map[r][c];
+      const solidT = SOLID_TERRAIN.has(ch);
+      const def2 = def.markers?.[ch];
+      let blocked = solidT;
+      if (ch === '#') walls.push([c, r]);
+      else if (ch === '=') traces.push([c, r]);
+      else if (ch === '~') water.push([c, r]);
+      else if (ch === '_') abyss.push([c, r]);
+      else if (ch === 'S') spawn = { c, r };
+      else if (def2) {
+        markers.push({ ...def2, c, r, key: ch });
+        if (def2.type === 'portal') portals.push({ c, r, to: def2.to, requires: def2.requires, key: ch });
+        if (OBJECT_TYPES.has(def2.type)) blocked = true;
+      } else if (ch === '.' && rand() < 0.06) {
+        decor.push([c, r]);
+      }
+      grid[r].push({ blocked, ch });
+    }
+  }
+
+  // Paredes (chips) — um InstancedMesh só
+  if (walls.length) {
+    const topTex = chipTopTexture(theme, hashStr(def.id) + 1);
+    const mat = new THREE.MeshStandardMaterial({
+      color: 0x6f8799, map: topTex, roughness: 0.5, metalness: 0.45,
+      emissive: new THREE.Color(theme.accent).multiplyScalar(0.12),
+    });
+    const inst = new THREE.InstancedMesh(new THREE.BoxGeometry(TILE, 2.6, TILE), mat, walls.length);
+    inst.castShadow = true; inst.receiveShadow = true;
+    const m = new THREE.Matrix4();
+    walls.forEach(([c, r], i) => {
+      m.makeTranslation(c * TILE, 1.3, r * TILE);
+      inst.setMatrixAt(i, m);
+    });
+    inst.instanceMatrix.needsUpdate = true;
+    group.add(inst);
+  }
+
+  // Trilhas brilhantes
+  if (traces.length) {
+    const mat = new THREE.MeshStandardMaterial({
+      color: theme.trace, emissive: theme.trace, emissiveIntensity: 1.1, roughness: 0.3,
+    });
+    const inst = new THREE.InstancedMesh(new THREE.BoxGeometry(TILE * 0.9, 0.04, TILE * 0.22), mat, traces.length * 2);
+    const m = new THREE.Matrix4();
+    let k = 0;
+    traces.forEach(([c, r]) => {
+      // Duas barras cruzadas dão a sensação de trilha de cobre
+      m.makeRotationY(0).setPosition(c * TILE, 0.03, r * TILE);
+      inst.setMatrixAt(k++, m);
+      m.makeRotationY(Math.PI / 2).setPosition(c * TILE, 0.03, r * TILE);
+      inst.setMatrixAt(k++, m);
+    });
+    inst.instanceMatrix.needsUpdate = true;
+    group.add(inst);
+  }
+
+  // Poças de refrigerante
+  if (water.length) {
+    const mat = new THREE.MeshStandardMaterial({
+      color: 0x1b6f80, emissive: 0x0b3b48, metalness: 0.9, roughness: 0.08,
+      transparent: true, opacity: 0.88,
+    });
+    const inst = new THREE.InstancedMesh(new THREE.BoxGeometry(TILE, 0.12, TILE), mat, water.length);
+    const m = new THREE.Matrix4();
+    water.forEach(([c, r], i) => { m.makeTranslation(c * TILE, 0.04, r * TILE); inst.setMatrixAt(i, m); });
+    inst.instanceMatrix.needsUpdate = true;
+    group.add(inst);
+  }
+
+  // Abismos
+  if (abyss.length) {
+    const mat = new THREE.MeshStandardMaterial({ color: 0x030306, emissive: theme.trace, emissiveIntensity: 0.15 });
+    const inst = new THREE.InstancedMesh(new THREE.BoxGeometry(TILE, 0.1, TILE), mat, abyss.length);
+    const m = new THREE.Matrix4();
+    abyss.forEach(([c, r], i) => { m.makeTranslation(c * TILE, -0.6, r * TILE); inst.setMatrixAt(i, m); });
+    inst.instanceMatrix.needsUpdate = true;
+    group.add(inst);
+  }
+
+  // Decoração: capacitores e resistores pequenos
+  if (decor.length) {
+    const mat = new THREE.MeshStandardMaterial({ color: 0x9a9a9a, metalness: 0.8, roughness: 0.35 });
+    const cap = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.22, 0.22, 0.5, 10), mat, decor.length);
+    const res = new THREE.InstancedMesh(new THREE.BoxGeometry(0.6, 0.18, 0.2), new THREE.MeshStandardMaterial({ color: 0x6b4a2a, roughness: 0.7 }), decor.length);
+    const m = new THREE.Matrix4();
+    decor.forEach(([c, r], i) => {
+      const x = c * TILE + (rand() - 0.5) * 0.9, z = r * TILE + (rand() - 0.5) * 0.9;
+      m.makeTranslation(x, 0.25, z); cap.setMatrixAt(i, m);
+      m.makeTranslation(x + 0.2, 0.09, z - 0.2); res.setMatrixAt(i, m);
+    });
+    cap.instanceMatrix.needsUpdate = true; res.instanceMatrix.needsUpdate = true;
+    cap.castShadow = true;
+    group.add(cap, res);
+  }
+
+  // Portais: anéis que giram e feixe de luz
+  const portalMeshes = [];
+  for (const p of portals) {
+    const pg = new THREE.Group();
+    pg.position.set(p.c * TILE, 0, p.r * TILE);
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(0.85, 0.07, 12, 40),
+      new THREE.MeshStandardMaterial({ color: theme.accent, emissive: theme.accent, emissiveIntensity: 2 }),
+    );
+    ring.rotation.x = Math.PI / 2; ring.position.y = 0.1;
+    const beam = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.7, 0.9, 3.2, 24, 1, true),
+      new THREE.MeshBasicMaterial({ color: theme.accent, transparent: true, opacity: 0.18, side: THREE.DoubleSide, depthWrite: false }),
+    );
+    beam.position.y = 1.6;
+    pg.add(ring, beam);
+    group.add(pg);
+    portalMeshes.push({ group: pg, ring, beam });
+  }
+
+  // Luzes pontuais coloridas
+  for (let i = 0; i < 3; i++) {
+    const light = new THREE.PointLight(theme.accent, 1.3, 14, 2);
+    const t = traces[Math.floor(rand() * Math.max(1, traces.length))] || [cols / 2, rows / 2];
+    light.position.set(t[0] * TILE, 2.4, t[1] * TILE);
+    group.add(light);
+  }
+
+  // Partículas de bits flutuando
+  const pCount = 160;
+  const pGeo = new THREE.BufferGeometry();
+  const pos = new Float32Array(pCount * 3);
+  for (let i = 0; i < pCount; i++) {
+    pos[i * 3] = rand() * cols * TILE;
+    pos[i * 3 + 1] = rand() * 6;
+    pos[i * 3 + 2] = rand() * rows * TILE;
+  }
+  pGeo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const particles = new THREE.Points(
+    pGeo,
+    new THREE.PointsMaterial({ color: theme.trace, size: 0.12, transparent: true, opacity: 0.75, depthWrite: false }),
+  );
+  group.add(particles);
+
+  scene.add(group);
+
+  const toWorld = (c, r) => new THREE.Vector3(c * TILE, 0, r * TILE);
+
+  // Ponto de partida desta zona (S ou primeiro piso livre)
+  const freeSpawn = () => {
+    if (spawn) return spawn;
+    for (let r = 1; r < rows; r++) for (let c = 1; c < cols; c++) if (!grid[r][c].blocked && map[r][c] === '.') return { c, r };
+    return { c: 1, r: 1 };
+  };
+
+  // Destino de chegada: célula livre mais próxima do portal de retorno para zona `fromId`
+  const arrivalFrom = (fromId) => {
+    const back = portals.find((p) => p.to === fromId);
+    if (!back) return freeSpawn();
+    const seen = new Set([`${back.c},${back.r}`]);
+    const queue = [[back.c, back.r]];
+    while (queue.length) {
+      const [c, r] = queue.shift();
+      for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nc = c + dc, nr = r + dr;
+        if (nr < 0 || nc < 0 || nr >= rows || nc >= cols) continue;
+        const key = `${nc},${nr}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const cell = grid[nr][nc];
+        if (cell.blocked || cell.ch === '_' || cell.ch === '~') continue;
+        if (portals.some((p) => p.c === nc && p.r === nr)) continue;
+        return { c: nc, r: nr };
+      }
+      queue.push(...[[c + 1, r], [c - 1, r], [c, r + 1], [c, r - 1]].filter(([x, y]) => x >= 0 && y >= 0 && x < cols && y < rows && !seen.has(`${x},${y}`)));
+    }
+    return freeSpawn();
+  };
+
+  const update = (t) => {
+    for (const pm of portalMeshes) {
+      pm.ring.rotation.z = t * 0.0015;
+      pm.beam.material.opacity = 0.14 + Math.sin(t * 0.003) * 0.05;
+    }
+    const arr = particles.geometry.attributes.position;
+    for (let i = 0; i < pCount; i++) {
+      let y = arr.getY(i) + 0.004;
+      if (y > 6) y = 0;
+      arr.setY(i, y);
+    }
+    arr.needsUpdate = true;
+  };
+
+  const dispose = () => {
+    scene.remove(group);
+    group.traverse((o) => {
+      o.geometry?.dispose?.();
+      if (o.material) {
+        const mats = Array.isArray(o.material) ? o.material : [o.material];
+        mats.forEach((mm) => { mm.map?.dispose?.(); mm.dispose(); });
+      }
+    });
+  };
+
+  return {
+    id: def.id,
+    name: def.name,
+    rows, cols, map, grid, markers, portals,
+    group, update, dispose, toWorld,
+    spawn: freeSpawn(),
+    arrivalFrom,
+    solidAt(c, r) {
+      if (c < 0 || r < 0 || c >= cols || r >= rows) return true;
+      return grid[r][c].blocked;
+    },
+    chArt(c, r) { return map[r][c]; },
+    theme,
+  };
+}
