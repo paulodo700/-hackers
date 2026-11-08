@@ -44,6 +44,15 @@ for _lid in ("llc",):
     _entry = _layers.zone_entry(_lid, ZONES["cache"])
     ZONES[_entry["id"]] = _entry
     LAYER_ZONE_IDS[_lid] = _entry["id"]
+# Camada 3: cidade microscópica sobre o chiplet de computação (blocos viram prédios)
+_CITY_THEME = {"ground": "#0b2a22", "trace": "#7dffd0", "fog": "#06181a", "sky": "#081f1d", "accent": "#ffd166"}
+_city = _layers.zone_entry("metal_m2", ZONES["cache"], zone_id="cidade_chiplet",
+                           name="Cidade do Chiplet de Computação", wall_codes={"L", "d"},
+                           floor_codes={"G", "B", "v"}, theme=_CITY_THEME, tall=True,
+                           props=[{"model": "moinho"}, {"model": "zepelim"}, {"model": "entulho"},
+                                  {"model": "figura"}, {"model": "figura"}, {"model": "entulho"}])
+ZONES[_city["id"]] = _city
+LAYER_ZONE_IDS["metal_m2"] = _city["id"]
 
 
 def ending_lines(kind, flags):

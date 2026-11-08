@@ -250,18 +250,20 @@ WALL_CODES = {"x", "c", "C", "d", "R"}   # bancos de cache, bits e anel: bloquei
 FLOOR_CODES = {"G", "B", "v"}            # substrato entre os blocos, trilhas e vias: andam
 
 
-def _layer_zone_map(layer_id, seed_offset=0):
+def _layer_zone_map(layer_id, wall_codes=None, floor_codes=None):
     """Mapa jogável: paredes '#', caminhos '.', trilhas '=' (cores da zona)."""
+    walls = set(wall_codes) if wall_codes is not None else WALL_CODES
+    floors = set(floor_codes) if floor_codes is not None else FLOOR_CODES
     rows = layer_rows(layer_id)
     out = []
     for row in rows:
         line = []
         for ch in row:
-            if ch in WALL_CODES:
+            if ch in walls:
                 line.append("#")
             elif ch == "B":
                 line.append("=")
-            elif ch in FLOOR_CODES:
+            elif ch in floors:
                 line.append(".")
             else:
                 line.append("#")
@@ -284,14 +286,15 @@ def _bfs(rows, start):
     return seen
 
 
-def zone_entry(layer_id, base_zone, zone_id=None, name=None):
+def zone_entry(layer_id, base_zone, zone_id=None, name=None, wall_codes=None, floor_codes=None,
+               theme=None, tall=False, props=None):
     """Entrada de zona (mesmo formato de zones.json) construída a partir de uma camada do processador.
 
     base_zone: zona de referência (tema, inimigos e música). Paredes, caminhos, spawn, itens e a
     passagem de volta ficam na grade da camada, então o mapa é o desenho da camada.
     """
     zone_id = zone_id or f"camada_{layer_id}"
-    rows = _layer_zone_map(layer_id)
+    rows = _layer_zone_map(layer_id, wall_codes, floor_codes)
     h, w = len(rows), len(rows[0])
     # ponto inicial: caminho alcançável mais próximo do centro da parte de baixo
     floor = [(c, r) for r in range(h) for c in range(w) if rows[r][c] in ".="]
@@ -322,13 +325,24 @@ def zone_entry(layer_id, base_zone, zone_id=None, name=None):
             grid[r][c] = "x"
             markers["x"] = {"type": "chest", "extra": True}
             break
+    # adereços: pontos alcançáveis espaçados, cada um com um modelo decorativo
+    props_out = []
+    if props:
+        spots = [p for p in reach if p not in placed and grid[p[1]][p[0]] == "."]
+        step = max(1, len(spots) // (len(props) + 1))
+        for k, pr in enumerate(props):
+            if k * step < len(spots):
+                c, r = spots[k * step]
+                props_out.append({"model": pr["model"], "c": c, "r": r, "rot": pr.get("rot", 0)})
     base = base_zone or {}
     return {
+        "tall": tall,
+        "props": props_out,
         "id": zone_id,
         "name": name or f"Camada: {next(l['name'] for l in LAYERS if l['id'] == layer_id)}",
         "music": base.get("music", "wind"),
         "encounter": base.get("encounter", 0.02),
-        "theme": dict(base.get("theme", {})),
+        "theme": dict(theme or base.get("theme", {})),
         "enemies": list(base.get("enemies", [])),
         "decor": base.get("decor", "pins"),
         "markers": markers,

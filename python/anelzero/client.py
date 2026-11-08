@@ -929,6 +929,12 @@ class Game(ShowBase):
                     node = mesh.node("bench")
                     self._place(node, c, r)
                     self.interactables.append({"kind": "bench", "c": c, "r": r, "m": m, "node": node})
+        for pr in self.zone.props:
+            from . import models as MD
+            node = MD.prop_node(pr["model"])
+            node.reparentTo(self.zone_root)
+            node.setPos(pr["c"], pr["r"], 0)
+            node.setH(pr.get("rot", 0))
         for rm in self.fight.roamers:
             self._add_roamer_node(rm)
 

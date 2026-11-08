@@ -209,11 +209,11 @@ def build_zone_mesh(zone):
     for c, r in zone.cells_of("~"):
         mesh.disc(c, r, 0.015, 0.45, trace)
         mesh.disc(c, r, 0.02, 0.22, accent)
-    h = 1.0
     for r in range(zone.height):
         for c in range(zone.width):
             if zone.walkable(c, r) or zone.char(c, r) != W.WALL:
                 continue
+            h = zone.wall_height(c, r)
             k = 0.8 + 0.4 * _noise(c, r, 2)
             top = tuple(v * k for v in wall_base[:3]) + (1.0,)
             # topo com borda iluminada (chanfro) e miolo escuro

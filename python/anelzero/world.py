@@ -26,6 +26,15 @@ class Zone:
         self.theme = data.get("theme", {})
         self.music = data.get("music")
         self.decor = data.get("decor")
+        self.tall = bool(data.get("tall"))          # paredes com alturas diferentes (prédios)
+        self.props = list(data.get("props", []))    # adereços decorativos: {model, c, r, rot}
+
+    def wall_height(self, c, r):
+        """Altura de uma parede: 1 no mapa comum; nas cidades, cada bloco tem a sua altura."""
+        if not self.tall:
+            return 1.0
+        h = (c * 73856093 ^ r * 19349663) & 0xFFFF
+        return 1.0 + 0.35 * (h % 5)  # de 1,0 a 2,4 em degraus
 
     # ---- Consultas de célula ----
     def inside(self, c, r):

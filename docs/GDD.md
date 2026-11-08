@@ -433,3 +433,18 @@ As nove imagens de referência mostram um processador com cooler, tampa de calor
 2. Ferramentas do personagem para melhorar o processador (reparo de cache, reforço de núcleo, ajuste de energia), com ícones e modelos próprios.
 3. Camadas 1 e 2 como zonas de entrada: dissipador e tampa de calor.
 4. Modelos 3D próprios para ativos de cenário (zepelins, moinhos, entulho), com a mesma paleta da zona.
+
+## Rodada 17: cidade do chiplet e ativos de cenário
+
+- **Cidade do Chiplet de Computação (camada 3):** zona jogável gerada da grade da camada M2. Os blocos de lógica viram prédios de alturas diferentes (de 1,0 a 2,4), as ruas são caminhos e as trilhas são ruas iluminadas. A paleta é própria da cidade (verde-azulado, destaques amarelos). Entrada pela tela de camadas (Enter, na camada 3).
+- **Ativos de cenário originais (desenhados em código):** moinho de torre com cúpula e janela iluminada, zepelim com envelope, gôndola e barbatanas, entulho de blocos e fragmentos, e figura humana simples. Nenhum deles copia as referências.
+- **Limites:** as figuras são decorativas e não andam nem reagem. O zepelim é estático (não flutua nem se move). A cidade ainda não tem inimigos nem objetivos próprios.
+
+### Desempenho medido nesta rodada
+
+| Robô | Motor e condição | Resultado |
+|---|---|---|
+| `tools/bench_shadows.py` | Panda3D, Xvfb, CPU; sombra desligada / ligada | 6,54 / 13,49 ms por quadro (+6,96 ms, +106%) |
+| `tests/perf.mjs` | Chromium headless, 360×740, software; cena inteira / só o jogador | 32,1 FPS (52 chamadas, 10 560 triângulos) / 60,2 FPS |
+
+A cidade só existe na versão Python. O robô da web mede a cena inteira da zona de cache, não a cidade.

@@ -88,3 +88,34 @@ class LayerZone(unittest.TestCase):
         from anelzero import world as W
         z = W.load(self.zone["id"])
         self.assertTrue(all(m["to"] == "cache" for _c, _r, m in z.portals()))
+
+
+class ChipletCity(unittest.TestCase):
+    """Cidade do chiplet (camada 3): prédios de alturas diferentes, adereços e paleta própria."""
+
+    @classmethod
+    def setUpClass(cls):
+        from anelzero import content as C
+        cls.zone = C.ZONES[C.LAYER_ZONE_IDS["metal_m2"]]
+
+    def test_buildings_have_varied_heights(self):
+        from anelzero import world as W
+        z = W.load(self.zone["id"])
+        heights = {z.wall_height(c, r) for r in range(z.height) for c in range(z.width) if z.char(c, r) == "#"}
+        self.assertGreater(len(heights), 2)
+
+    def test_props_are_placed_on_walkable_cells(self):
+        from anelzero import world as W
+        z = W.load(self.zone["id"])
+        self.assertTrue(z.props)
+        for pr in z.props:
+            with self.subTest(prop=pr["model"]):
+                self.assertTrue(z.walkable(pr["c"], pr["r"]))
+
+    def test_palette_is_the_city_palette(self):
+        self.assertEqual(self.zone["theme"]["accent"], "#ffd166")
+
+    def test_props_models_exist(self):
+        from anelzero import models as MD
+        for model in ("moinho", "zepelim", "entulho", "figura"):
+            self.assertIsNotNone(MD.prop_node(model))

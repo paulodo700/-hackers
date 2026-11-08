@@ -355,3 +355,61 @@ def enemy_node(enemy_id, color_hex=None, scale=1.0):
     m.node(f"enemy-body-{enemy_id}").reparentTo(root)
     root.setScale(scale)
     return root
+
+
+# ---- Ativos de cenário (originais, desenhados em código) ----
+
+def _moinho(m, p):
+    """Moinho de torre: torre cônica com janela, cúpula e quatro pás treliçadas (em nó separado)."""
+    m.cone(0, 0, 0.0, 1.1, 0.42, 0.26, p["base"], sides=10)
+    m.cone(0, 0, 1.1, 1.3, 0.3, 0.1, p["dark"], sides=10)  # cúpula
+    m.box(-0.07, -0.3, 0.45, 0.07, -0.26, 0.7, p["eye"])   # porta
+    m.box(-0.05, -0.27, 0.8, 0.05, -0.21, 0.95, p["glow"])  # janela iluminada
+
+
+def _zepelim(m, p):
+    """Zepelim: envelope alongado com barbatanas na cauda e gôndola sob o casco."""
+    m.sphere(0, 0, 1.2, 0.5, p["base"], rings=8, sides=14)
+    for k in range(3):  # barbatanas da cauda
+        a = k * 2.094
+        m.box(-0.1, -0.05, 1.2, -0.05, 0.02, 1.2, p["dark"])
+        m.cone(-0.42, 0.0, 1.2, 1.2, 0.02, 0.22 + 0.0 * a, p["dark"], sides=3, caps=False)
+    m.box(-0.14, -0.08, 0.66, 0.14, 0.08, 0.86, p["dark"])  # gôndola
+    m.box(-0.1, -0.1, 0.86, 0.1, 0.1, 0.9, p["light"])     # cabine iluminada
+
+
+def _entulho(m, p):
+    """Entulho: pilha de blocos irregulares e fragmentos soltos ao redor."""
+    rng = random.Random(42)
+    for _ in range(9):
+        x, y = rng.uniform(-0.35, 0.35), rng.uniform(-0.35, 0.35)
+        s = rng.uniform(0.07, 0.17)
+        m.box(x - s, y - s, 0.0, x + s, y + s, s * 1.4 + rng.uniform(0, 0.06),
+              p["base"] if rng.random() < 0.6 else p["dark"])
+    for _ in range(4):
+        m.sphere(rng.uniform(-0.45, 0.45), rng.uniform(-0.45, 0.45), 0.03, 0.04, p["light"], rings=2, sides=5)
+
+
+def _figura(m, p):
+    """Figura humana simples: cabeça, tronco, braços e pernas."""
+    m.sphere(0, 0, 0.92, 0.1, p["light"], rings=4, sides=8)            # cabeça
+    m.box(-0.13, -0.07, 0.5, 0.13, 0.07, 0.82, p["base"])              # tronco
+    m.box(-0.2, -0.05, 0.52, -0.13, 0.05, 0.8, p["dark"])              # braço esq.
+    m.box(0.13, -0.05, 0.52, 0.2, 0.05, 0.8, p["dark"])                # braço dir.
+    m.box(-0.11, -0.06, 0.0, -0.02, 0.06, 0.5, p["eye"])               # perna esq.
+    m.box(0.02, -0.06, 0.0, 0.11, 0.06, 0.5, p["eye"])                 # perna dir.
+
+
+PROP_BUILDERS = {"moinho": _moinho, "zepelim": _zepelim, "entulho": _entulho, "figura": _figura}
+
+
+def prop_node(model, color_hex=None):
+    """Adereço decorativo do cenário (centrado no chão, na origem)."""
+    if model not in PROP_BUILDERS:
+        raise KeyError(model)
+    color = color_hex or {"moinho": "#c9d6c0", "zepelim": "#b99a6a", "entulho": "#8a8f88",
+                          "figura": "#d8d2c0"}[model]
+    p = _palette(color)
+    m = SC.Mesh()
+    PROP_BUILDERS[model](m, p)
+    return m.node(f"prop-{model}")
