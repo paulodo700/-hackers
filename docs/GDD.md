@@ -231,17 +231,26 @@ Os testes de ponta a ponta cobrem: título e slots, migração do save antigo, s
 
 **Estado do cliente Python:** título com opção de ajustes, cena de abertura com o Vigia em primeiro plano (faixas de cinema e transição por escurecimento), exploração 3D com colisão e sombra projetada, coleta de itens, portais entre zonas, NPCs com diálogo digitado e escolhas numeradas, baús, reparo (puzzle de cruzamentos e fusíveis, com cronômetro, pausa, modo difícil e recorde por zona), batalha por turnos contra os chefes (intenções, fase 2, defesa, itens, habilidades, recompensas e dificuldade), combate em tempo real contra os inimigos errantes (F), loja do lojista e bancada de criação, menus (status, inventário com usar/equipar/vender, habilidades, missões e viagem rápida), minimapa com névoa, ajustes salvos em `~/.anelzero` (volumes, legendas, tamanho do texto, dificuldade, sombras e movimento reduzido) e salvamento em três slots.
 
-**Desempenho medido (sombra projetada):** com `tools/bench_shadows.py`, a mediana por quadro foi de 6,0 ms sem sombra e 12,1 ms com sombra, na renderização por software deste ambiente (Xvfb, CPU). Esse é o pior caso: em placa de vídeo o custo tende a ser bem menor. Por isso a sombra é uma opção nos ajustes e fica ligada por padrão.
+**Desempenho medido (sombra projetada):** com `tools/bench_shadows.py`, na renderização por software deste ambiente (Xvfb, CPU), a mediana por quadro foi de 6,0 ms sem sombra e 12,1 ms com sombra na primeira medição, e de 6,68 ms e 13,14 ms (+6,46 ms, +97%) depois da rodada 9, com a câmera nova e os ícones. A diferença entre medições é ruído da máquina. Esse é o pior caso: em placa de vídeo o custo tende a ser bem menor. Por isso a sombra é uma opção nos ajustes e fica ligada por padrão.
 
 **Regressão visual:** `tests/test_visual.py` captura seis telas (título, zona, batalha, reparo, loja e ajustes) em estado fixo e compara com `tests/visual/refs`. Limites: diferença média acima de 2,0 por canal, ou mais de 1,5% dos pixels amostrados com mudança clara. As referências foram geradas neste ambiente; se a renderização mudar em outra máquina, regere-as com `ANELZERO_UPDATE_REFS=1`.
 
-**Limites conhecidos do cliente Python:**
-- O áudio é sintetizado, mas não foi ouvido: este ambiente não tem dispositivo de som, então a reprodução não foi verificada.
+**Limites conhecidos do cliente Python (rodada 9):**
+- O áudio é sintetizado e verificado por medição (pico, duração e RMS, em `python/audio_samples/`, via `tools/verify_audio.py`), mas não foi ouvido: este ambiente não tem dispositivo de som.
 - O tamanho do texto é aplicado ao iniciar o jogo (não ao vivo).
-- O céu em gradiente aparece no topo da tela, com contraste baixo, porque a câmera olha de cima.
-- Não há sprites nem arte 2D próprios: todos os personagens e objetos são malhas 3D simples, geradas em código. Falta um sistema de assets 2D e de ícones.
-- Os inimigos errantes ainda não iniciam batalha por turnos; só os chefes.
-- Sem reparo por clique com mouse; o reparo é por teclado.
+- Os ícones 3D aparecem no inventário, nas habilidades, na prévia da loja, na bancada e no retrato do inimigo na batalha. Os itens dentro da lista de comandos da batalha ainda são só texto.
+- As barras de vida dos inimigos errantes (no mundo) continuam sem ícone; o retrato aparece só na batalha por turnos.
+- A abertura tem aproximação de câmera, pulso de luz, trilha sintetizada e texto na faixa inferior. Não há animação própria de personagens.
+- O céu em gradiente é visível no topo da tela com a câmera atual (medido: as faixas de cima sobem de 38 para 43 de brilho, em vez de ficarem praticamente iguais).
+- Os inimigos errantes podem iniciar batalha por turnos (ajuste "Inimigos errantes: batalha"); desligado, o contato continua em tempo real.
+- O reparo aceita clique com mouse, além do teclado.
+
+**Rodada 9: o que mudou e como foi medido**
+- **Ícones 3D:** modelos renderizados offscreen pelo Panda3D e salvos em `~/.anelzero/cache/icons/<zona>/`, tingidos pela cor da zona. A câmera do ícone precisa viver na cena dos ícones (antes, presa à câmera do jogo, o modelo saía do quadro). Teste: o centro do ícone precisa ser visivelmente diferente do canto.
+- **Céu:** escolhido por medição nas capturas (variantes de câmera), com o brilho das faixas de cima crescendo de forma contínua.
+- **Abertura:** a zona carregada antes é escondida durante a abertura (antes, um piso de outra zona aparecia atrás do Vigia).
+- **HUD e menu:** com o menu aberto, o HUD e o minimapa saem da tela (o painel ocupa a coluna da esquerda).
+- **Regressão visual:** oito referências (título, zona, batalha, reparo, loja, ajustes, inventário com ícones e abertura). Regeneradas depois de cada mudança intencional com `ANELZERO_UPDATE_REFS=1`. Um problema de estado vazado entre testes foi corrigido nos testes (nós de inimigos errantes e câmera fixa antes do menu).
 
 ## Estado atual
 

@@ -26,6 +26,18 @@ class Synthesis(unittest.TestCase):
             A.synth("nao_existe")
 
 
+class Track(unittest.TestCase):
+    def test_track_is_about_eight_seconds_and_in_range(self):
+        samples = A.intro_track()
+        self.assertAlmostEqual(len(samples) / A.RATE, 8.0, delta=0.1)
+        self.assertLessEqual(max(abs(x) for x in samples), 1.0)
+
+    def test_track_loops_without_a_click(self):
+        samples = A.intro_track()
+        # Diferença entre a última e a primeira amostra: pequena, para o laço não estalar
+        self.assertLess(abs(samples[-1] - samples[0]), 0.1)
+
+
 class Files(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -35,7 +47,7 @@ class Files(unittest.TestCase):
 
     def test_generate_writes_valid_wav_files(self):
         paths = A.generate(self.tmp.name)
-        self.assertEqual(set(paths), set(A.EFFECTS))
+        self.assertEqual(set(paths), set(A.EFFECTS) | {A.TRACK})
         for name, path in paths.items():
             with self.subTest(effect=name), wave.open(str(path), "rb") as w:
                 self.assertEqual(w.getnchannels(), 1)

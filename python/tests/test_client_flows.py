@@ -239,3 +239,114 @@ class Intro(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@unittest.skipUnless(HAS_DISPLAY, "precisa de display (use xvfb-run)")
+class RoamerBattle(unittest.TestCase):
+    def setUp(self):
+        from anelzero import state as S
+        self.g = get_game()
+        _reset(self.g, S.new_state())
+        self.g.load_zone("cache", None)
+        self.g.fight.roamers = []
+        self.g.settings.set("battle_on_contact", True)
+
+    def tearDown(self):
+        self.g.settings.set("battle_on_contact", False)
+
+    def test_contact_opens_turn_battle_when_setting_on(self):
+        from anelzero import rt
+        import random
+        rm = rt.Roamer("pulga", self.g.px, self.g.py + 0.1, random.Random(1))
+        self.g.fight.roamers = [rm]
+        self.g.step(0.016)
+        self.assertEqual(self.g.mode, "battle")
+        self.assertEqual(self.g.battle.enemy_id, "pulga")
+
+    def test_win_removes_roamer(self):
+        from anelzero import rt
+        import random
+        rm = rt.Roamer("pulga", self.g.px, self.g.py + 0.1, random.Random(1))
+        self.g.fight.roamers = [rm]
+        self.g.step(0.016)
+        self.g.battle.e_hp = 1
+        self.g.battle.result = "win"
+        self.g.battle._victory()
+        self.g._end_battle()
+        self.assertFalse(rm.alive)
+        self.assertEqual(self.g.mode, "play")
+
+    def test_setting_off_keeps_real_time_combat(self):
+        from anelzero import rt
+        import random
+        self.g.settings.set("battle_on_contact", False)
+        rm = rt.Roamer("pulga", self.g.px, self.g.py + 0.1, random.Random(1))
+        self.g.fight.roamers = [rm]
+        self.g.step(0.016)
+        self.assertEqual(self.g.mode, "play")
+
+
+@unittest.skipUnless(HAS_DISPLAY, "precisa de display (use xvfb-run)")
+class RepairMouse(unittest.TestCase):
+    def setUp(self):
+        from anelzero import state as S
+        self.g = get_game()
+        _reset(self.g, S.new_state())
+        self.g.load_zone("cache", None)
+        self.g.fight.roamers = []
+
+    def test_click_on_cell_rotates_it(self):
+        from anelzero import panels as P
+        from anelzero import repair as R
+        import random
+        self.g.repair_target = None
+        self.g.start_repair({"m": {"id": "rp_teste"}, "node": None, "done": False})
+        g = self.g.repair
+        n, size = g.puzzle.n, self.g.repair_screen.size
+        cell = (1, 2)
+        cell_w = size * 2 / n
+        ax = -size + (cell[0] + 0.5) * cell_w
+        ay = size - (cell[1] + 0.5) * cell_w
+        self.assertEqual(P.cell_at(ax, ay, n, size), cell)
+        before = g.puzzle.cells[cell[1]][cell[0]].rot
+        got = self.g.repair_click(ax, ay)
+        self.assertEqual(got, cell)
+        if g.puzzle.cells[cell[1]][cell[0]].type != "cruzamento":
+            self.assertEqual(g.puzzle.cells[cell[1]][cell[0]].rot, (before + 1) % 4)
+        self.g._end_repair(cancelled=True)
+
+    def test_click_outside_grid_does_nothing(self):
+        self.g.start_repair({"m": {"id": "rp_teste"}, "node": None, "done": False})
+        moves = self.g.repair.moves
+        self.assertIsNone(self.g.repair_click(1.6, 0.0))
+        self.assertEqual(self.g.repair.moves, moves)
+        self.g._end_repair(cancelled=True)
+
+
+@unittest.skipUnless(HAS_DISPLAY, "precisa de display (use xvfb-run)")
+class IconRendering(unittest.TestCase):
+    def test_item_enemy_and_skill_icons_are_written_as_png(self):
+        import os
+        g = get_game()
+        self.assertIsNotNone(g.icons)
+        self.assertTrue(g.icons.available)
+        for kind, ident in (("item", "pasta_termica"), ("enemy", "pulga"), ("skill", "golpe")):
+            with self.subTest(kind=kind, ident=ident):
+                path = g.icon_for(kind, ident)
+                self.assertIsNotNone(path)
+                self.assertTrue(path.endswith(".png"))
+                # O modelo tem de aparecer: o centro da imagem é visivelmente diferente do canto (fundo)
+                from panda3d.core import Filename, PNMImage
+                img = PNMImage()
+                img.read(Filename.from_os_specific(path))
+                def mean(x0, y0, x1, y1):
+                    tot, n = 0.0, 0
+                    for y in range(y0, y1, 4):
+                        for x in range(x0, x1, 4):
+                            tot += img.getRed(x, y) + img.getGreen(x, y) + img.getBlue(x, y)
+                            n += 3
+                    return tot / n
+                w, h = img.getXSize(), img.getYSize()
+                center = mean(w // 4, h // 4, 3 * w // 4, 3 * h // 4)
+                corner = mean(0, 0, w // 8, h // 8)
+                self.assertGreater(abs(center - corner), 0.05, "ícone sem modelo visível")

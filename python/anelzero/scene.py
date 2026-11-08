@@ -158,8 +158,9 @@ def build_zone_mesh(zone):
 def sky_backdrop(top_hex, bottom_hex):
     """Céu em gradiente: um plano grande preso à câmera, desenhado antes do resto.
     As bordas de baixo usam a cor do horizonte e as de cima a cor do zênite; a GPU interpola."""
-    top = mix(hex_rgba(top_hex)[:3], (0, 0, 0), 0.45) + (1.0,)
-    bottom = mix(hex_rgba(bottom_hex)[:3], (0.55, 0.85, 0.9), 0.14) + (1.0,)
+    # Zênite escuro e horizonte claro: o degradê precisa de contraste para aparecer na tela
+    top = mix(hex_rgba(top_hex)[:3], (0, 0, 0), 0.8) + (1.0,)
+    bottom = mix(hex_rgba(bottom_hex)[:3], (0.6, 0.95, 1.0), 0.35) + (1.0,)
     mesh = Mesh()
     pts = [(-80, 60, -40), (80, 60, -40), (80, 60, 60), (-80, 60, 60)]
     cols = [bottom, bottom, top, top]
@@ -245,9 +246,9 @@ def repair_mesh(color_hex):
 def vigia_mesh():
     """O Vigia: figura alta encapuzada, com anel de luz em volta."""
     mesh = Mesh()
-    mesh.box(-.35, -.35, 0, .35, .35, 1.6, (0.26, 0.3, 0.4, 1))
+    mesh.box(-.35, -.35, 0, .35, .35, 1.6, (0.46, 0.52, 0.64, 1))
     mesh.box(-.22, -.36, 1.3, .22, -.37, 1.55, (0.05, 0.06, 0.09, 1))
-    mesh.box(-.2, -.2, 1.6, .2, .2, 2.0, (0.26, 0.3, 0.4, 1))
+    mesh.box(-.2, -.2, 1.6, .2, .2, 2.0, (0.46, 0.52, 0.64, 1))
     for i in range(8):
         a = 2 * math.pi * i / 8
         x, y = math.cos(a) * 0.9, math.sin(a) * 0.9

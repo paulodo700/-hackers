@@ -14,13 +14,16 @@ from . import settings as T
 
 RATE = 22050
 EFFECTS = ["passo", "golpe", "pesado", "coleta", "reparo", "cura", "ui", "vitoria", "derrota", "dano"]
+TRACK = "abertura"
 
 
 def _env(i, n, attack=0.005, release=0.2):
     t = i / RATE
     total = n / RATE
     a = min(1.0, t / attack) if attack else 1.0
-    r = min(1.0, max(0.0, (total - t) / release)) if release else 1.0
+    # A soltura nunca passa da metade do som: em sons curtos, o volume ainda chega ao nível pedido
+    rel = min(release, total * 0.5) if release else 0.0
+    r = min(1.0, max(0.0, (total - t) / rel)) if rel else 1.0
     return a * r
 
 
@@ -82,7 +85,7 @@ def synth(name):
     if name == "cura":
         return _seq(_tone(523, 0.12, vol=0.35), _tone(659, 0.12, vol=0.35), _tone(784, 0.2, vol=0.35))
     if name == "ui":
-        return _tone(980, 0.04, "square", vol=0.2)
+        return _tone(980, 0.04, "square", vol=0.3)
     if name == "vitoria":
         return _seq(_tone(523, 0.12, vol=0.35), _tone(659, 0.12, vol=0.35), _tone(784, 0.12, vol=0.35),
                     _tone(1046, 0.35, vol=0.35))
@@ -92,6 +95,18 @@ def synth(name):
     if name == "dano":
         return _mix(_tone(180, 0.22, "square", -120, 0.3), _noise(0.12, 0.2, seed=9))
     raise KeyError(name)
+
+
+def intro_track():
+    """Trilha curta da abertura (≈ 8 s): arpejo lento sobre um acorde de fundo, fechando em loop."""
+    notes = [220.0, 277.18, 329.63, 440.0, 329.63, 277.18, 246.94, 329.63]  # Lá, Dó#, Mi, Lá...
+    step = 1.0
+    lead = []
+    for f in notes:
+        lead += _tone(f, step * 0.9, vol=0.22)
+    pad_len = step * len(notes)
+    pad = _mix(_tone(110.0, pad_len, vol=0.10), _tone(164.81, pad_len, vol=0.07))
+    return _mix(lead, pad)[: int(RATE * pad_len)]
 
 
 def write_wav(path, samples):
@@ -111,13 +126,13 @@ def sfx_dir():
 
 
 def generate(directory=None):
-    """Escreve os efeitos que faltarem. Devolve {nome: caminho}."""
+    """Escreve os efeitos e a trilha que faltarem. Devolve {nome: caminho}."""
     d = pathlib.Path(directory) if directory else sfx_dir()
     out = {}
-    for name in EFFECTS:
+    for name in EFFECTS + [TRACK]:
         path = d / f"{name}.wav"
         if not path.exists():
-            write_wav(path, synth(name))
+            write_wav(path, intro_track() if name == TRACK else synth(name))
         out[name] = path
     return out
 
@@ -142,3 +157,19 @@ class SoundBank:
         snd.setVolume(self.settings.volume("sfx"))
         snd.play()
         return True
+
+    def play_music(self, name=TRACK):
+        snd = self.sounds.get(name)
+        if snd is None:
+            return False
+        snd.setLoop(True)
+        snd.setVolume(self.settings.volume("music"))
+        snd.play()
+        self.current_music = snd
+        return True
+
+    def stop_music(self):
+        snd = getattr(self, "current_music", None)
+        if snd is not None:
+            snd.stop()
+            self.current_music = None

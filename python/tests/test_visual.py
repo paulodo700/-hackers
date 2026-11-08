@@ -54,6 +54,14 @@ def compare(a_path, b_path):
     return 255.0 * total / n, 100.0 * changed / samples
 
 
+def _clear_roamers(game):
+    """Zera os inimigos errantes e remove também os nós deles (senão continuam visíveis na cena)."""
+    for root, _bar in game.roamer_nodes.values():
+        root.removeNode()
+    game.roamer_nodes = {}
+    game.fight.roamers = []
+
+
 @unittest.skipUnless(HAS_DISPLAY, "precisa de display (use xvfb-run)")
 class VisualRegression(unittest.TestCase):
     @classmethod
@@ -105,6 +113,9 @@ class VisualRegression(unittest.TestCase):
         for screen in (g.battle_screen, g.repair_screen, g.shop_screen, g.settings_screen):
             screen.hide()
         g.hud_on = None
+        for node in (g.menu_list, g.menu_preview, g.menu_detail, g.menu_footer):
+            node.hide()
+        g.sfx.stop_music()
         # Títulos, faixas, painéis e menus de outras telas: todos escondidos antes de cada captura
         g._show_title(mode == "title")
         g.letter_top.hide()
@@ -127,7 +138,7 @@ class VisualRegression(unittest.TestCase):
         from anelzero import state as S
         self._reset()
         self.g.start_play(S.new_state())
-        self.g.fight.roamers = []
+        _clear_roamers(self.g)
         self.g.dialog = None
         self.g.panel.hide()
         self.g.px, self.g.py = 9.0, 9.0
@@ -136,7 +147,7 @@ class VisualRegression(unittest.TestCase):
     def test_battle(self):
         self._reset()
         self.g.load_zone("alu", None)
-        self.g.fight.roamers = []
+        _clear_roamers(self.g)
         self.g.time = 1.0
         boss = next(it for it in self.g.interactables if it["kind"] == "boss")
         self.g.start_battle(boss)
@@ -145,7 +156,7 @@ class VisualRegression(unittest.TestCase):
     def test_repair(self):
         self._reset()
         self.g.load_zone("cache", None)
-        self.g.fight.roamers = []
+        _clear_roamers(self.g)
         target = next((it for it in self.g.interactables if it["kind"] == "repair" and not it["done"]), None)
         if target is None:
             self.skipTest("sem trilha partida")
@@ -158,6 +169,32 @@ class VisualRegression(unittest.TestCase):
         self.g.load_zone("cache", None)
         self.g.open_shop(bench=False)
         self._check("loja")
+
+    def test_inventory_with_icons(self):
+        from anelzero import state as S
+        self._reset()
+        self.g.start_play(S.new_state())
+        _clear_roamers(self.g)
+        self.g.dialog = None
+        self.g.panel.hide()
+        self.g.px, self.g.py = 9.0, 9.0
+        for _ in range(3):  # quadros de exploração fixam a câmera antes do menu
+            self.g.step(1 / 30)
+        self.g.open_menu()
+        self.g.menu.next_tab(1)
+        self.g.menu.move(1)
+        self.g._refresh_menu()
+        self._check("inventario_icones")
+        self.g.close_menu()
+
+    def test_intro_frame(self):
+        self._reset("intro")
+        self.g.start_intro()
+        for _ in range(30):
+            self.g.step(0.1)
+        self._check("abertura")
+        self.g.fade = None
+        self.g.fade_card.hide()
 
     def test_settings(self):
         self._reset("title")

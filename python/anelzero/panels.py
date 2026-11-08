@@ -75,7 +75,7 @@ class Panel:
 
 class BattleScreen:
     def __init__(self, parent, ar, scale_mult=1.0):
-        self.panel = Panel(parent, 0, 0, ar, 1.0, alpha=0.88)
+        self.panel = Panel(parent, 0, 0, ar, 1.0, alpha=1.0)  # opaco: o mundo não vaza para a batalha
         self.name = Text(parent, "", -ar + 0.1, 0.9, 0.07, color=(1, 0.85, 0.5, 1), scale_mult=scale_mult)
         self.intent = Text(parent, "", -ar + 0.1, 0.8, 0.045, color=(1, 0.6, 0.5, 1), scale_mult=scale_mult)
         self.enemy_hp = Text(parent, "", -ar + 0.1, 0.72, 0.045, color=(0.6, 1, 0.6, 1), scale_mult=scale_mult)
@@ -88,6 +88,7 @@ class BattleScreen:
         self.diff = Text(parent, "", ar - 0.1, -0.92, 0.035, align=TextNode.ARight, color=(0.9, 0.8, 0.5, 1),
                          scale_mult=scale_mult)
         self._all = [self.name, self.intent, self.enemy_hp, self.player, self.log, self.cmds, self.help, self.diff]
+        self.portrait = IconSlot(ar - 0.45, 0.42, 0.22)
 
     def show(self):
         self.panel.show()
@@ -98,6 +99,7 @@ class BattleScreen:
         self.panel.hide()
         for t in self._all:
             t.hide()
+        self.portrait.hide()
 
     def render(self, battle, cursor, difficulty_label):
         self.name.set(battle.name)
@@ -241,6 +243,7 @@ class ShopScreen:
                            width=86)
         self.help = Text(parent, "", -ar + 0.1, -0.92, 0.035, color=(0.6, 0.7, 0.7, 1), scale_mult=scale_mult)
         self._all = [self.header, self.rows, self.detail, self.help]
+        self.preview = IconSlot(ar - 0.45, 0.42, 0.22)
 
     def show(self):
         self.panel.show()
@@ -251,6 +254,7 @@ class ShopScreen:
         self.panel.hide()
         for t in self._all:
             t.hide()
+        self.preview.hide()
 
     def render(self, shop, title):
         self.header.set(f"{title}   {shop.header()}")
@@ -266,11 +270,13 @@ class ShopScreen:
                       + "Setas escolhem | Enter confirma | Tab troca modo | Esc fecha")
 
 
-SETTINGS_ROWS = ["master", "music", "sfx", "captions", "text_scale", "difficulty", "shadows", "reduced_motion"]
+SETTINGS_ROWS = ["master", "music", "sfx", "captions", "text_scale", "difficulty", "shadows", "reduced_motion",
+                 "battle_on_contact"]
 SETTINGS_LABELS = {
     "master": "Volume geral", "music": "Música", "sfx": "Efeitos", "captions": "Legendas",
     "text_scale": "Tamanho do texto", "difficulty": "Dificuldade das batalhas", "shadows": "Sombras",
     "reduced_motion": "Movimento reduzido",
+    "battle_on_contact": "Inimigos errantes: batalha",
 }
 
 
@@ -313,3 +319,78 @@ class SettingsScreen:
             lines.append(f"{mark} {SETTINGS_LABELS[key]:<26} {settings_value_text(settings, key)}")
         self.rows.set("\n".join(lines))
         self.help.set("Setas escolhem e mudam | Enter alterna | Esc salva e volta")
+
+
+class IconSlot:
+    """Imagem de ícone que aparece só quando há um caminho válido (sem ícone, o texto segue sozinho)."""
+
+    def __init__(self, x, y, size):
+        self.x, self.y, self.size = x, y, size
+        self.node = None
+        self.path = None
+
+    def set(self, path):
+        from direct.gui.OnscreenImage import OnscreenImage
+        if path == self.path:
+            return
+        self.path = path
+        if self.node is not None:
+            self.node.destroy()
+            self.node = None
+        if path:
+            self.node = OnscreenImage(image=path, pos=(self.x, 0, self.y), scale=self.size)
+            self.node.setTransparency(TransparencyAttrib.MAlpha)
+
+    def hide(self):
+        self.set(None)
+
+
+class ListView:
+    """Lista de linhas com ícone à esquerda. Reaproveita os nós entre quadros."""
+
+    def __init__(self, x, y, row_h=0.09, icon=0.04, scale=0.045, width=60, scale_mult=1.0):
+        self.x, self.y, self.row_h = x, y, row_h
+        self.icon, self.scale, self.width, self.scale_mult = icon, scale, width, scale_mult
+        self.rows = []
+
+    def _row(self, i):
+        while len(self.rows) <= i:
+            k = len(self.rows)
+            ty = self.y - k * self.row_h
+            text = Text(None, "", self.x + self.icon * 2.6, ty, self.scale, scale_mult=self.scale_mult,
+                        width=self.width)
+            slot = IconSlot(self.x + self.icon, ty + self.icon * 0.2, self.icon)
+            self.rows.append((text, slot))
+        return self.rows[i]
+
+    def render(self, labels, cursor, icon_paths):
+        for i, label in enumerate(labels):
+            text, slot = self._row(i)
+            mark = ">" if i == cursor else " "
+            text.set(f"{mark} {label}")
+            text.show()
+            slot.set(icon_paths[i] if i < len(icon_paths) else None)
+        for text, slot in self.rows[len(labels):]:
+            text.hide()
+            slot.hide()
+
+    def hide(self):
+        for text, slot in self.rows:
+            text.hide()
+            slot.hide()
+
+
+def cell_at(ax, ay, n, size):
+    """Célula (coluna, linha) sob um ponto em coordenadas aspect2d, ou None fora da grade do reparo.
+
+    A grade ocupa x em [-size, size] e y em [-size, size] (topo = +size), dividida em n x n células.
+    """
+    x0, y0 = -size, size
+    cell = size * 2 / n
+    col = int((ax - x0) // cell)
+    row = int((y0 - ay) // cell)
+    if ax < x0 or ay > y0 or ax >= x0 + size * 2 or ay <= y0 - size * 2:
+        return None
+    if not (0 <= col < n and 0 <= row < n):
+        return None
+    return col, row

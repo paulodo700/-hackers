@@ -19,6 +19,7 @@ DEFAULTS = {
     "difficulty": "normal",
     "shadows": True,
     "reduced_motion": False,
+    "battle_on_contact": False,
 }
 TEXT_SCALES = [0.85, 1.0, 1.25, 1.5]
 
@@ -47,7 +48,7 @@ def sanitize(raw):
                 out[key] = _clamp01(raw[key])
             except (TypeError, ValueError):
                 pass
-    for key in ("captions", "shadows", "reduced_motion"):
+    for key in ("captions", "shadows", "reduced_motion", "battle_on_contact"):
         if isinstance(raw.get(key), bool):
             out[key] = raw[key]
     if raw.get("text_scale") in TEXT_SCALES:

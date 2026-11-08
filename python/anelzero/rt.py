@@ -16,6 +16,7 @@ CHASE_RANGE = 5.0
 WANDER_RADIUS = 3.0
 CONTACT_RANGE = 0.7
 PLAYER_RAD = 0.3
+TOUCH_COOLDOWN = 4.0
 
 
 class Roamer:
@@ -134,13 +135,26 @@ class Fight:
             if self.rng.random() < drop["chance"]:
                 self.state.add_item(drop["item"], 1)
 
-    def step(self, px, pz, dt):
-        """Atualiza inimigos e dano de contato. Devolve eventos ("hurt", rm, dano) ou ("defeat",)."""
+    def step(self, px, pz, dt, touch=False):
+        """Atualiza inimigos e o contato com o Bit.
+
+        touch=False: dano de contato em tempo real. Eventos ("hurt", rm, dano) ou ("defeat",).
+        touch=True (ajuste "batalha ao toque"): nenhum dano; devolve ("touch", rm) para o cliente
+        abrir a batalha por turnos. O cooldown evita abrir a batalha de novo logo após uma fuga.
+        """
         self.swing_cd = max(0.0, self.swing_cd - dt)
         self.iframes = max(0.0, self.iframes - dt)
         self.swing_flash = max(0.0, self.swing_flash - dt)
         events = []
         touching = update_roamers(self.roamers, self.zone, px, pz, dt, self.rng)
+        if touch:
+            for rm in touching:
+                if rm.attack_cd > 0:
+                    continue
+                rm.attack_cd = TOUCH_COOLDOWN
+                events.append(("touch", rm))
+                break  # uma batalha por vez
+            return events
         for rm in touching:
             if rm.attack_cd > 0 or self.iframes > 0:
                 continue

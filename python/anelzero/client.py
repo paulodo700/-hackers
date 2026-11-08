@@ -33,6 +33,7 @@ from . import battle as B  # noqa: E402
 from . import combat as K  # noqa: E402
 from . import content as C  # noqa: E402
 from . import dialog as D  # noqa: E402
+from . import icon_render as IR  # noqa: E402
 from . import menu as M  # noqa: E402
 from . import panels as P  # noqa: E402
 from . import repair as R  # noqa: E402
@@ -44,6 +45,13 @@ from . import state as S  # noqa: E402
 from . import world as W  # noqa: E402
 
 SPEED = 4.2
+INTRO_DOLLY_S = 6.0
+CAM_BACK = 6.0      # distância atrás do Bit (medida: deixa o céu com degradê no topo da tela)
+CAM_HEIGHT = 2.0   # altura da câmera
+CAM_AIM_AHEAD = 4.0  # o ponto de mira fica à frente do Bit
+CAM_AIM_HEIGHT = 0.9
+INTRO_FAR = 4.6
+INTRO_NEAR = 3.1
 INTERACT_RANGE = 1.3
 PICKUP_RANGE = 0.7
 ROAMER_RESPAWN_S = 30.0
@@ -125,6 +133,10 @@ class Game(ShowBase):
         self._build_hud()
         self._build_screens()
         self._apply_shadows()
+        try:
+            self.icons = IR.IconRenderer(self)
+        except Exception:  # sem OpenGL: o jogo segue só com texto
+            self.icons = None
         self._bind_keys()
         self.taskMgr.add(self._task, "update")
 
@@ -223,6 +235,15 @@ class Game(ShowBase):
         self.dlg_text.hide()
         self.menu_text = self._ot("", -ar + 0.12, 0.8, 0.045, color=(0.95, 1, 0.95, 1))
         self.menu_text.hide()
+        self.menu_list = P.ListView(-ar + 0.12, 0.66, row_h=0.11, icon=0.05, scale=0.042, width=44,
+                                    scale_mult=self.tm)
+        self.menu_list.hide()
+        self.menu_preview = P.IconSlot(-0.3, 0.5, 0.2)
+        self.menu_detail = self._ot("", -0.62, 0.12, 0.04, color=(0.9, 1, 0.95, 1), wordwrap=34)
+        self.menu_detail.hide()
+        self.menu_footer = self._ot("", -ar + 0.12, -0.86, 0.04, color=(0.7, 0.85, 0.85, 1), wordwrap=60)
+        self.menu_footer.hide()
+        self.icons = None
         self.title_big = self._ot("ANEL ZERO", -ar + 0.12, 0.45, 0.2, color=(0.6, 1, 0.95, 1))
         self.title_sub = self._ot("Dentro do Processador", -ar + 0.14, 0.25, 0.07, color=(0.8, 0.9, 0.9, 1))
         self.title_menu = self._ot("", -ar + 0.14, -0.2, 0.07, color=(1, 1, 1, 1))
@@ -252,6 +273,7 @@ class Game(ShowBase):
             self.vigia.hide()
 
     def _bind_keys(self):
+        self.accept("mouse1", self.on_mouse_click)
         names = ["w", "a", "s", "d", "arrow_up", "arrow_down", "arrow_left", "arrow_right",
                  "e", "f", "v", "tab", "escape", "enter", "space", "f5", "o", "h", "p"]
         names += list(DIGIT_KEYS)
@@ -406,6 +428,35 @@ class Game(ShowBase):
             self.sound("vitoria" if b.result == "win" else "derrota")
             self.battle_cursor = 0
 
+    def on_mouse_click(self):
+        """Clique do mouse: no reparo, gira a célula sob o cursor."""
+        mw = self.mouseWatcherNode
+        if self.mode != "repair" or not mw.hasMouse():
+            return
+        ax = mw.getMouseX() * self.getAspectRatio()
+        ay = mw.getMouseY()
+        self.repair_click(ax, ay)
+
+    def repair_click(self, ax, ay):
+        """Gira a célula que está em (ax, ay) no espaço da tela (aspect2d). Devolve a célula ou None."""
+        g = self.repair
+        if g is None or self.mode != "repair":
+            return None
+        cell = P.cell_at(ax, ay, g.puzzle.n, self.repair_screen.size)
+        if cell is None:
+            return None
+        g.cursor = [cell[0], cell[1]]
+        res = g.rotate(*cell)
+        if res == R.ROTATE:
+            self.sound("ui")
+        elif res is not None:
+            self.sound("dano")
+        if g.done:
+            self._end_repair(cancelled=False)
+        else:
+            self._refresh_repair()
+        return cell
+
     def _repair_key(self, name):
         g = self.repair
         if g is None:
@@ -475,7 +526,7 @@ class Game(ShowBase):
         if key in ("master", "music", "sfx"):
             st.set(key, round(st.get(key) + 0.1 * step, 2))
             self.sound("ui")
-        elif key in ("captions", "shadows", "reduced_motion"):
+        elif key in ("captions", "shadows", "reduced_motion", "battle_on_contact"):
             st.set(key, not st.get(key))
             if key == "shadows":
                 self._apply_shadows()
@@ -511,6 +562,10 @@ class Game(ShowBase):
     def start_intro(self):
         self.state = S.new_state()
         self.mode = "intro"
+        self.intro_t = 0.0
+        if self.zone_root is not None:
+            self.zone_root.hide()  # a abertura mostra só o Vigia, sem a zona de uma partida anterior
+        self.sfx.play_music()
         self._show_title(False)
         self.vigia.show()
         self.player.hide()
@@ -551,6 +606,10 @@ class Game(ShowBase):
     def start_play(self, state, pos=None):
         self.state = state
         self.mode = "play"
+        self.sfx.stop_music()
+        self.sun.setColor((0.95, 0.97, 1, 1))
+        if self.zone_root is not None:
+            self.zone_root.show()
         self._show_title(False)
         self.letter_top.hide()
         self.player.show()
@@ -587,14 +646,25 @@ class Game(ShowBase):
             after(value)
         self._announce(self.state.check_quests())
 
+    def icon_for(self, kind, ident):
+        """Caminho do ícone 3D (renderizado na primeira vez). None sem OpenGL ou sem ícone."""
+        if self.icons is None or not self.icons.available or ident is None:
+            return None
+        zone = self.zone.id if self.zone is not None else None
+        try:
+            return self.icons.ensure(kind, ident, zone)
+        except Exception:
+            return None
+
     def open_menu(self):
         if self.mode != "play":
             return
         self.menu = M.Menu(self.state, self.zone.id)
         self.mode = "menu"
         self.menu_text.show()
-        self.panel.setScale(0.66, 1, 0.92)
-        self.panel.setPos(-self.getAspectRatio() + 0.66, 0, 0)
+        self.menu_footer.show()
+        self.panel.setScale(0.95, 1, 0.92)
+        self.panel.setPos(-self.getAspectRatio() + 0.95, 0, 0)
         self.panel.show()
         self._refresh_menu()
 
@@ -602,6 +672,10 @@ class Game(ShowBase):
         self.mode = "play"
         self.menu = None
         self.menu_text.hide()
+        self.menu_list.hide()
+        self.menu_preview.hide()
+        self.menu_detail.hide()
+        self.menu_footer.hide()
         self.panel.hide()
         self.panel.setScale(self.getAspectRatio(), 1, 0.34)
         self.panel.setPos(0, 0, -0.66)
@@ -610,14 +684,21 @@ class Game(ShowBase):
         if self.menu is None:
             return
         tabs = " | ".join(("[" + t + "]") if i == self.menu.tab else t for i, t in enumerate(M.TABS))
-        lines = [tabs, ""]
-        for i, row in enumerate(self.menu.rows()):
-            mark = ">" if i == self.menu.cursor[self.menu.tab] else " "
-            lines.append(f"{mark} {row['label']}   {row['detail']}")
-        if self.menu.message:
-            lines += ["", self.menu.message]
-        lines += ["", "Tab ou setas trocam aba | Enter usar | V vender | Esc fechar"]
-        self.menu_text.setText("\n".join(lines))
+        rows = self.menu.rows()
+        cursor = self.menu.cursor[self.menu.tab]
+        kind = {1: "item", 2: "skill"}.get(self.menu.tab)
+        icon_paths = [self.icon_for(kind, r["id"]) if kind else None for r in rows]
+        # Cabeçalho e rodapé em texto; a lista com ícones fica ao lado
+        self.menu_text.setText(tabs)
+        footer = (self.menu.message + "\n" if self.menu.message else "")
+        self.menu_footer.setText(footer + "Tab ou setas trocam aba | Enter usar | V vender | Esc fechar")
+        self.menu_list.render([r["label"] for r in rows], cursor, icon_paths)
+        sel = rows[cursor] if rows else None
+        sel_icon = icon_paths[cursor] if rows else None
+        self.menu_preview.set(sel_icon)
+        detail = sel["detail"] if sel else ""
+        self.menu_detail.setText(detail)
+        self.menu_detail.show()
 
     def fast_travel(self, zid):
         self.close_menu()
@@ -640,12 +721,20 @@ class Game(ShowBase):
         self.battle_screen.show()
         self._refresh_battle()
 
+    def start_roamer_battle(self, rm):
+        """Contato com um inimigo errante (ajuste 'batalha ao toque'): abre a batalha por turnos."""
+        entry = self.roamer_nodes.get(id(rm))
+        target = {"m": {"id": rm.id}, "node": entry[0] if entry else None, "defeated": False, "roamer": rm}
+        self.say(f"{rm.name} bloqueia o caminho!", 2.0)
+        self.start_battle(target)
+
     def time_seed(self):
         return int(self.time * 1000) + self.state.level * 7919
 
     def _refresh_battle(self):
         if self.battle is None:
             return
+        self.battle_screen.portrait.set(self.icon_for("enemy", self.battle.enemy_id))
         self.battle_screen.render(self.battle, self.battle_cursor,
                                   P.DIFF_LABEL.get(self.settings.get("difficulty"), "Normal"))
 
@@ -657,9 +746,15 @@ class Game(ShowBase):
         self.battle_screen.hide()
         self.mode = "play"
         if result == "win" and target is not None:
-            target["node"].hide()
+            if target.get("node") is not None:
+                target["node"].hide()
             target["defeated"] = True
+            rm = target.get("roamer")
+            if rm is not None:
+                rm.alive = False
             self.say(f"{b.name} foi derrotado!", 3.0)
+        elif result == "flee" and target is not None and target.get("roamer") is not None:
+            self.say("Você escapou.", 2.0)
         elif result == "lose":
             self.state.hp = max(1, self.state.max_hp() // 2)
             sx, sz = self.zone.spawn()
@@ -726,6 +821,9 @@ class Game(ShowBase):
     def _refresh_shop(self):
         if self.shop is None:
             return
+        rows = self.shop.rows()
+        row = rows[self.shop.cursor] if rows else None
+        self.shop_screen.preview.set(self.icon_for("item", row["id"]) if row and row["id"] else None)
         title = "Bancada de criação" if self.shop.modes == ["criar"] else "Lojista"
         self.shop_screen.render(self.shop, title)
 
@@ -901,7 +999,9 @@ class Game(ShowBase):
 
     def _handle_fight_events(self, events):
         for ev in events:
-            if ev[0] == "hit":
+            if ev[0] == "touch":
+                self.start_roamer_battle(ev[1])
+            elif ev[0] == "hit":
                 _, rm, dmg = ev
                 self._burst((rm.x, rm.z, 0.6), rm.color, 8)
                 self._float(f"-{dmg}", (rm.x, rm.z, 1.4), (1, 0.95, 0.4, 1))
@@ -983,7 +1083,7 @@ class Game(ShowBase):
     # ---- Quadro ----
     def _sync_hud(self):
         """O HUD do jogo só aparece em exploração, diálogo e menu (telas cheias o escondem)."""
-        on = self.mode in ("play", "dialog", "menu")
+        on = self.mode in ("play", "dialog")  # no menu, o painel ocupa a tela e o HUD sai
         if on == self.hud_on:
             return
         self.hud_on = on
@@ -1030,9 +1130,18 @@ class Game(ShowBase):
         self.hub_angle += dt * spin
         a = math.radians(self.hub_angle)
         if self.mode == "intro":
-            # Vigia em primeiro plano, enquadrado de perto
-            self.camera.setPos(1.9 + math.cos(a * 0.2) * 0.3, -3.4, 1.9)
-            self.camera.lookAt(0, 0, 1.25)
+            # Aproximação em câmera lenta até o Vigia (6 s), com pulso de luz no fundo
+            t = getattr(self, "intro_t", 0.0)
+            k = min(1.0, t / INTRO_DOLLY_S)
+            k = k * k * (3 - 2 * k)  # suavização (smoothstep)
+            if self.settings.get("reduced_motion"):
+                k = 1.0
+            dist = INTRO_FAR + (INTRO_NEAR - INTRO_FAR) * k
+            self.camera.setPos(1.6 + math.cos(a * 0.2) * 0.2, -dist, 1.7 + 0.2 * k)
+            self.camera.lookAt(0, 0, 1.45)
+            pulse = 0.85 + 0.15 * math.sin(2 * math.pi * t / 2.4)
+            self.sun.setColor((0.95 * pulse, 0.97 * pulse, 1.0 * pulse, 1))
+            self.intro_t = t + dt
         else:
             self.camera.setPos(math.cos(a) * 5.0, math.sin(a) * 5.0, 2.4)
             self.camera.lookAt(0, 0, 1.0)
@@ -1076,7 +1185,7 @@ class Game(ShowBase):
 
         for node, _key, _item in self.pickups.values():
             node.setH(self.time * 120)
-        events = self.fight.step(self.px, self.py, dt)
+        events = self.fight.step(self.px, self.py, dt, touch=self.settings.get("battle_on_contact"))
         if events:
             self._handle_fight_events(events)
         self._sync_roamers()
@@ -1090,8 +1199,8 @@ class Game(ShowBase):
 
         self._update_fx(dt)
         self._update_prompt()
-        self.camera.setPos(self.px, self.py - 7.0, 3.6)
-        self.camera.lookAt(self.px, self.py + 2.2, 0.6)
+        self.camera.setPos(self.px, self.py - CAM_BACK, CAM_HEIGHT)
+        self.camera.lookAt(self.px, self.py + CAM_AIM_AHEAD, CAM_AIM_HEIGHT)
         self._update_hud(dt)
 
     def _sync_roamers(self):

@@ -107,5 +107,31 @@ class Roaming(unittest.TestCase):
             self.assertGreater(((rm.x - sx) ** 2 + (rm.z - sz) ** 2) ** 0.5, 7.9)
 
 
+class TouchMode(unittest.TestCase):
+    """Ajuste 'batalha ao toque': contato vira evento de batalha, sem dano em tempo real."""
+
+    def setUp(self):
+        self.zone = arena()
+        self.st = S.GameState()
+        self.fight = rt.Fight(self.zone, self.st, rng=random.Random(3), count=0)
+        self.rm = rt.Roamer("pulga", 4.0, 2.5, random.Random(4))
+        self.fight.roamers = [self.rm]
+
+    def test_contact_emits_touch_without_damage(self):
+        hp0 = self.st.hp
+        ev = self.fight.step(4.0, 2.5, 0.01, touch=True)
+        self.assertEqual([e[0] for e in ev], ["touch"])
+        self.assertIs(ev[0][1], self.rm)
+        self.assertEqual(self.st.hp, hp0)
+
+    def test_touch_cooldown_prevents_repeat(self):
+        self.fight.step(4.0, 2.5, 0.01, touch=True)
+        self.assertEqual(self.fight.step(4.0, 2.5, 0.01, touch=True), [])
+
+    def test_default_mode_still_hurts(self):
+        ev = self.fight.step(4.0, 2.5, 0.01)
+        self.assertTrue(any(e[0] == "hurt" for e in ev))
+
+
 if __name__ == "__main__":
     unittest.main()

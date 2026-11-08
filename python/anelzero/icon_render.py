@@ -77,6 +77,8 @@ class IconRenderer:
             self.tex = Texture("anelzero-icon")
             self.buf.addRenderTexture(self.tex, GraphicsOutput.RTMCopyRam, GraphicsOutput.RTPColor)
             self.cam = base.makeCamera(self.buf, scene=self.root)
+            # A câmera do ícone precisa viver na cena dos ícones, não sob a câmera do jogo (que se move)
+            self.cam.reparentTo(self.root)
             lens = self.cam.node().getLens()
             lens.setFov(34)
             self.cam.setPos(2.3, -3.0, 2.0)
