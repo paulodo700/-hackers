@@ -102,3 +102,35 @@ def load(zid):
 
 def all_zone_ids():
     return list(C.ZONES.keys())
+
+
+# ---- Movimento contínuo com colisão (células são quadrados centrados em inteiros) ----
+
+import math as _math
+
+
+def blocked(zone, x, z, rad=0.3):
+    """True se um círculo de raio rad em (x, z) toca alguma parede."""
+    c0 = _math.floor(x - rad + 0.5)
+    c1 = _math.floor(x + rad + 0.5)
+    r0 = _math.floor(z - rad + 0.5)
+    r1 = _math.floor(z + rad + 0.5)
+    for r in range(r0, r1 + 1):
+        for c in range(c0, c1 + 1):
+            if zone.char(c, r) != WALL:
+                continue
+            # Interseção entre o círculo e o quadrado da parede [c-0.5, c+0.5] x [r-0.5, r+0.5]
+            nx = min(max(x, c - 0.5), c + 0.5)
+            nz = min(max(z, r - 0.5), r + 0.5)
+            if (x - nx) ** 2 + (z - nz) ** 2 < rad * rad:
+                return True
+    return False
+
+
+def move(zone, x, z, dx, dz, rad=0.3):
+    """Desloca eixo a eixo (desliza ao longo das paredes). Devolve a nova posição."""
+    if not blocked(zone, x + dx, z, rad):
+        x += dx
+    if not blocked(zone, x, z + dz, rad):
+        z += dz
+    return x, z
