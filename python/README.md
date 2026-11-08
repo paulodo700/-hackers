@@ -3,6 +3,7 @@
 Port em Python do jogo. A versão web (raiz do repositório) continua sendo a que roda em celular.
 
 ## Requisitos
+- **Python 3.11, 3.12 ou 3.13** (o Panda3D 1.10.16 não tem pacote para Python 3.14). No Windows, instale o Python 3.12 do python.org e use `py -3.12`.
 - Python 3.11+ (testado em 3.13)
 - `pip install -r requirements.txt` (Panda3D 1.10.16)
 
