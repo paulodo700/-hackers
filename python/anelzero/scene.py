@@ -160,30 +160,55 @@ class Mesh:
         return np
 
 
+def _ao(zone, c, r):
+    """Oclusão ambiente aproximada: quanto mais paredes em volta da célula, mais escura fica."""
+    walls = 0
+    for dc, dr in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+        if not zone.walkable(c + dc, r + dr):
+            walls += 1
+    corners = 0
+    for dc, dr in ((1, 1), (-1, 1), (1, -1), (-1, -1)):
+        if not zone.walkable(c + dc, r + dr):
+            corners += 1
+    return max(0.55, 1.0 - 0.12 * walls - 0.05 * corners)
+
+
 def build_zone_mesh(zone):
-    """Piso texturizado, trilhas luminosas e paredes com faces expostas. Uma malha só."""
+    """Mapa da zona: piso com blocos e rejunte, oclusão ambiente junto às paredes, trilhas e poças
+    luminosas, e paredes com borda iluminada no topo. Tudo numa malha só (poucas chamadas de desenho)."""
     th = zone.theme
     ground = hex_rgba(th.get("ground", "#222222"))
     trace = hex_rgba(th.get("trace", "#66aaff"))
     accent = hex_rgba(th.get("accent", "#ffffff"))
-    wall_base = mix(ground[:3], (0, 0, 0), 0.25) + (1.0,)
+    grout = mix(ground[:3], (0, 0, 0), 0.55) + (1.0,)
+    wall_base = mix(ground[:3], (0, 0, 0), 0.25)
+    wall_rim = mix(wall_base, accent[:3], 0.35) + (1.0,)
     mesh = Mesh()
+    inset = 0.07  # largura do rejunte
+    # Piso: cada célula é um bloco com rejunte escuro ao redor e oclusão ambiente
     for r in range(zone.height):
         for c in range(zone.width):
-            if zone.walkable(c, r):
-                k = 0.86 + 0.2 * _noise(c, r, 1)
-                col = tuple(v * k for v in ground[:3]) + (1.0,)
-                mesh.quad([(c - .5, r - .5, 0), (c + .5, r - .5, 0), (c + .5, r + .5, 0), (c - .5, r + .5, 0)],
-                          (0, 0, 1), col)
-    # Trilhas de circuito: faixa luminosa no piso, com brilho pulsante no centro
+            if not zone.walkable(c, r):
+                continue
+            ao = _ao(zone, c, r)
+            k = (0.86 + 0.2 * _noise(c, r, 1)) * ao
+            col = tuple(v * k for v in ground[:3]) + (1.0,)
+            # rejunte (faixa escura): a célula inteira, e depois o bloco por cima, menor
+            mesh.quad([(c - .5, r - .5, 0), (c + .5, r - .5, 0), (c + .5, r + .5, 0), (c - .5, r + .5, 0)],
+                      (0, 0, 1), tuple(v * ao for v in grout[:3]) + (1.0,))
+            i = .5 - inset
+            mesh.quad([(c - i, r - i, .004), (c + i, r - i, .004), (c + i, r + i, .004), (c - i, r + i, .004)],
+                      (0, 0, 1), col)
+    # Trilhas de circuito: faixa luminosa com núcleo claro
     for c, r in zone.cells_of("="):
         mesh.quad([(c - .5, r - .5, .01), (c + .5, r - .5, .01), (c + .5, r + .5, .01), (c - .5, r + .5, .01)],
                   (0, 0, 1), mix(ground[:3], trace[:3], 0.55) + (1.0,))
         mesh.quad([(c - .15, r - .15, .02), (c + .15, r - .15, .02), (c + .15, r + .15, .02), (c - .15, r + .15, .02)],
                   (0, 0, 1), accent)
-    # Poças: pequenos discos brilhantes
+    # Poças: discos com anel brilhante
     for c, r in zone.cells_of("~"):
         mesh.disc(c, r, 0.015, 0.45, trace)
+        mesh.disc(c, r, 0.02, 0.22, accent)
     h = 1.0
     for r in range(zone.height):
         for c in range(zone.width):
@@ -191,10 +216,12 @@ def build_zone_mesh(zone):
                 continue
             k = 0.8 + 0.4 * _noise(c, r, 2)
             top = tuple(v * k for v in wall_base[:3]) + (1.0,)
+            # topo com borda iluminada (chanfro) e miolo escuro
             mesh.quad([(c - .5, r - .5, h), (c + .5, r - .5, h), (c + .5, r + .5, h), (c - .5, r + .5, h)],
                       (0, 0, 1), top)
-            # Circuito gravado no topo da parede (linha de traço)
-            if _noise(c, r, 3) < 0.35:
+            mesh.quad([(c - .5, r - .5, h + .005), (c + .5, r - .5, h + .005), (c + .5, r - .44, h + .005),
+                       (c - .5, r - .44, h + .005)], (0, 0, 1), wall_rim)
+            if _noise(c, r, 3) < 0.35:  # circuito gravado no topo
                 mesh.quad([(c - .4, r - .03, h + .01), (c + .4, r - .03, h + .01), (c + .4, r + .03, h + .01),
                            (c - .4, r + .03, h + .01)], (0, 0, 1), mix(top[:3], trace[:3], 0.6) + (1.0,))
             side = tuple(v * 0.7 for v in top[:3]) + (1.0,)

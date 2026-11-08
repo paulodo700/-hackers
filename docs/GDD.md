@@ -352,3 +352,19 @@ Observação: a medição acima é do estado do commit `b2ab640`, que reúne os 
 | `tests/perf.mjs` | Chromium headless, 360×740, software; cena inteira / só o jogador | 30,3 FPS (52 chamadas, 10 560 triângulos) / 60,2 FPS |
 
 Os dois motores não se comparam entre si. As variações em relação à rodada 11 estão no ruído da máquina.
+
+## Rodada 13: mapa (prioridade)
+
+- **Piso:** cada bloco tem rejunte escuro ao redor, para separar as células.
+- **Oclusão ambiente aproximada:** células perto de paredes e cantos escurecem (vértices, sem custo extra de desenho).
+- **Paredes:** o topo tem uma borda iluminada na cor de destaque da zona.
+- **Trilhas e poças:** as poças ganham anel brilhante.
+- A malha continua única por zona.
+- **Limite:** isso é acabamento sobre geometria simples. Não é o nível de detalhe fotorrealista pedido.
+
+### Desempenho medido nesta rodada
+
+| Robô | Motor e condição | Resultado |
+|---|---|---|
+| `tools/bench_shadows.py` | Panda3D, Xvfb, CPU; sombra desligada / ligada | 6,44 / 13,62 ms por quadro (+7,18 ms, +111%) |
+| `tests/perf.mjs` | Chromium headless, 360×740, software; cena inteira / só o jogador | 32,1 FPS (52 chamadas, 10 560 triângulos) / 60,2 FPS |
