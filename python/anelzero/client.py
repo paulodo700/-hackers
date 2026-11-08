@@ -983,8 +983,12 @@ class Game(ShowBase):
         from panda3d.core import CardMaker, TransparencyAttrib as TA
         cm = CardMaker("roamer-icon")
         cm.setFrame(-0.5, 0.5, -0.5, 0.5)
+        try:
+            tex = self.loader.loadTexture(path)
+        except Exception:  # imagem ausente ou ilegível: o inimigo fica sem cartão
+            return
         card = root.attachNewNode(cm.generate())
-        card.setTexture(self.loader.loadTexture(path))
+        card.setTexture(tex)
         card.setTransparency(TA.MAlpha)
         card.setBillboardPointEye()
         card.setPos(0, 0, 1.75 * rm.scale)

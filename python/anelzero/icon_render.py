@@ -162,8 +162,13 @@ class IconRenderer:
         if not path.exists():
             if not self.available:
                 return None
-            path.parent.mkdir(parents=True, exist_ok=True)
-            self._render(kind, ident, zone_id, path)
+            try:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                self._render(kind, ident, zone_id, path)
+            except Exception:
+                return None
+            if not path.exists():  # a renderização não gravou o arquivo: sem ícone, o texto segue
+                return None
         self._loaded[path] = str(path)
         return self._loaded[path]
 

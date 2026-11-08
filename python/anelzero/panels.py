@@ -4,6 +4,7 @@ Cada tela recebe um modelo de lógica (battle.Battle, repair.RepairGame, shop.Sh
 e só desenha o estado dele. Nenhuma regra de jogo vive aqui.
 """
 
+import os
 import textwrap
 
 from direct.gui.OnscreenText import OnscreenText
@@ -340,8 +341,11 @@ class IconSlot:
         if self.node is not None:
             self.node.destroy()
             self.node = None
-        if path:
-            self.node = OnscreenImage(image=path, pos=(self.x, 0, self.y), scale=self.size)
+        if path and os.path.exists(path):
+            try:
+                self.node = OnscreenImage(image=path, pos=(self.x, 0, self.y), scale=self.size)
+            except Exception:  # imagem ilegível: segue sem ícone
+                self.node = None
             self.node.setTransparency(TransparencyAttrib.MAlpha)
 
     def hide(self):
