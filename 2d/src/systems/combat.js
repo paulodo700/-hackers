@@ -8,6 +8,8 @@ import { registrarVista, registrarVitoria } from './bestiario.js';
 import { progresso } from './quests.js';
 
 export const ESCALA_POR_CAMADA = (ordem) => 1 + 0.2 * ordem;
+// Falhas comuns dão o dobro do XP do conteúdo: o personagem precisa crescer a tempo do primeiro chefe.
+export const XP_FATOR_COMUM = 2;
 
 // Multiplicador de elemento: 1,5 se o atacante tem vantagem; 0,75 se o alvo tem vantagem; 1 caso contrário.
 export function fatorElemento(atacante, alvo) {
@@ -38,7 +40,7 @@ export function iniciarBatalha(game, ent) {
   const ordem = game.layerOrdem(ent.camada);
   const esc = ESCALA_POR_CAMADA(ordem);
   const boss = !!foe.chefe;
-  const hp = Math.round(foe.hp * esc * (boss ? 1.4 : 1));
+  const hp = Math.round(foe.hp * esc);
   game.battle = {
     entId: ent.id,
     foeId: foe.id,
@@ -341,7 +343,7 @@ export function vitoria(game) {
   game.battle = null;
   game.player.estados = [];
   game.player.escudo = 0;
-  const xp = foe.chefe ? foe.recompensa.xp : foe.xp;
+  const xp = foe.chefe ? foe.recompensa.xp : foe.xp * XP_FATOR_COMUM;
   const ciclos = foe.chefe ? foe.recompensa.ciclos : Math.floor(game.rng() * (3 + ordem));
   game.ciclos += ciclos;
   const quedas = [];
@@ -353,7 +355,7 @@ export function vitoria(game) {
   }
   if (foe.chefe && foe.recompensa.item) adicionar(game, foe.recompensa.item, 1);
   registrarVitoria(game, foe.id);
-  game.say(`${foe.nome} foi vencido. +${xp} XP, +${ciclos} ciclos.`);
+  game.say(`${foe.nome} caiu! +${xp} XP, +${ciclos} ciclos.`);
   game.emit({ tipo: 'sfx', id: 'vitoria' });
   game.emit({ tipo: 'texto', texto: `+${xp} XP`, c: b.c, r: b.r, cor: '#ffd166' });
   game.removerEntidade?.(b.entId);

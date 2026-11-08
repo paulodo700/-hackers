@@ -90,7 +90,7 @@ export const FALHAS = {
   // ================================================================ Chefes (Guardiões)
   bolha_termica: chefe('bolha_termica', {
     nome: 'Bolha Térmica', camada: 'dissipador', elemento: 'calor', nivel: 2,
-    hp: 60, atk: 6, def: 2, spd: 4, xp: 40,
+    hp: 36, atk: 4, def: 1, spd: 4, xp: 40,
     drops: [{ item: 'polimero_termico', chance: 1, qtd: 1 }],
     fases: [
       { ate: 0.66, ataques: ['borbulhar', 'chiado_quente'] },

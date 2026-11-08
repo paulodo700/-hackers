@@ -10,7 +10,9 @@ import { estatisticas } from './systems/stats.js';
 import {
   efeitosDoPasso, coletarNaCelula, moverFalhas, contatoComFalha, interagir, usarFerramenta,
 } from './systems/world.js';
-import { iniciarBatalha, acaoJogador } from './systems/combat.js';
+import { COOL, HOT } from './grid.js';
+import { clamp } from './systems/util.js';
+import { iniciarBatalha, acaoJogador, aplicarDanoJogador, derrota } from './systems/combat.js';
 import { progresso } from './systems/quests.js';
 import { avancarDialogo, escolherOpcao, encerrarDialogo } from './systems/dialogue.js';
 import { executarAcaoMenu, itensDoMenu } from './menus.js';
@@ -289,6 +291,32 @@ export class Game {
     const item = itensDoMenu(this)[this.menu.cursor];
     if (!item || item.acao?.tipo === 'nada') return { type: 'nada' };
     return executarAcaoMenu(this, item.acao);
+  }
+
+  // Esperar (descansar): o tempo passa sem andar. A vida volta aos poucos; na zona fria o chip esfria mais;
+// as falhas se movem; contato inicia combate.
+  esperar() {
+    if (this.menu || this.dialog || this.mapOpen || this.battle) return { type: 'paused' };
+    const p = this.player;
+    const ch = this.grid.at(p.c, p.r);
+    // Descansar: a vida volta aos poucos fora do combate.
+    p.hp = Math.min(this.estatisticas().maxHp, p.hp + 2);
+    if (ch === COOL) {
+      p.calor = clamp(p.calor - 8, 0, 100);
+      this.emit({ tipo: 'fx', fx: 'gelo', c: p.c, r: p.r });
+      this.say('O chip esfria.');
+    } else {
+      p.calor = clamp(p.calor - 2, 0, 100); // esperar em terreno comum também resfria, devagar
+      this.say('Você espera. O chip esfria um pouco.');
+    }
+    if (p.calor >= 85 && ch !== COOL) {
+      this.emit({ tipo: 'sfx', id: 'sobreaquecer' });
+      if (aplicarDanoJogador(this, p.calor >= 100 ? 3 : 1)) { derrota(this); return { type: 'derrota' }; }
+    }
+    moverFalhas(this);
+    const contato = contatoComFalha(this);
+    if (contato && !this.battle) iniciarBatalha(this, { ...contato, camada: p.camada });
+    return { type: 'espera' };
   }
 
   toggleMap() {

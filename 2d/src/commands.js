@@ -16,6 +16,7 @@ export const TECLAS = {
   j: 'journal', J: 'journal',
   b: 'bestiary', B: 'bestiary',
   Tab: 'menu',
+  z: 'wait', Z: 'wait',
   F3: 'debug', '`': 'debug',
   n: 'newgame', N: 'newgame',
   1: 'num1', 2: 'num2', 3: 'num3', 4: 'num4', 5: 'num5', 6: 'num6', 7: 'num7', 8: 'num8', 9: 'num9',
@@ -52,6 +53,7 @@ export function executarComando(game, cmd) {
     case 'bestiary': return abrirExplorando(game, 'bestiario');
     case 'menu': return abrirOuFechar(game, 'principal');
     case 'debug': return game.toggleDebug();
+    case 'wait': return game.battle ? { type: 'batalha' } : game.esperar();
     case 'newgame': return { type: 'app', cmd: 'newgame' };
     default: return { type: 'ignored', cmd };
   }
@@ -136,6 +138,7 @@ export function botoesDeToque(game) {
     { rotulo: 'Criar', cmd: 'craft' },
     { rotulo: 'Mapa', cmd: 'map' },
     { rotulo: 'Inventário', cmd: 'inv' },
+    { rotulo: 'Esperar', cmd: 'wait' },
     { rotulo: 'Menu', cmd: 'menu' },
   ];
 }

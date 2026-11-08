@@ -21,13 +21,13 @@ export function efeitosDoPasso(game) {
   const ch = game.grid.at(p.c, p.r);
   p.passos++;
   if (ch === HOT) {
-    p.calor = clamp(p.calor + 4, 0, 100);
+    p.calor = clamp(p.calor + 3, 0, 100);
     game.emit({ tipo: 'fx', fx: 'fogo', c: p.c, r: p.r });
   } else if (ch === COOL) {
     p.calor = clamp(p.calor - 6, 0, 100);
     game.emit({ tipo: 'fx', fx: 'gelo', c: p.c, r: p.r });
-  } else if (p.passos % 2 === 0) {
-    p.calor = clamp(p.calor + 1, 0, 100); // terreno neutro esquenta devagar
+  } else if (p.passos % 4 === 0) {
+    p.calor = clamp(p.calor + 1, 0, 100); // terreno neutro esquenta devagar: 1 a cada 4 passos
   }
   if (p.calor >= 85) {
     game.emit({ tipo: 'sfx', id: 'sobreaquecer' });

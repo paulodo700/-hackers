@@ -136,8 +136,10 @@ test('chefes: validador, um por camada, três fases e faixas', () => {
     assert.ok(LAYER_ORDER.includes(c.camada), c.id);
     assert.equal(c.fases.length, 3);
     assert.deepEqual(c.fases.map((f) => f.ate), [0.66, 0.33, 0]);
-    assert.ok(c.hp >= 60 && c.hp <= 120 && c.atk >= 6 && c.atk <= 12, c.id);
-    assert.ok(c.def >= 2 && c.def <= 6 && c.spd >= 4 && c.spd <= 8 && c.nivel >= 2 && c.nivel <= 8, c.id);
+    // O primeiro chefe é mais fraco de propósito (o personagem começa de nível 1); os demais seguem 60–120.
+    const primeiro = c.camada === 'dissipador';
+    assert.ok(c.hp >= (primeiro ? 30 : 60) && c.hp <= 120 && c.atk >= (primeiro ? 4 : 6) && c.atk <= 12, c.id);
+    assert.ok(c.def >= (primeiro ? 1 : 2) && c.def <= 6 && c.spd >= 4 && c.spd <= 8 && c.nivel >= 2 && c.nivel <= 8, c.id);
     if (c.recompensa.item) assert.ok(ITENS[c.recompensa.item], `${c.id}: item de recompensa`);
   }
   assert.equal(new Set(chefes.map((c) => c.camada)).size, 8);

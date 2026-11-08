@@ -92,9 +92,9 @@ test('calor: trilha quente esquenta, zona fria esfria, e calor 100 machuca a cad
   const g = cenario(['#########', '#Sh~....#', '#########'], 1, 1);
   g.player.calor = 10;
   g.move(1, 0);
-  assert.equal(g.player.calor, 14, 'trilha quente +4');
+  assert.equal(g.player.calor, 13, 'trilha quente +3');
   g.move(1, 0);
-  assert.equal(g.player.calor, 8, 'zona fria -6');
+  assert.equal(g.player.calor, 7, 'zona fria -6');
   g.player.calor = 100;
   const hp = g.player.hp;
   g.move(1, 0);

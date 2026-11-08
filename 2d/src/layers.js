@@ -16,12 +16,12 @@ export const LAYER_ORDER = [
 export const LAYERS = {
   dissipador: {
     nome: 'Dissipador de calor', first: true, pickups: { a: 2, w: 2, k: 1 }, blockers: [],
-    enemies: [['pulga_corrente', 2], ['ruido_termico', 1]], loops: 4, baus: 2, quentes: 3, frias: 1, chave: true,
+    enemies: [['pulga_corrente', 2], ['ruido_termico', 1]], loops: 4, baus: 2, quentes: 3, frias: 2, chave: true,
     tema: { fundo: '#07090d', chao: '#101b24', parede: '#1d2a36', destaque: '#f29b4a' },
   },
   metal_m1: {
     nome: 'Metal M1', pickups: { a: 2, w: 1, k: 1 }, blockers: ['x'],
-    enemies: [['pulga_corrente', 2], ['rasgo_trilha', 2]], loops: 5, baus: 1, quentes: 2, frias: 0, chave: true,
+    enemies: [['pulga_corrente', 2], ['rasgo_trilha', 2]], loops: 5, baus: 1, quentes: 2, frias: 1, chave: true,
     tema: { fundo: '#070b0a', chao: '#0f1c1a', parede: '#1c3a35', destaque: '#c9854a' },
   },
   cache_l3: {
@@ -31,17 +31,17 @@ export const LAYERS = {
   },
   nucleos: {
     nome: 'Núcleos de CPU', pickups: { a: 1, w: 2, k: 1, p: 1 }, blockers: ['o'],
-    enemies: [['ruido_termico', 2], ['sobrecarga_termica', 2]], loops: 6, baus: 1, quentes: 3, frias: 0, chave: true,
+    enemies: [['ruido_termico', 2], ['sobrecarga_termica', 2]], loops: 6, baus: 1, quentes: 3, frias: 1, chave: true,
     tema: { fundo: '#0c0708', chao: '#1f1416', parede: '#3b2226', destaque: '#ff6b5a' },
   },
   controlador_memoria: {
     nome: 'Controlador de memória', pickups: { a: 1, w: 1, m: 1 }, blockers: ['x'],
-    enemies: [['fantasma_de_cache', 2], ['glitch_de_pipeline', 2]], loops: 4, baus: 1, quentes: 0, frias: 1, chave: true,
+    enemies: [['fantasma_de_cache', 2], ['glitch_de_pipeline', 2]], loops: 4, baus: 1, quentes: 0, frias: 2, chave: true,
     tema: { fundo: '#080a0d', chao: '#14181f', parede: '#2b3340', destaque: '#a3e635' },
   },
   energia: {
     nome: 'Rede de energia', pickups: { w: 1, k: 1, p: 1 }, blockers: ['g'],
-    enemies: [['vazamento_corrente', 2], ['pico_de_tensao', 2]], loops: 5, baus: 2, quentes: 2, frias: 0, chave: true,
+    enemies: [['vazamento_corrente', 2], ['pico_de_tensao', 2]], loops: 5, baus: 2, quentes: 2, frias: 1, chave: true,
     tema: { fundo: '#0a0a05', chao: '#1d1c0f', parede: '#3d3a17', destaque: '#ffd166' },
   },
   interposer: {
@@ -51,7 +51,7 @@ export const LAYERS = {
   },
   substrato: {
     nome: 'Substrato', goal: true, pickups: { p: 1, m: 1 }, blockers: [],
-    enemies: [['bit_corrompido', 2], ['sobrecarga_termica', 2]], loops: 3, baus: 2, quentes: 2, frias: 0, chave: true,
+    enemies: [['bit_corrompido', 2], ['sobrecarga_termica', 2]], loops: 3, baus: 2, quentes: 2, frias: 2, chave: true,
     tema: { fundo: '#040406', chao: '#0b0b10', parede: '#1a1a24', destaque: '#c084fc' },
   },
 };
