@@ -403,3 +403,33 @@ A tela de camadas não aparece durante a exploração, então as medições de e
 | `tests/perf.mjs` | Chromium headless, 360×740, software; cena inteira / só o jogador | 32,5 FPS (52 chamadas, 10 560 triângulos) / 60,2 FPS |
 
 A zona da camada existe só na versão Python. O robô da web não tem essa zona, então não há medição dela no lado web. As medições acima são da cena inteira de cada versão, não da zona da camada.
+
+## Rodada 16: referências visuais (direção, sem cópia)
+
+As nove imagens de referência mostram um processador com cooler, tampa de calor, chiplets empilhados, uma cidade microscópica sobre o silício, blocos de lógica, interposer, substrato e matriz de contato. Elas são usadas como **inspiração de estrutura e composição**, não como arte a copiar.
+
+**Regras:**
+- Nenhum logotipo, nome de linha de produto ou número de modelo de terceiros entra no jogo. As imagens mostram a marca Intel em vários pontos, e isso fica fora.
+- As imagens são geradas por IA. O que se aproveita são ideias (camadas, cidade sobre o chip, ferramentas), que são redesenhadas com formas, nomes e cores próprios.
+
+**Correspondência com elementos originais do jogo:**
+
+| Referência | Elemento original no jogo |
+|---|---|
+| Cooler de cobre com ventoinha e aletas | Camada 1 — Dissipador térmico (aletas e ventoinha de cobre próprias) |
+| Tampa de calor prateada | Camada 2 — Tampa de calor (IHS) com nome e marca próprios |
+| Pasta térmica e micro-gap (corte) | Diagrama de corte da camada 1: pasta, micro-gap e fio-gap, com nomes próprios |
+| Chiplet de computação empilhado | Camada 3 — Chiplet de computação, com cidade microscópica sobre o silício |
+| Blocos de lógica AND/OR/NAND | Ferramentas de lógica (portas como itens e ferramentas do personagem) |
+| Interposer translúcido com TSVs | Camada 9 — Interposer com vias verticais |
+| Substrato multicamadas com PDN | Camada 10 — Substrato com planos de energia e de terra |
+| Matriz micro-BGA e LGA | Matriz de contato da base do processador (esferas e pontos de contato) |
+| Mapa de ilhas com mini-mapa | Visão de mundo: as camadas como ilhas de um mapa jogável |
+| Zepelins e moinhos de vento | Ativos de cenário decorativos, desenhados como objetos originais |
+| Figuras humanas e entulho | Personagens e obstáculos do ambiente da cidade microscópica |
+
+**Próximos passos sugeridos (depois de você escolher prioridades):**
+1. Cidade microscópica sobre o chiplet, como zona de exploração a partir da camada 3.
+2. Ferramentas do personagem para melhorar o processador (reparo de cache, reforço de núcleo, ajuste de energia), com ícones e modelos próprios.
+3. Camadas 1 e 2 como zonas de entrada: dissipador e tampa de calor.
+4. Modelos 3D próprios para ativos de cenário (zepelins, moinhos, entulho), com a mesma paleta da zona.
