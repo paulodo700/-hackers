@@ -223,15 +223,25 @@ Os testes de ponta a ponta cobrem: título e slots, migração do save antigo, s
 |---|---|---|
 | Plataforma | navegador, celular e PC | janela de PC |
 | Renderização | Three.js | Panda3D, malha única por zona |
-| Reparo (puzzle de cruzamentos) | sim | ainda não; reparo é instantâneo no Python |
-| Batalhas por turno | sim | ainda não no Python (há só a luta em tempo real) |
-| Loja | sim | ainda não no Python |
-| Áudio | síntese procedural | ainda não no Python (sem som) |
+| Reparo (puzzle de cruzamentos) | sim | sim, por teclado (setas, Enter, H, P); sem clique com mouse ainda |
+| Batalhas por turno | sim | sim, contra os chefes (com E); os inimigos errantes continuam em tempo real |
+| Loja e bancada | sim | sim (comprar, vender e criar com RECIPES) |
+| Áudio | síntese procedural | efeitos originais sintetizados em Python, com volume dos ajustes |
 | Saves | localStorage por slot | arquivos JSON em `~/.anelzero/saves` |
 
-**Estado do cliente Python:** título, cena de abertura com o Vigia, exploração 3D com colisão, coleta de itens, portais entre zonas, NPCs com diálogo digitado e escolhas numeradas, baús, reparo, combate em tempo real (F), inimigos com barra de vida e partículas, menus (status, inventário com usar/equipar/vender, habilidades, missões e viagem rápida), minimapa com névoa, e salvamento em três slots. Os testes headless rodam o cliente sob `xvfb-run` e cobrem título, coleta, portal, salvamento, diálogo, combate, menu e minimapa.
+**Estado do cliente Python:** título com opção de ajustes, cena de abertura com o Vigia em primeiro plano (faixas de cinema e transição por escurecimento), exploração 3D com colisão e sombra projetada, coleta de itens, portais entre zonas, NPCs com diálogo digitado e escolhas numeradas, baús, reparo (puzzle de cruzamentos e fusíveis, com cronômetro, pausa, modo difícil e recorde por zona), batalha por turnos contra os chefes (intenções, fase 2, defesa, itens, habilidades, recompensas e dificuldade), combate em tempo real contra os inimigos errantes (F), loja do lojista e bancada de criação, menus (status, inventário com usar/equipar/vender, habilidades, missões e viagem rápida), minimapa com névoa, ajustes salvos em `~/.anelzero` (volumes, legendas, tamanho do texto, dificuldade, sombras e movimento reduzido) e salvamento em três slots.
 
-**Limites conhecidos do cliente Python:** sombras são manchas de contato (não sombra projetada em tempo real); o céu em gradiente existe mas só aparece quando a câmera olha para cima; o áudio ainda não existe.
+**Desempenho medido (sombra projetada):** com `tools/bench_shadows.py`, a mediana por quadro foi de 6,0 ms sem sombra e 12,1 ms com sombra, na renderização por software deste ambiente (Xvfb, CPU). Esse é o pior caso: em placa de vídeo o custo tende a ser bem menor. Por isso a sombra é uma opção nos ajustes e fica ligada por padrão.
+
+**Regressão visual:** `tests/test_visual.py` captura seis telas (título, zona, batalha, reparo, loja e ajustes) em estado fixo e compara com `tests/visual/refs`. Limites: diferença média acima de 2,0 por canal, ou mais de 1,5% dos pixels amostrados com mudança clara. As referências foram geradas neste ambiente; se a renderização mudar em outra máquina, regere-as com `ANELZERO_UPDATE_REFS=1`.
+
+**Limites conhecidos do cliente Python:**
+- O áudio é sintetizado, mas não foi ouvido: este ambiente não tem dispositivo de som, então a reprodução não foi verificada.
+- O tamanho do texto é aplicado ao iniciar o jogo (não ao vivo).
+- O céu em gradiente aparece no topo da tela, com contraste baixo, porque a câmera olha de cima.
+- Não há sprites nem arte 2D próprios: todos os personagens e objetos são malhas 3D simples, geradas em código. Falta um sistema de assets 2D e de ícones.
+- Os inimigos errantes ainda não iniciam batalha por turnos; só os chefes.
+- Sem reparo por clique com mouse; o reparo é por teclado.
 
 ## Estado atual
 
@@ -264,4 +274,4 @@ Os testes de ponta a ponta cobrem: título e slots, migração do save antigo, s
 - **Dificuldade das batalhas não calibrada com jogadores.** Fácil, normal e difícil mudam o dano dos inimigos (×0,75, ×1, ×1,25) e a chance de drop (×1,25, ×1, ×0,8), mas os valores não foram testados com pessoas. O simulador só mede o modo normal.
 - **Vibração** depende do navegador; no PC não tem efeito.
 - **Dependência de ambiente.** O Playwright está declarado em `devDependencies` na versão 1.63.0, mas o Chromium precisa ser instalado com `npm run install:browser` em outra máquina. No ambiente de desenvolvimento deste projeto, ele já estava disponível.
-- **Cliente Python incompleto.** Faltam as batalhas por turno, a loja, o reparo com puzzle, o áudio e as cenas de história além da abertura. Cada uma está descrita em Plataformas.
+- **Cliente Python incompleto.** Faltam a arte 2D (sprites e ícones), a verificação do áudio em aparelho com som, as cenas de história além da abertura e a batalha por turnos para os inimigos errantes. Cada uma está descrita em Plataformas.

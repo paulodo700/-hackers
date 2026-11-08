@@ -1,13 +1,18 @@
-"""Cliente 3D em Panda3D: título, abertura com o Vigia, exploração, diálogos, combate em tempo real e menus.
+"""Cliente 3D em Panda3D: título, abertura com o Vigia, exploração, diálogos, batalha por turnos,
+combate em tempo real, reparo, loja, bancada, menus e ajustes.
 
-Controles no jogo:  WASD ou setas mover | E falar, abrir baú ou reparar | F atacar | Tab menu | F5 salvar | Esc salvar e sair
+Controles no jogo:  WASD ou setas mover | E falar, abrir baú, reparar, enfrentar chefe ou usar bancada/loja
+                    F atacar (tempo real) | Tab menu | O ajustes | F5 salvar | Esc salvar e sair
 Diálogos: E avança (a primeira vez completa o texto); 1 a 3 escolhem quando houver escolhas.
-Menus: Tab ou setas esquerda/direita trocam de aba, setas escolhem, Enter usa/equipa/gasta ponto/viaja, V vende, Esc fecha.
+Batalha: setas ou 1 a 9 escolhem, Enter confirma. Reparo: setas movem, Enter gira, H difícil, P pausa, Esc cancela.
+Loja: setas, Enter compra/vende/cria, Tab troca modo, Esc fecha. Menus: Tab troca aba, V vende, Esc fecha.
+Ajustes: setas escolhem e mudam, Enter alterna, Esc salva e volta.
 
 --shot ARQUIVO: pula o título, renderiza alguns quadros, salva uma captura e encerra (verificação).
 """
 
 import math
+import random
 
 from panda3d.core import loadPrcFileData
 
@@ -23,11 +28,18 @@ from panda3d.core import (  # noqa: E402
     AmbientLight, ClockObject, DirectionalLight, Point2, Point3, TextNode, TransparencyAttrib,
 )
 
+from . import audio as A  # noqa: E402
+from . import battle as B  # noqa: E402
+from . import combat as K  # noqa: E402
 from . import content as C  # noqa: E402
 from . import dialog as D  # noqa: E402
 from . import menu as M  # noqa: E402
+from . import panels as P  # noqa: E402
+from . import repair as R  # noqa: E402
 from . import rt  # noqa: E402
 from . import scene as SC  # noqa: E402
+from . import settings as T  # noqa: E402
+from . import shop as SH  # noqa: E402
 from . import state as S  # noqa: E402
 from . import world as W  # noqa: E402
 
@@ -35,9 +47,31 @@ SPEED = 4.2
 INTERACT_RANGE = 1.3
 PICKUP_RANGE = 0.7
 ROAMER_RESPAWN_S = 30.0
+STEP_DISTANCE = 0.9
+FADE_TIME = 0.8
+REPAIR_TIME_LIMIT = 120
 MOVE_KEYS = {"w": "w", "arrow_up": "w", "s": "s", "arrow_down": "s",
              "a": "a", "arrow_left": "a", "d": "d", "arrow_right": "d"}
 CHOICE_KEYS = {"1": 1, "2": 2, "3": 3}
+# Legendas sonoras: texto curto mostrado quando o efeito toca (só com a opção Legendas ligada)
+SOUND_CAPTIONS = {"golpe": "[golpe]", "pesado": "[golpe pesado]", "dano": "[dano]", "coleta": "[item]",
+                  "reparo": "[reparo]", "cura": "[cura]", "vitoria": "[vitória]", "derrota": "[derrota]"}
+DIGIT_KEYS = {str(i): i for i in range(1, 10)}
+CONFIRM_KEYS = ("enter", "space", "e")
+BOSS_HALF_SIZE = 0.5
+
+
+def _cmd_sound(cmd):
+    """Efeito sonoro de um comando de batalha."""
+    if cmd == "atacar":
+        return "golpe"
+    if cmd.startswith("skill:"):
+        sid = cmd.split(":", 1)[1]
+        skill = next((s for s in C.SKILLS if s["id"] == sid), {})
+        return "pesado" if skill.get("mult", 1) >= 2 else "golpe"
+    if cmd.startswith("item:"):
+        return "cura"
+    return "ui"
 
 
 class Game(ShowBase):
@@ -45,6 +79,9 @@ class Game(ShowBase):
         super().__init__()
         self.disableMouse()
         self.camLens.setFov(68)
+        self.settings = T.Settings().load()
+        self.tm = self.settings.get("text_scale")
+        self.sfx = A.SoundBank(self.loader, self.settings)
         self.slots = S.SaveSlots()
         self.slot = slot
         self.shot = shot
@@ -60,6 +97,16 @@ class Game(ShowBase):
         self.dialog = None
         self.dialog_after = None
         self.menu = None
+        self.battle = None
+        self.battle_cursor = 0
+        self.battle_target = None
+        self.repair = None
+        self.repair_target = None
+        self.shop = None
+        self.shop_target = None
+        self.settings_cursor = 0
+        self.settings_return = "title"
+        self.fade = None
         self.pickups = {}
         self.interactables = []
         self.roamer_nodes = {}
@@ -69,11 +116,15 @@ class Game(ShowBase):
         self.facing = 0.0
         self.hurt_flash = 0.0
         self.respawn_timer = 0.0
+        self.step_dist = 0.0
         self.last_cell = None
         self.time = 0.0
+        self.hud_on = None
         self.px, self.py = 0.0, 0.0
         self._build_scene_base()
         self._build_hud()
+        self._build_screens()
+        self._apply_shadows()
         self._bind_keys()
         self.taskMgr.add(self._task, "update")
 
@@ -87,13 +138,13 @@ class Game(ShowBase):
     def _build_scene_base(self):
         self.setBackgroundColor(0.03, 0.04, 0.06, 1)
         amb = AmbientLight("amb")
-        amb.setColor((0.45, 0.5, 0.55, 1))
+        amb.setColor((0.42, 0.47, 0.52, 1))
         self.render.setLight(self.render.attachNewNode(amb))
-        sun = DirectionalLight("sun")
-        sun.setColor((0.9, 0.95, 1, 1))
-        sun_np = self.render.attachNewNode(sun)
-        sun_np.setHpr(25, -55, 0)
-        self.render.setLight(sun_np)
+        self.sun = DirectionalLight("sun")
+        self.sun.setColor((0.95, 0.97, 1, 1))
+        self.sun_np = self.render.attachNewNode(self.sun)
+        self.sun_np.setHpr(25, -55, 0)
+        self.render.setLight(self.sun_np)
         self.sky = None
         self._set_sky("#0b0f14", "#122410")
 
@@ -111,22 +162,40 @@ class Game(ShowBase):
         self.vigia.hide()
         self.hub_angle = 0.0
 
+    def _apply_shadows(self):
+        """Sombra projetada da luz direcional (um único mapa de sombra). Desligada nos ajustes ou sem suporte."""
+        if self.settings.get("shadows"):
+            self.sun.setShadowCaster(True, 1024, 1024)
+            lens = self.sun.getLens()
+            lens.setFilmSize(34, 34)
+            lens.setNearFar(1, 60)
+            self.render.setShaderAuto()
+        else:
+            self.sun.setShadowCaster(False)
+            self.render.setShaderOff()
+
     def _set_sky(self, top, bottom):
         if self.sky is not None:
             self.sky.removeNode()
         self.sky = SC.sky_backdrop(top, bottom)
         self.sky.reparentTo(self.camera)
 
+    def _ot(self, text, x, y, scale, align=TextNode.ALeft, color=(1, 1, 1, 1), wordwrap=None, parent=None):
+        """Texto de tela no tamanho escolhido nos ajustes."""
+        kw = {"text": text, "pos": (x, y), "scale": scale * self.tm, "align": align, "fg": color,
+              "shadow": (0, 0, 0, 1), "mayChange": True}
+        if wordwrap:
+            kw["wordwrap"] = wordwrap
+        if parent is not None:
+            kw["parent"] = parent
+        return OnscreenText(**kw)
+
     def _build_hud(self):
         ar = self.getAspectRatio()
-        self.hud = OnscreenText(text="", pos=(-ar + 0.05, 0.9), scale=0.045, align=TextNode.ALeft,
-                                fg=(0.9, 1, 0.9, 1), shadow=(0, 0, 0, 1), mayChange=True)
-        self.msg = OnscreenText(text="", pos=(0, 0.72), scale=0.06, align=TextNode.ACenter,
-                                fg=(1, 0.95, 0.6, 1), shadow=(0, 0, 0, 1), mayChange=True)
-        self.prompt = OnscreenText(text="", pos=(0, -0.62), scale=0.05, align=TextNode.ACenter,
-                                   fg=(0.7, 1, 1, 1), shadow=(0, 0, 0, 1), mayChange=True)
-        self.floor_hint = OnscreenText(text="", pos=(-ar + 0.05, -0.93), scale=0.035, align=TextNode.ALeft,
-                                       fg=(0.7, 0.8, 0.75, 1), shadow=(0, 0, 0, 1), mayChange=True)
+        self.hud = self._ot("", -ar + 0.05, 0.9, 0.045, color=(0.9, 1, 0.9, 1))
+        self.msg = self._ot("", 0, 0.72, 0.06, align=TextNode.ACenter, color=(1, 0.95, 0.6, 1))
+        self.prompt = self._ot("", 0, -0.62, 0.05, align=TextNode.ACenter, color=(0.7, 1, 1, 1))
+        self.floor_hint = self._ot("", -ar + 0.05, -0.93, 0.035, color=(0.7, 0.8, 0.75, 1))
         self.minimap_img = OnscreenImage(image=SC.minimap_image([" " * 25] * 25),
                                          pos=(ar - 0.3, 0, 0.45), scale=0.26)
         self.minimap_img.setTransparency(TransparencyAttrib.MAlpha)
@@ -134,29 +203,42 @@ class Game(ShowBase):
         self.flash = SC.fullscreen_card((0.9, 0.1, 0.1), 0.0)
         self.flash.reparentTo(self.render2d)
         self.flash.hide()
-        # Painel de diálogo e de menu (fundo escuro translúcido)
+        # Faixas de cinema (abertura) e cortina preta (transições)
+        self.letter_top = SC.fullscreen_card((0, 0, 0), 1.0)
+        self.letter_top.reparentTo(self.render2d)
+        self.letter_top.setPos(0, 0, 0.84)
+        self.letter_top.setScale(ar, 1, 0.16)
+        self.letter_top.hide()
+        self.fade_card = SC.fullscreen_card((0, 0, 0), 0.0)
+        self.fade_card.reparentTo(self.render2d)
+        self.fade_card.setBin("fixed", 100)
+        self.fade_card.hide()
+        # Painel de diálogo (faixa inferior) e de menu (coluna da esquerda)
         self.panel = SC.fullscreen_card((0.02, 0.04, 0.05), 0.82)
         self.panel.reparentTo(self.render2d)
         self.panel.hide()
-        self.dlg_speaker = OnscreenText(text="", pos=(-ar + 0.12, -0.42), scale=0.05, align=TextNode.ALeft,
-                                        fg=(1, 0.9, 0.5, 1), shadow=(0, 0, 0, 1), mayChange=True)
-        self.dlg_text = OnscreenText(text="", pos=(-ar + 0.12, -0.52), scale=0.05, align=TextNode.ALeft,
-                                     fg=(1, 1, 1, 1), shadow=(0, 0, 0, 1), mayChange=True, wordwrap=38)
+        self.dlg_speaker = self._ot("", -ar + 0.12, -0.42, 0.05, color=(1, 0.9, 0.5, 1))
+        self.dlg_text = self._ot("", -ar + 0.12, -0.52, 0.05, color=(1, 1, 1, 1), wordwrap=38)
         self.dlg_speaker.hide()
         self.dlg_text.hide()
-        self.menu_text = OnscreenText(text="", pos=(-ar + 0.12, 0.8), scale=0.045, align=TextNode.ALeft,
-                                      fg=(0.95, 1, 0.95, 1), shadow=(0, 0, 0, 1), mayChange=True)
+        self.menu_text = self._ot("", -ar + 0.12, 0.8, 0.045, color=(0.95, 1, 0.95, 1))
         self.menu_text.hide()
-        self.title_big = OnscreenText(text="ANEL ZERO", pos=(-ar + 0.12, 0.45), scale=0.2, align=TextNode.ALeft,
-                                      fg=(0.6, 1, 0.95, 1), shadow=(0, 0.3, 0.3, 1), mayChange=True)
-        self.title_sub = OnscreenText(text="Dentro do Processador", pos=(-ar + 0.14, 0.25), scale=0.07,
-                                      align=TextNode.ALeft, fg=(0.8, 0.9, 0.9, 1), mayChange=True)
-        self.title_menu = OnscreenText(text="", pos=(-ar + 0.14, -0.2), scale=0.07, align=TextNode.ALeft,
-                                       fg=(1, 1, 1, 1), shadow=(0, 0, 0, 1), mayChange=True)
-        self.title_hint = OnscreenText(text="Setas escolhem | Enter confirma", pos=(-ar + 0.14, -0.85), scale=0.04,
-                                       align=TextNode.ALeft, fg=(0.6, 0.7, 0.7, 1), mayChange=True)
+        self.title_big = self._ot("ANEL ZERO", -ar + 0.12, 0.45, 0.2, color=(0.6, 1, 0.95, 1))
+        self.title_sub = self._ot("Dentro do Processador", -ar + 0.14, 0.25, 0.07, color=(0.8, 0.9, 0.9, 1))
+        self.title_menu = self._ot("", -ar + 0.14, -0.2, 0.07, color=(1, 1, 1, 1))
+        self.title_hint = self._ot("Setas escolhem | Enter confirma", -ar + 0.14, -0.85, 0.04,
+                                   color=(0.6, 0.7, 0.7, 1))
         self._show_title(True)
         self._refresh_title()
+
+    def _build_screens(self):
+        ar = self.getAspectRatio()
+        self.battle_screen = P.BattleScreen(self.render2d, ar, self.tm)
+        self.repair_screen = P.RepairScreen(self.render2d, ar, self.tm)
+        self.shop_screen = P.ShopScreen(self.render2d, ar, self.tm)
+        self.settings_screen = P.SettingsScreen(self.render2d, ar, self.tm)
+        for screen in (self.battle_screen, self.repair_screen, self.shop_screen, self.settings_screen):
+            screen.hide()
 
     def _show_title(self, on):
         for node in (self.title_big, self.title_sub, self.title_menu, self.title_hint):
@@ -171,7 +253,8 @@ class Game(ShowBase):
 
     def _bind_keys(self):
         names = ["w", "a", "s", "d", "arrow_up", "arrow_down", "arrow_left", "arrow_right",
-                 "e", "f", "v", "tab", "escape", "enter", "space", "f5", "1", "2", "3"]
+                 "e", "f", "v", "tab", "escape", "enter", "space", "f5", "o", "h", "p"]
+        names += list(DIGIT_KEYS)
         for name in names:
             self.accept(name, self.key_event, [name, True])
             self.accept(name + "-up", self.key_event, [name, False])
@@ -180,36 +263,46 @@ class Game(ShowBase):
     def key_event(self, name, down):
         if name in MOVE_KEYS:
             self.keys[MOVE_KEYS[name]] = down
-        if not down:
+        if not down or self.fade is not None:
             return
-        if self.mode == "title":
-            self._title_key(name)
-        elif self.mode in ("intro", "dialog"):
-            self._dialog_key(name)
-        elif self.mode == "menu":
-            self._menu_key(name)
-        elif self.mode == "play":
-            self._play_key(name)
+        handler = {
+            "title": self._title_key,
+            "intro": self._dialog_key,
+            "dialog": self._dialog_key,
+            "menu": self._menu_key,
+            "play": self._play_key,
+            "battle": self._battle_key,
+            "repair": self._repair_key,
+            "shop": self._shop_key,
+            "settings": self._settings_key,
+        }.get(self.mode)
+        if handler is not None:
+            handler(name)
 
     def title_options(self):
         opts = ["Novo jogo"]
         if self.slots.info(self.slot):
             opts.append("Continuar")
-        opts.append("Sair")
+        opts += ["Ajustes", "Sair"]
         return opts
 
     def _title_key(self, name):
         options = self.title_options()
         if name in ("arrow_up", "w"):
             self.title_index = (self.title_index - 1) % len(options)
+            self.sound("ui")
         elif name in ("arrow_down", "s"):
             self.title_index = (self.title_index + 1) % len(options)
-        elif name in ("enter", "space", "e"):
+            self.sound("ui")
+        elif name in CONFIRM_KEYS:
             choice = options[self.title_index]
             if choice == "Novo jogo":
                 self.start_intro()
             elif choice == "Continuar":
                 self.start_play(self.slots.load(self.slot) or S.new_state())
+            elif choice == "Ajustes":
+                self.open_settings("title")
+                return
             elif choice == "Sair":
                 self.userExit()
         elif name == "escape":
@@ -223,7 +316,7 @@ class Game(ShowBase):
                                           for i, o in enumerate(opts)))
 
     def _dialog_key(self, name):
-        if name in ("e", "enter", "space"):
+        if name in CONFIRM_KEYS:
             self.dialog.advance()
             if self.dialog.closed:
                 self._end_dialog()
@@ -245,6 +338,7 @@ class Game(ShowBase):
             self.menu.move(1)
         elif name == "enter":
             msg = self.menu.activate()
+            self.sound("coleta" if msg and not msg.startswith("VIAGEM") else "ui")
             if msg.startswith("VIAGEM:"):
                 self.fast_travel(msg.split(":", 1)[1])
                 return
@@ -259,10 +353,159 @@ class Game(ShowBase):
             self.do_attack()
         elif name == "tab":
             self.open_menu()
+        elif name == "o":
+            self.open_settings("play")
         elif name == "f5":
             self.do_save()
         elif name == "escape":
             self.quit_game()
+
+    def _battle_key(self, name):
+        b = self.battle
+        if b is None:
+            return
+        cmds = b.commands()
+        if b.over:
+            if name in CONFIRM_KEYS:
+                self._end_battle()
+            return
+        if name in ("arrow_up", "w"):
+            self.battle_cursor = (self.battle_cursor - 1) % max(1, len(cmds))
+            self.sound("ui")
+        elif name in ("arrow_down", "s"):
+            self.battle_cursor = (self.battle_cursor + 1) % max(1, len(cmds))
+            self.sound("ui")
+        elif name in CONFIRM_KEYS:
+            self._battle_run(self.battle_cursor)
+        elif name in DIGIT_KEYS:
+            idx = DIGIT_KEYS[name] - 1
+            if idx < len(cmds):
+                self.battle_cursor = idx
+                self._battle_run(idx)
+        self._refresh_battle()
+
+    def _battle_run(self, idx):
+        b = self.battle
+        cmds = b.commands()
+        if not cmds or idx >= len(cmds):
+            return
+        cmd = cmds[idx]
+        hp_before = self.state.hp
+        menu_before = b.menu
+        if not b.act(cmd):
+            self.say("Não é possível agora.", 1.4)
+            return
+        self.sound(_cmd_sound(cmd))
+        if self.state.hp < hp_before:
+            self.sound("dano")
+        if b.menu != menu_before:
+            self.battle_cursor = 0
+        elif self.battle_cursor >= len(b.commands()):
+            self.battle_cursor = max(0, len(b.commands()) - 1)
+        if b.over:
+            self.sound("vitoria" if b.result == "win" else "derrota")
+            self.battle_cursor = 0
+
+    def _repair_key(self, name):
+        g = self.repair
+        if g is None:
+            return
+        if name in ("arrow_up", "w"):
+            g.move_cursor(0, -1)
+        elif name in ("arrow_down", "s"):
+            g.move_cursor(0, 1)
+        elif name in ("arrow_left", "a"):
+            g.move_cursor(-1, 0)
+        elif name in ("arrow_right", "d"):
+            g.move_cursor(1, 0)
+        elif name in CONFIRM_KEYS:
+            res = g.rotate_cursor()
+            if res == R.ROTATE:
+                self.sound("ui")
+            elif res is not None:
+                self.sound("dano")
+        elif name == "h":
+            g.toggle_hard()
+        elif name == "p":
+            g.toggle_pause()
+        elif name == "escape":
+            self._end_repair(cancelled=True)
+            return
+        if g.done:
+            self._end_repair(cancelled=False)
+            return
+        self._refresh_repair()
+
+    def _shop_key(self, name):
+        sh = self.shop
+        if sh is None:
+            return
+        if name == "escape":
+            self.close_shop()
+            return
+        if name in ("arrow_up", "w"):
+            sh.move(-1)
+        elif name in ("arrow_down", "s"):
+            sh.move(1)
+        elif name in CONFIRM_KEYS:
+            msg = sh.activate()
+            self.sound("coleta" if "Comprou" in msg or "Criou" in msg or "Vendeu" in msg else "ui")
+        elif name == "tab":
+            sh.switch_mode()
+        self._refresh_shop()
+
+    def _settings_key(self, name):
+        rows = P.SETTINGS_ROWS
+        key = rows[self.settings_cursor]
+        if name == "escape":
+            self.close_settings()
+            return
+        if name in ("arrow_up", "w"):
+            self.settings_cursor = (self.settings_cursor - 1) % len(rows)
+        elif name in ("arrow_down", "s"):
+            self.settings_cursor = (self.settings_cursor + 1) % len(rows)
+        elif name in ("arrow_left", "a"):
+            self._adjust_setting(key, -1)
+        elif name in ("arrow_right", "d") or name in CONFIRM_KEYS:
+            self._adjust_setting(key, 1)
+        self._refresh_settings()
+
+    def _adjust_setting(self, key, step):
+        st = self.settings
+        if key in ("master", "music", "sfx"):
+            st.set(key, round(st.get(key) + 0.1 * step, 2))
+            self.sound("ui")
+        elif key in ("captions", "shadows", "reduced_motion"):
+            st.set(key, not st.get(key))
+            if key == "shadows":
+                self._apply_shadows()
+        elif key == "text_scale":
+            opts = T.TEXT_SCALES
+            cur = opts.index(st.get("text_scale"))
+            st.set("text_scale", opts[(cur + step) % len(opts)])
+        elif key == "difficulty":
+            order = K.DIFFICULTY_ORDER
+            cur = order.index(st.get("difficulty"))
+            st.set("difficulty", order[(cur + step) % len(order)])
+
+    def open_settings(self, return_to):
+        self.settings_return = return_to
+        self.settings_cursor = 0
+        self.mode = "settings"
+        if return_to == "title":
+            self._show_title(False)
+        self.settings_screen.show()
+        self._refresh_settings()
+
+    def close_settings(self):
+        self.settings.save()
+        self.settings_screen.hide()
+        if self.settings_return == "title":
+            self.mode = "title"
+            self._show_title(True)
+            self._refresh_title()
+        else:
+            self.mode = "play"
 
     # ---- Modos ----
     def start_intro(self):
@@ -272,13 +515,44 @@ class Game(ShowBase):
         self.vigia.show()
         self.player.hide()
         self.player_shadow.hide()
+        self.letter_top.show()
         self.open_dialog(C.INTRO_TEXT, title="Abertura", color="#7dfff0",
-                         after=lambda _value=None: self.start_play(self.state, None))
+                         after=lambda _value=None: self.begin_transition(
+                             lambda: self.start_play(self.state, None)))
+
+    def begin_transition(self, then):
+        """Escurece a tela, executa 'then' (troca de zona ou de modo) e clareia.
+        Não reinicia uma transição em andamento (senão o portal sob o jogador a manteria para sempre)."""
+        if self.fade is not None:
+            return
+        self.fade = {"t": 0.0, "phase": "out", "then": then}
+        self.fade_card.setColor(0, 0, 0, 0)
+        self.fade_card.show()
+
+    def _update_fade(self, dt):
+        f = self.fade
+        if f is None:
+            return
+        f["t"] += dt
+        if f["phase"] == "out":
+            alpha = min(1.0, f["t"] / FADE_TIME)
+            self.fade_card.setColor(0, 0, 0, alpha)
+            if f["t"] >= FADE_TIME:
+                f["then"]()
+                f["phase"] = "in"
+                f["t"] = 0.0
+        else:
+            alpha = max(0.0, 1.0 - f["t"] / FADE_TIME)
+            self.fade_card.setColor(0, 0, 0, alpha)
+            if f["t"] >= FADE_TIME:
+                self.fade = None
+                self.fade_card.hide()
 
     def start_play(self, state, pos=None):
         self.state = state
         self.mode = "play"
         self._show_title(False)
+        self.letter_top.hide()
         self.player.show()
         self.player_shadow.show()
         self.minimap_img.show()
@@ -350,8 +624,110 @@ class Game(ShowBase):
         if zid == self.zone.id:
             self.say("Você já está aqui.")
             return
-        self.load_zone(zid, None)
+        self.begin_transition(lambda: self.load_zone(zid, None))
         self.say(f"Viagem para {C.ZONES[zid].get('name', zid)}.", 2.5)
+
+    # ---- Batalha por turnos ----
+    def start_battle(self, boss_entity):
+        enemy = boss_entity["m"]["id"]
+        self.battle_target = boss_entity
+        self.battle = B.Battle(self.state, enemy, rng=random.Random(self.time_seed()),
+                               difficulty=self.settings.get("difficulty"))
+        self.battle.state.discover_enemy(enemy)
+        self.battle_cursor = 0
+        self.mode = "battle"
+        self.panel.hide()
+        self.battle_screen.show()
+        self._refresh_battle()
+
+    def time_seed(self):
+        return int(self.time * 1000) + self.state.level * 7919
+
+    def _refresh_battle(self):
+        if self.battle is None:
+            return
+        self.battle_screen.render(self.battle, self.battle_cursor,
+                                  P.DIFF_LABEL.get(self.settings.get("difficulty"), "Normal"))
+
+    def _end_battle(self):
+        b = self.battle
+        target = self.battle_target
+        result = b.result
+        self.battle = None
+        self.battle_screen.hide()
+        self.mode = "play"
+        if result == "win" and target is not None:
+            target["node"].hide()
+            target["defeated"] = True
+            self.say(f"{b.name} foi derrotado!", 3.0)
+        elif result == "lose":
+            self.state.hp = max(1, self.state.max_hp() // 2)
+            sx, sz = self.zone.spawn()
+            self.px, self.py = float(sx), float(sz)
+            self.say("Você caiu. Voltou ao início da zona.", 3.0)
+        self._announce(self.state.check_quests())
+
+    # ---- Reparo ----
+    def start_repair(self, target):
+        seed = self.time_seed()
+        self.repair_target = target
+        self.repair = R.RepairGame(size=4, fuses=1, time_limit=REPAIR_TIME_LIMIT, hard=False,
+                                   rng=random.Random(seed).random, zone_key=self.zone.id)
+        self.mode = "repair"
+        self.panel.hide()
+        self.repair_screen.show()
+        self._refresh_repair()
+
+    def _refresh_repair(self):
+        g = self.repair
+        if g is None:
+            return
+        best = self.state.repairBest.get(g.record_key())
+        self.repair_screen.render(g, "Reparo de Trilha" + (" (difícil)" if g.hard else ""),
+                                  str(best) if best else "sem recorde")
+
+    def _end_repair(self, cancelled):
+        g = self.repair
+        target = self.repair_target
+        self.repair = None
+        self.repair_target = None
+        self.repair_screen.hide()
+        self.mode = "play"
+        if cancelled or g is None:
+            self.say("Reparo cancelado.", 1.5)
+            return
+        if g.success:
+            new_record = self.state.record_repair_score(g.record_key(), g.score_now())
+            self.state.set_flag(f"rep_{target['m'].get('id')}")
+            self.state.bump(f"repair_{self.zone.id}", 1)
+            target["done"] = True
+            target["node"].setColor(0.4, 0.5, 0.4, 1)
+            self.sound("reparo")
+            self.say("Trilha reparada!" + (" Novo recorde!" if new_record else ""), 3.0)
+            self._announce(self.state.check_quests())
+        elif g.timed_out:
+            self.sound("derrota")
+            self.say("Tempo esgotado. Tente de novo.", 2.5)
+
+    # ---- Loja e bancada ----
+    def open_shop(self, bench=False, target=None):
+        self.shop = SH.Shop(self.state, "criar" if bench else "comprar", bench=bench)
+        self.shop_target = target
+        self.mode = "shop"
+        self.panel.hide()
+        self.shop_screen.show()
+        self._refresh_shop()
+
+    def close_shop(self):
+        self.shop = None
+        self.mode = "play"
+        self.shop_screen.hide()
+
+    def _refresh_shop(self):
+        if self.shop is None:
+            return
+        title = "Bancada de criação" if self.shop.modes == ["criar"] else "Lojista"
+        self.shop_screen.render(self.shop, title)
 
     # ---- Zonas ----
     def load_zone(self, zid, pos=None):
@@ -409,6 +785,25 @@ class Game(ShowBase):
                     self._place(node, c, r)
                     self.interactables.append({"kind": "repair", "c": c, "r": r, "m": m, "node": node,
                                                "done": done})
+                elif kind == "boss" and m.get("id") in C.ENEMIES:
+                    defeated = self.state.has_flag(f"boss_{m['id']}")
+                    e = C.ENEMIES[m["id"]]
+                    body, _dark = SC.roamer_mesh(e["color"], e.get("scale", 1.0) * 1.3)
+                    node = self.zone_root.attachNewNode("boss")
+                    body.reparentTo(node)
+                    SC.blob_shadow(node, 0.5)
+                    node.setPos(c, r, 0)
+                    if defeated:
+                        node.hide()
+                    self.interactables.append({"kind": "boss", "c": c, "r": r, "m": m, "node": node,
+                                               "defeated": defeated})
+                elif kind == "bench":
+                    mesh = SC.Mesh()
+                    mesh.box(-.4, -.25, 0, .4, .25, .45, (0.25, 0.3, 0.32, 1))
+                    mesh.box(-.3, -.2, .45, .3, .2, .5, (0.5, 0.95, 0.9, 1))
+                    node = mesh.node("bench")
+                    self._place(node, c, r)
+                    self.interactables.append({"kind": "bench", "c": c, "r": r, "m": m, "node": node})
         for rm in self.fight.roamers:
             self._add_roamer_node(rm)
 
@@ -426,6 +821,13 @@ class Game(ShowBase):
         self.roamer_nodes[id(rm)] = (root, bar)
 
     # ---- Ações ----
+    def sound(self, name):
+        """Toca um efeito. Com legendas ligadas, o som importante também aparece como texto curto."""
+        self.sfx.play(name)
+        caption = SOUND_CAPTIONS.get(name)
+        if caption and self.settings.get("captions"):
+            self.say(caption, 0.9)
+
     def say(self, text, seconds=2.2):
         self.msg.setText(text)
         self.msg_left = seconds
@@ -437,6 +839,8 @@ class Game(ShowBase):
     def nearest_interactable(self):
         best, best_d = None, INTERACT_RANGE
         for it in self.interactables:
+            if it.get("defeated"):
+                continue
             d = math.hypot(it["c"] - self.px, it["r"] - self.py)
             if d <= best_d:
                 best, best_d = it, d
@@ -449,40 +853,50 @@ class Game(ShowBase):
         if it is None:
             self.say("Nada por perto.", 1.5)
             return
-        if it["kind"] == "npc":
+        kind = it["kind"]
+        if kind == "npc":
             res = self.state.talk(it["m"]["id"])
             if res is None:
                 self.say(f"{C.NPCS[it['m']['id']]['name']} não tem nada a dizer agora.", 2.0)
-            else:
-                self.open_dialog(res["lines"], title=res["name"], color=res["color"])
+                return
+            after = None
+            if C.NPCS[it["m"]["id"]].get("shop"):
+                after = lambda _v=None, t=it: self.open_shop(bench=False, target=t)  # noqa: E731
+            self.open_dialog(res["lines"], title=res["name"], color=res["color"], after=after)
+            if after is None:
                 self._announce(self.state.check_quests())
-        elif it["kind"] == "chest":
+        elif kind == "chest":
             got = self.state.open_chest(it["m"]["id"], self.zone.id, it["c"], it["r"])
             if got is None:
                 self.say("O baú já foi aberto.", 1.5)
             else:
                 names = ", ".join(f"{C.ITEMS.get(i, {}).get('name', i)} x{n}" for i, n in got)
                 self.say(f"Baú aberto: {names}", 3.0)
+                self.sound("coleta")
                 it["node"].removeNode()
                 it["node"] = SC.chest_mesh("#ffd166", True)
                 self._place(it["node"], it["c"], it["r"])
                 it["opened"] = True
                 self._announce(self.state.check_quests())
-        elif it["kind"] == "repair":
+        elif kind == "repair":
             if it["done"]:
                 self.say("Esta trilha já está reparada.", 1.5)
             else:
-                self.state.set_flag(f"rep_{it['m'].get('id')}")
-                self.state.bump(f"repair_{self.zone.id}", 1)
-                it["done"] = True
-                self.say("Trilha reparada.", 2.0)
-                self._announce(self.state.check_quests())
+                self.start_repair(it)
+        elif kind == "boss":
+            e = C.ENEMIES[it["m"]["id"]]
+            lines = [{"s": e["name"], "t": e["lore"]}, {"s": "Bit", "t": "Preciso passar por você."}]
+            self.open_dialog(lines, title=e["name"], color="#ff9a6b",
+                             after=lambda _v=None, t=it: self.start_battle(t))
+        elif kind == "bench":
+            self.open_shop(bench=True, target=it)
 
     def do_attack(self):
         if self.mode != "play" or self.fight is None:
             return
         events = self.fight.swing(self.px, self.py, self.facing)
         if events:
+            self.sound("golpe")
             self._handle_fight_events(events)
 
     def _handle_fight_events(self, events):
@@ -495,24 +909,30 @@ class Game(ShowBase):
                 _, rm = ev
                 self._burst((rm.x, rm.z, 0.5), rm.color, 22)
                 self.say(f"{rm.name} derrotado!", 2.0)
+                self.sound("coleta")
                 self._announce(self.state.check_quests())
             elif ev[0] == "hurt":
                 _, rm, dmg = ev
                 self.hurt_flash = 0.35
+                self.sound("dano")
                 self._float(f"-{dmg}", (self.px, self.py, 1.4), (1, 0.3, 0.3, 1))
             elif ev[0] == "defeat":
                 self.state.hp = max(1, self.state.max_hp() // 2)
                 self.say("Você caiu. Voltou ao início da zona.", 3.0)
+                self.sound("derrota")
                 sx, sz = self.zone.spawn()
                 self.px, self.py = float(sx), float(sz)
                 self.fight.iframes = 2.0
 
     def _burst(self, pos, color, count):
+        if self.settings.get("reduced_motion"):
+            return
         self.particles += [[np, vel, life, life] for np, vel, life in SC.burst(self.render, pos, color, count)]
 
     def _float(self, text, pos, color):
-        t = OnscreenText(text=text, pos=(0, 0), scale=0.06, align=TextNode.ACenter, fg=color,
-                         shadow=(0, 0, 0, 1), mayChange=True)
+        if self.settings.get("reduced_motion"):
+            return
+        t = self._ot(text, 0, 0, 0.06, align=TextNode.ACenter, color=color)
         self.floaters.append([t, pos, 0.9])
 
     def _project(self, pos):
@@ -536,14 +956,17 @@ class Game(ShowBase):
         del self.pickups[cell]
         name = C.ITEMS.get(item, {}).get("name", item) if item else "item"
         self.say(f"+ {name}" if got else "Nada aqui.", 1.6)
+        self.sound("coleta")
         self._announce(self.state.check_quests())
 
     def _portal(self):
+        if self.fade is not None:
+            return
         cell = (round(self.px), round(self.py))
         for c, r, m in self.zone.portals():
             if (c, r) == cell and m.get("to") in C.ZONES:
                 dest = m["to"]
-                self.load_zone(dest, W.load(dest).arrival_from(self.zone.id))
+                self.begin_transition(lambda d=dest: self.load_zone(d, W.load(d).arrival_from(self.zone.id)))
                 return
 
     def do_save(self):
@@ -558,8 +981,23 @@ class Game(ShowBase):
         self.userExit()
 
     # ---- Quadro ----
+    def _sync_hud(self):
+        """O HUD do jogo só aparece em exploração, diálogo e menu (telas cheias o escondem)."""
+        on = self.mode in ("play", "dialog", "menu")
+        if on == self.hud_on:
+            return
+        self.hud_on = on
+        for node in (self.hud, self.msg, self.prompt, self.floor_hint):
+            node.show() if on else node.hide()
+        if on and self.state is not None and self.zone is not None:
+            self.minimap_img.show()
+        else:
+            self.minimap_img.hide()
+
     def step(self, dt):
         self.time += dt
+        self._update_fade(dt)
+        self._sync_hud()
         if self.mode == "title":
             self._update_hub(dt)
             return
@@ -570,15 +1008,34 @@ class Game(ShowBase):
             if self.mode == "intro":
                 self._update_hub(dt)
             return
-        if self.mode == "menu":
+        if self.mode in ("menu", "settings", "shop"):
+            return
+        if self.mode == "battle":
+            self._update_battle_fx(dt)
+            return
+        if self.mode == "repair":
+            self.repair.tick(dt)
+            if self.repair.done:
+                self._end_repair(cancelled=False)
+            else:
+                self._refresh_repair()
             return
         self._update_play(dt)
 
+    def _update_battle_fx(self, dt):
+        self.msg_left = max(0.0, self.msg_left - dt)
+
     def _update_hub(self, dt):
-        self.hub_angle += dt * 18
+        spin = 4 if self.settings.get("reduced_motion") else 18
+        self.hub_angle += dt * spin
         a = math.radians(self.hub_angle)
-        self.camera.setPos(math.cos(a) * 5.0, math.sin(a) * 5.0, 2.4)
-        self.camera.lookAt(0, 0, 1.0)
+        if self.mode == "intro":
+            # Vigia em primeiro plano, enquadrado de perto
+            self.camera.setPos(1.9 + math.cos(a * 0.2) * 0.3, -3.4, 1.9)
+            self.camera.lookAt(0, 0, 1.25)
+        else:
+            self.camera.setPos(math.cos(a) * 5.0, math.sin(a) * 5.0, 2.4)
+            self.camera.lookAt(0, 0, 1.0)
         self.vigia.setH(self.hub_angle * 0.5)
 
     def _refresh_dialog(self):
@@ -600,9 +1057,14 @@ class Game(ShowBase):
             step = SPEED * dt
             self.px, self.py = W.move(self.zone, self.px, self.py, dx / n * step, dy / n * step)
             self.facing = math.atan2(dx, dy)
+            self.step_dist += step
+            if self.step_dist >= STEP_DISTANCE:
+                self.step_dist = 0.0
+                self.sound("passo")
         self.player.setPos(self.px, self.py, 0)
         self.player.setH(math.degrees(math.atan2(-math.sin(self.facing), math.cos(self.facing))))
         self.player_shadow.setPos(self.px, self.py, 0)
+        self.sun_np.setPos(self.px, self.py, 16)
 
         cell = (round(self.px), round(self.py))
         if cell != self.last_cell:
@@ -628,8 +1090,8 @@ class Game(ShowBase):
 
         self._update_fx(dt)
         self._update_prompt()
-        self.camera.setPos(self.px, self.py - 6.0, 6.5)
-        self.camera.lookAt(self.px, self.py + 0.5, 0.6)
+        self.camera.setPos(self.px, self.py - 7.0, 3.6)
+        self.camera.lookAt(self.px, self.py + 2.2, 0.6)
         self._update_hud(dt)
 
     def _sync_roamers(self):
@@ -680,7 +1142,7 @@ class Game(ShowBase):
         self.floaters = keep
 
         self.hurt_flash = max(0.0, self.hurt_flash - dt)
-        if self.hurt_flash > 0:
+        if self.hurt_flash > 0 and not self.settings.get("reduced_motion"):
             self.flash.setColor(0.9, 0.1, 0.1, self.hurt_flash * 0.8)
             self.flash.show()
         else:
@@ -691,12 +1153,17 @@ class Game(ShowBase):
         if it is None:
             self.prompt.setText("")
             return
-        if it["kind"] == "npc":
+        kind = it["kind"]
+        if kind == "npc":
             label = f"Falar com {C.NPCS[it['m']['id']]['name']}"
-        elif it["kind"] == "chest":
+        elif kind == "chest":
             label = "Baú já aberto" if it.get("opened") else "Abrir baú"
-        else:
+        elif kind == "repair":
             label = "Trilha já reparada" if it["done"] else "Reparar trilha"
+        elif kind == "boss":
+            label = f"Enfrentar {C.ENEMIES[it['m']['id']]['name']}"
+        else:
+            label = "Usar bancada de criação"
         self.prompt.setText(f"[E] {label}")
 
     def _refresh_minimap(self):
@@ -708,11 +1175,14 @@ class Game(ShowBase):
         self.hud.setText(
             f"{self.zone.name}\n"
             f"Nível {st.level}   HP {st.hp}/{st.max_hp()}   EN {st.en}/{st.max_en()}   Ouro {st.gold}")
-        self.floor_hint.setText("WASD mover | F atacar | E interagir | Tab menu | F5 salvar | Esc sair")
+        self.floor_hint.setText("WASD mover | F atacar | E interagir | Tab menu | O ajustes | F5 salvar | Esc sair")
         if self.msg_left > 0:
             self.msg_left -= dt
             if self.msg_left <= 0:
                 self.msg.setText("")
+
+    def _refresh_settings(self):
+        self.settings_screen.render(self.settings, self.settings_cursor)
 
     def _task(self, task):
         dt = min(ClockObject.getGlobalClock().getDt(), 0.05)

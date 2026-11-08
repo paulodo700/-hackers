@@ -27,6 +27,10 @@ Os testes do cliente (`tests/test_client.py`) abrem o jogo sem tela e simulam te
 xvfb-run -a -s "-screen 0 1280x720x24" python3 -m unittest discover -s tests -v
 ```
 
+Regressão visual (compara capturas com `tests/visual/refs`; para atualizar após uma mudança intencional: `ANELZERO_UPDATE_REFS=1`).
+
+Medição de desempenho da sombra: `xvfb-run -a python3 tools/bench_shadows.py 120`.
+
 Capturas de tela para conferir o visual: `python -m anelzero --novo --shot tela.png` (tela de jogo, pulando o título).
 
 ## Estrutura

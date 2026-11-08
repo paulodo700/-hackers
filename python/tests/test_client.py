@@ -4,41 +4,32 @@ combate e menu. Precisa de um display: rode com  xvfb-run -a python3 -m unittest
 O Panda3D só aceita um ShowBase por processo, por isso há uma única instância para todos os testes.
 """
 
-import os
 import random
-import tempfile
 import unittest
 
-HAS_DISPLAY = bool(os.environ.get("DISPLAY"))
-_TMP = None
-GAME = None
-
-
-def setUpModule():
-    global _TMP, GAME
-    if not HAS_DISPLAY:
-        return
-    _TMP = tempfile.TemporaryDirectory()
-    os.environ["ANELZERO_SAVE_DIR"] = _TMP.name
-    from anelzero.client import Game
-    GAME = Game()
-
-
-def tearDownModule():
-    if GAME is not None:
-        GAME.destroy()  # não usar userExit: ele encerra o processo inteiro
-    if _TMP is not None:
-        _TMP.cleanup()
+from gamehost import HAS_DISPLAY, get_game
 
 
 @unittest.skipUnless(HAS_DISPLAY, "precisa de display (use xvfb-run)")
 class ClientHeadless(unittest.TestCase):
     def setUp(self):
         from anelzero import state as S
-        self.g = GAME
+        self.g = get_game()
+        self.g.fade = None  # uma transição pela metade de outro teste não pode bloquear as teclas
+        self.g.fade_card.hide()
+        self.g.battle = None
+        self.g.repair = None
+        self.g.shop = None
         self.g.start_play(S.new_state())
         self.g.fight.roamers = []
         self.g.msg_left = 0
+
+    def settle(self):
+        """Avança o tempo até a transição de tela (escurecer e clarear) terminar."""
+        for _ in range(60):
+            if self.g.fade is None:
+                return
+            self.g.step(0.1)
 
     def _go(self, c, r):
         self.g.px, self.g.py = float(c), float(r)
@@ -47,6 +38,7 @@ class ClientHeadless(unittest.TestCase):
     def test_title_to_intro_to_play(self):
         from anelzero import state as S
         self.g.mode = "title"
+        self.g.title_index = 0
         self.g.key_event("enter", True)  # "Novo jogo"
         self.assertEqual(self.g.mode, "intro")
         for _ in range(400):
@@ -83,6 +75,7 @@ class ClientHeadless(unittest.TestCase):
         c, r, m = portals[0]
         self._go(c, r)
         self.g.step(0.016)
+        self.settle()
         self.assertEqual(self.g.zone.id, m["to"])
         self.assertEqual(self.g.state.zone, m["to"])
 
