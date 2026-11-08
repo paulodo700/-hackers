@@ -261,6 +261,51 @@ class GameState:
                 done.append({"id": qid, "reward": reward})
         return done
 
+    # ---- Diálogos, ações e baús ----
+    def apply_action(self, action):
+        if "set" in action:
+            self.set_flag(action["set"])
+        if "start" in action:
+            self.start_quest(action["start"])
+        if "give" in action:
+            item, n = action["give"]
+            self.add_item(item, n)
+
+    def npc_scene(self, npc_id):
+        """Primeira cena do NPC cuja condição vale agora (None se o NPC não tem nada a dizer)."""
+        npc = C.NPCS.get(npc_id)
+        if npc is None:
+            return None
+        return next((sc for sc in npc["scenes"] if self.scene_matches(sc.get("when"))), None)
+
+    def talk(self, npc_id):
+        """Fala com o NPC: devolve nome, cor e falas da cena, aplicando suas ações."""
+        npc = C.NPCS.get(npc_id)
+        scene = self.npc_scene(npc_id)
+        if npc is None or scene is None:
+            return None
+        for action in scene.get("actions", []):
+            self.apply_action(action)
+        self.check_quests()
+        return {"npc": npc_id, "name": npc["name"], "color": npc["color"], "lines": scene["lines"]}
+
+    def open_chest(self, chest_id, zone_id=None, c=None, r=None):
+        """Abre um baú. Baús nomeados usam CHEST_LOOT; baús extras sorteiam da lista da zona de forma fixa."""
+        key = f"chest_{chest_id}"
+        if self.has_flag(key):
+            return None
+        self.set_flag(key)
+        gained = []
+        if chest_id in C.CHEST_LOOT:
+            gained = [(item, n) for item, n in C.CHEST_LOOT[chest_id]]
+        elif zone_id is not None and C.ZONE_LOOT.get(zone_id):
+            pool = C.ZONE_LOOT[zone_id]
+            idx = (c * 31 + r * 17 + len(zone_id)) % len(pool)
+            gained = [(pool[idx], 1)]
+        for item, n in gained:
+            self.add_item(item, n)
+        return gained
+
     # ---- Experiência ----
     def gain_xp(self, n):
         self.xp += n
