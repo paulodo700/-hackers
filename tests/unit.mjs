@@ -65,7 +65,7 @@ t('todo chefe, NPC e baú do mundo existe no conteúdo', async () => {
     for (const m of Object.values(z.markers)) {
       if (m.type === 'npc') assert.ok(content.NPCS[m.id], `NPC ausente: ${m.id}`);
       if (m.type === 'boss') assert.ok(content.ENEMIES[m.id], `chefe ausente: ${m.id}`);
-      if (m.type === 'chest') assert.ok(loot.CHEST_LOOT[m.id], `baú sem saque: ${m.id}`);
+      if (m.type === 'chest' && !m.extra) assert.ok(loot.CHEST_LOOT[m.id], `baú sem saque: ${m.id}`);
     }
   }
 });
@@ -198,6 +198,55 @@ t('todo inimigo comum aparece em pelo menos uma zona', async () => {
   for (const [id, e] of Object.entries(content.ENEMIES)) {
     if (!e.boss) assert.ok(used.has(id), `inimigo sem zona: ${id}`);
   }
+});
+
+t('mapas extensos: todo objeto e portal é alcançável a partir do nascimento', async () => {
+  const { ZONES } = await import('../src/data/zones.js');
+  const SOLID = new Set(['#', '~', '_']);
+  for (const [id, z] of Object.entries(ZONES)) {
+    if (!z.gen) continue; // o Núcleo é uma arena fixa
+    const rows = z.map.length, cols = z.map[0].length;
+    let spawn = null;
+    z.map.forEach((row, r) => [...row].forEach((ch, c) => { if (ch === 'S') spawn = [c, r]; }));
+    assert.ok(spawn, `${id}: sem nascimento`);
+    const seen = new Set([spawn.join(',')]);
+    const queue = [spawn];
+    while (queue.length) {
+      const [c, r] = queue.shift();
+      for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nc = c + dc, nr = r + dr;
+        if (nc < 0 || nr < 0 || nc >= cols || nr >= rows) continue;
+        if (SOLID.has(z.map[nr][nc])) continue;
+        const k = `${nc},${nr}`;
+        if (seen.has(k)) continue;
+        seen.add(k);
+        queue.push([nc, nr]);
+      }
+    }
+    z.map.forEach((row, r) => [...row].forEach((ch, c) => {
+      const isObject = z.markers[ch] && ch !== 'S';
+      if (isObject) assert.ok(seen.has(`${c},${r}`), `${id}: '${ch}' inalcançável em ${c},${r}`);
+    }));
+  }
+});
+t('mapas extensos: tamanho e quantidade de itens por zona', async () => {
+  const { ZONES } = await import('../src/data/zones.js');
+  for (const [id, z] of Object.entries(ZONES)) {
+    if (!z.gen) continue;
+    assert.ok(z.map.length >= 30 && z.map[0].length >= 50, `${id}: mapa pequeno (${z.map[0].length}x${z.map.length})`);
+    const pickups = z.map.join('').split('').filter((ch) => z.markers[ch]?.type === 'pickup').length;
+    const chests = z.map.join('').split('').filter((ch) => z.markers[ch]?.type === 'chest' && z.markers[ch].extra).length;
+    assert.ok(pickups >= 10, `${id}: só ${pickups} itens no chão`);
+    assert.ok(chests >= 4, `${id}: só ${chests} baús extras`);
+  }
+});
+t('baús extras têm saque determinístico pela posição', async () => {
+  const loot = await import('../src/loot.js');
+  const a = loot.lootFor('cx_cache_12_7');
+  const b = loot.lootFor('cx_cache_12_7');
+  assert.deepEqual(a, b);
+  assert.ok(a.length >= 1);
+  for (const [item] of a) assert.ok(content.ITEMS[item], `item inválido no saque: ${item}`);
 });
 
 export async function runUnit() {

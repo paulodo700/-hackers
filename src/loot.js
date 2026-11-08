@@ -45,3 +45,33 @@ export function requirementText(req) {
 export function itemName(id) {
   return ITEMS[id]?.name || id;
 }
+
+// Tabela de saque por zona para os baús extras (gerados no mapa)
+export const ZONE_LOOT = {
+  cache: ['pasta_termica', 'capsula_energia', 'kit_solda', 'capacitor', 'lamina_solda'],
+  regs: ['capacitor', 'pinca_ressonante', 'capsula_energia', 'cristal_silicio'],
+  alu: ['kit_solda', 'liga_ferrugem', 'escudo_dissipador', 'capsula_energia'],
+  pipeline: ['pasta_termica', 'capsula_energia', 'kit_solda', 'escudo_dissipador'],
+  memory: ['capacitor', 'liga_ferrugem', 'pasta_termica', 'fio_cobre'],
+  bus: ['kit_solda', 'escudo_dissipador', 'capsula_energia', 'pinca_ressonante'],
+};
+
+function hashId(str) {
+  let h = 2166136261;
+  for (let i = 0; i < str.length; i++) h = Math.imul(h ^ str.charCodeAt(i), 16777619);
+  return h >>> 0;
+}
+
+// Saque de um baú pelo id. Baús fixos usam CHEST_LOOT; baús extras (cx_<zona>_<c>_<r>) sorteiam da tabela da zona.
+export function lootFor(id) {
+  if (CHEST_LOOT[id]) return CHEST_LOOT[id];
+  if (!id.startsWith('cx_')) return [];
+  const zone = id.split('_')[1];
+  const table = ZONE_LOOT[zone] || ['pasta_termica'];
+  const h = hashId(id);
+  const first = table[h % table.length];
+  const second = table[(h >>> 8) % table.length];
+  const out = [[first, 1 + ((h >>> 16) % 2)]];
+  if (second !== first) out.push([second, 1]);
+  return out;
+}

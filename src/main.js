@@ -21,7 +21,7 @@ import { startBattle, closeBattleScreen, isBattleOpen } from './battle.js';
 import { startRepair, isRepairOpen, bindRepairUI, repairDebug, REPAIR_TUTORIAL } from './repair.js';
 import { initNav, focusFirst } from './nav.js';
 import { moodForLine, moodForVitals } from './expression.js';
-import { CHEST_LOOT, requirementText } from './loot.js';
+import { lootFor, requirementText } from './loot.js';
 import { settings, loadSettings, applySettings, saveSettings, vibrate } from './settings.js';
 import { unlockAudio, sfx, setMusicZone, setSoundEnabled, setVolume, outputPeak, MAX_OUT } from './audio.js';
 
@@ -185,7 +185,7 @@ function updateSunAndCamera(snap = 0) {
 function nearestEntity(maxDist = 2.4) {
   let best = null, bd = Infinity;
   for (const e of entities) {
-    if (!e.obj) continue;
+    if (!e.obj || e.type === 'pickup') continue; // itens são coletados ao passar por cima
     const d = Math.hypot(e.obj.position.x - player.x, e.obj.position.z - player.z);
     if (d < bd && d <= maxDist) { bd = d; best = e; }
   }
@@ -232,7 +232,7 @@ function interact(e) {
     setFlag(`opened_${e.id}`);
     bump(`chest_${zone.id}`);
     const names = [];
-    for (const [id, n] of CHEST_LOOT[e.id] || []) { addItem(id, n); names.push(`${ITEMS[id].name} ×${n}`); }
+    for (const [id, n] of lootFor(e.id)) { addItem(id, n); names.push(`${ITEMS[id].name} ×${n}`); }
     const credits = 5 + state.level * 2;
     state.gold += credits;
     refreshEntity(e);
@@ -306,6 +306,20 @@ function afterProgress(extra = {}) {
   UI.updateHud();
   UI.updateQuestBox();
   autosave();
+}
+
+// Coleta automática: ao passar perto de um item no chão, ele vai para o inventário
+function collectNearbyPickups() {
+  for (const e of entities) {
+    if (e.type !== 'pickup' || !e.obj) continue;
+    if (Math.hypot(e.obj.position.x - player.x, e.obj.position.z - player.z) > 0.9) continue;
+    setFlag(`picked_${e.id}`);
+    addItem(e.item, e.n);
+    removeEntity(e, scene);
+    sfx('ui');
+    UI.toast(`+1 ${ITEMS[e.item].name}`, 1600);
+    afterProgress();
+  }
 }
 
 // ---------- Batalhas ----------
@@ -567,6 +581,8 @@ function frame(now) {
       lastTile = tile;
       if (portal) tryPortal(portal, prev);
     }
+
+    collectNearbyPickups();
 
     // Glitches que perseguem
     const hits = updateRoamers(roamers, zone, { x: player.x, z: player.z }, dt, now);

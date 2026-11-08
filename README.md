@@ -57,6 +57,7 @@ src/
   audio.js          som e trilha procedurais (Web Audio)
   settings.js       ajustes: som, vibração, tamanho do texto, alto contraste
   combat.js         regras de combate puras (dano, intenção, fase 2), usadas também pelo simulador
+  mapgen.js         gerador determinístico de mapas extensos (salas, corredores, objetos espalhados)
   face.js           rostos procedurais (olhos, boca, expressões)
   nav.js            navegação por teclado nos menus
   tests/            testes unitários, simulador de balanceamento e ponta a ponta

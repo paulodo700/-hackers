@@ -1,7 +1,7 @@
 // Entidades do mundo: NPCs, baús, nós de reparo, chefes e glitches que vagam.
 import * as THREE from 'three';
 import { TILE } from './world.js';
-import { NPCS, ENEMIES } from './data/content.js';
+import { NPCS, ENEMIES, ITEMS } from './data/content.js';
 import { hasFlag } from './state.js';
 import { createFace } from './face.js';
 
@@ -190,6 +190,19 @@ function makeRoamer(def) {
   return g;
 }
 
+// Item no chão: cristal pequeno na cor do item, com anel de luz embaixo
+function makePickup(itemId) {
+  const g = new THREE.Group();
+  const color = new THREE.Color(ITEMS[itemId]?.color || '#ffffff');
+  const gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.22, 0), glowMat(color, 1.4));
+  gem.position.y = 0.55;
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.03, 6, 20), glowMat(color, 0.8));
+  ring.rotation.x = Math.PI / 2; ring.position.y = 0.05;
+  g.add(gem, ring);
+  g.userData.gem = gem;
+  return g;
+}
+
 // Bancada de criação: mesa com painel de circuito e ferramentas
 function makeBench(id) {
   const g = new THREE.Group();
@@ -215,6 +228,8 @@ export function createMarkerEntities(layout, scene) {
   const list = [];
   for (const m of layout.markers) {
     if (m.type === 'portal' || m.type === 'spawn') continue;
+    // Itens já coletados não reaparecem
+    if (m.type === 'pickup' && hasFlag(`picked_${m.id}`)) continue;
     let obj = null;
     let entity = { type: m.type, id: m.id, c: m.c, r: m.r };
     if (m.type === 'npc') {
@@ -224,6 +239,10 @@ export function createMarkerEntities(layout, scene) {
       entity.name = def.name;
     } else if (m.type === 'chest') {
       obj = makeChest(m.id);
+    } else if (m.type === 'pickup') {
+      obj = makePickup(m.item);
+      entity.item = m.item;
+      entity.n = 1;
     } else if (m.type === 'bench') {
       obj = makeBench(m.id);
     } else if (m.type === 'repair') {
@@ -349,6 +368,10 @@ export function animateEntities(entities, t) {
       e.obj.userData.face.update(t, { talk: !!e.talk, mood: e.talkMood || 'neutral' });
     }
     if (e.type === 'bench') e.obj.userData.lamp.material.emissiveIntensity = 1.6 + Math.sin(t * 0.005) * 0.6;
+    if (e.type === 'pickup') {
+      e.obj.userData.gem.rotation.y = t * 0.0025;
+      e.obj.userData.gem.position.y = 0.55 + Math.sin(t * 0.004 + e.c) * 0.08;
+    }
     if (e.type === 'repair') {
       e.obj.userData.core.rotation.y = t * 0.002;
       e.obj.userData.core.position.y = 0.9 + Math.sin(t * 0.003) * 0.08;

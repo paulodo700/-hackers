@@ -107,6 +107,21 @@ Modo com tempo em algumas zonas. A pontuação combina menos giros e menos segun
 
 **Salvamento:** automático a cada 20 segundos, ao mudar de zona, ao concluir ações e ao sair. Versão 2 do formato, com migração da versão 1. Um salvamento corrompido não ativa o botão Continuar.
 
+## Mapas extensos (rodada 6)
+
+As seis zonas exploráveis (Cache, Planície, Forja, Canyon, Cidade e Barramento) deixaram de ser salas de 24 colunas feitas à mão. Agora cada uma é um mapa de 52 por 34 células, gerado por `src/mapgen.js`:
+
+- **Salas e corredores:** cerca de 14 salas de tamanhos variados, ligadas em ordem de posição, com alguns laços extras. Todo o mapa é conectado.
+- **Determinístico:** cada zona tem uma semente fixa (`gen.seed` em `src/data/zones.js`). Mesma semente, mesmo mapa, então salvamentos e testes continuam válidos.
+- **Objetos fixos da história** (NPCs, baús com saque definido, chefes, reparos e os portais A e B) são colocados em salas aleatórias, mas mantêm os mesmos ids. O nascimento fica na primeira sala e o portal de avanço na mais distante.
+- **Itens espalhados:** de 11 a 15 pickups por zona (cristais, fios, ligas, poções, capacitores), que são coletados automaticamente ao passar por cima. Coletados ficam marcados no save e não reaparecem.
+- **Baús extras:** de 4 a 5 por zona, com saque sorteado da tabela da zona (`ZONE_LOOT` em `src/loot.js`), sempre o mesmo para a mesma posição.
+- **Núcleo** continua sendo uma arena fixa.
+
+Testes: um teste unitário confirma que todo objeto e portal é alcançável a partir do nascimento em cada zona. Outro confirma tamanho mínimo e quantidade mínima de itens. Um teste de ponta a ponta confirma que um item é coletado ao passar por cima.
+
+**Custo de desempenho.** Os mapas maiores aumentam o tempo de cada teste de ponta a ponta em cerca de 1,5 a 2 vezes, porque o renderizador por software precisa desenhar mais geometria. O FPS medido em 360 px é o registro do teste de FPS.
+
 ## Balanceamento
 
 Os números vêm do simulador `tests/sim/sim.mjs`, que roda batalhas sem navegador com sementes fixas. O jogador simulado ataca sempre, usa poção abaixo de 35% de vida e usa o equipamento típico de cada faixa de nível. Não usa habilidades.

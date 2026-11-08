@@ -4,7 +4,6 @@ import { circuitFloorTexture, chipTopTexture, FLOOR_STYLE_BY_DECOR, labelSprite 
 import { ZONES } from './data/zones.js';
 
 export const TILE = 2;
-const COLS = 24;
 const SOLID_TERRAIN = new Set(['#', '~', '_']);
 const OBJECT_TYPES = new Set(['npc', 'chest', 'repair', 'boss', 'bench']);
 
@@ -91,17 +90,10 @@ function addZoneDecor(kind, cells, group, theme, rand, animated) {
 
 // Padroniza larguras: linhas curtas ganham "." antes do último caractere,
 // linhas longas perdem "." internos. Mapas podem ter alturas diferentes.
+// Largura do mapa = a maior linha. Linhas menores são completadas com paredes à direita.
 export function normalizeMap(raw) {
-  return raw.map((row) => {
-    let r = row;
-    while (r.length < COLS) r = r.slice(0, -1) + '.' + r.slice(-1);
-    while (r.length > COLS) {
-      const idx = r.indexOf('.', 1);
-      if (idx === -1 || idx >= r.length - 1) break;
-      r = r.slice(0, idx) + r.slice(idx + 1);
-    }
-    return r.slice(0, COLS).padEnd(COLS, '#');
-  });
+  const width = Math.max(...raw.map((row) => row.length));
+  return raw.map((row) => row.padEnd(width, '#'));
 }
 
 function hashStr(s) {
@@ -121,7 +113,7 @@ function rnd(seed) {
 export function buildZone(def, scene) {
   const map = normalizeMap(def.map);
   const rows = map.length;
-  const cols = COLS;
+  const cols = map[0].length;
   const theme = def.theme;
   const group = new THREE.Group();
   group.name = `zone:${def.id}`;
@@ -162,7 +154,11 @@ export function buildZone(def, scene) {
       else if (ch === '_') abyss.push([c, r]);
       else if (ch === 'S') spawn = { c, r };
       else if (def2) {
-        markers.push({ ...def2, c, r, key: ch });
+        // Ids próprios para objetos gerados: pickups e baús extras são únicos pela posição
+        const id = def2.type === 'pickup' ? `pk_${def.id}_${c}_${r}`
+          : (def2.type === 'chest' && def2.extra) ? `cx_${def.id}_${c}_${r}`
+            : def2.id;
+        markers.push({ ...def2, id, c, r, key: ch });
         if (def2.type === 'portal') portals.push({ c, r, to: def2.to, requires: def2.requires, key: ch });
         if (OBJECT_TYPES.has(def2.type)) blocked = true;
       } else if (ch === '.' && rand() < 0.06) {

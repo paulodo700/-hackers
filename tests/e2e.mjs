@@ -724,7 +724,7 @@ export default [
       });
       await page.waitForTimeout(150);
       await page.evaluate(() => { const cur = window.__anelZero.repairDebug(); cur.startedAt -= 130000; });
-      await page.waitForTimeout(1200);
+      await page.waitForFunction(() => document.getElementById('repair').classList.contains('hidden'), null, { timeout: 8000 }).catch(() => {});
       if (await visible(page, '#repair')) throw new Error('reparo não fechou com o tempo esgotado');
       const toast = await page.textContent('#toast');
       if (!toast.includes('Tempo esgotado')) throw new Error('aviso de tempo esgotado ausente: ' + toast);
@@ -813,6 +813,27 @@ export default [
       const m = log.match(/Bloco Corrompido ataca e causa (\d+) de dano/);
       if (!m) throw new Error(`registro ausente (aberta: ${await visible(page, '#battle')}, html: ${(await page.evaluate(() => document.getElementById('battle-log').innerHTML)).slice(0, 160)}, tests: ${await page.evaluate(() => document.querySelectorAll('#battle-log p').length)})`);
       if (Number(m[1]) > 6) throw new Error('dano no modo fácil acima do esperado: ' + m[1]);
+    },
+  },
+  {
+    name: 'mapa extenso: itens no chão são coletados ao passar por cima',
+    async run({ page, base }) {
+      await newGame(page, base, 1);
+      const count = await state(page, () => window.__anelZero.entities.filter((e) => e.type === 'pickup').length);
+      if (count < 10) throw new Error('poucos itens no chão na Cache: ' + count);
+      const total = () => page.evaluate(() => Object.values(window.__anelZero.state.inv).reduce((a, b) => a + b, 0));
+      const before = await total();
+      const id = await page.evaluate(() => {
+        const g = window.__anelZero;
+        const e = g.entities.find((x) => x.type === 'pickup');
+        g.player.setTile(e.c, e.r);
+        return e.id;
+      });
+      await page.waitForTimeout(400);
+      const picked = await page.evaluate((pid) => !!window.__anelZero.state.flags['picked_' + pid], id);
+      if (!picked) throw new Error('item não foi marcado como coletado: ' + id);
+      const after = await total();
+      if (after !== before + 1) throw new Error(`inventário: ${before} -> ${after} (esperado +1)`);
     },
   },
   {
