@@ -154,10 +154,10 @@ Outras mudanças anteriores: Sobrecarga com 150 de vida e 14 de ataque; Titã co
 
 ## Testes
 
-- `npm run test:unit`: 23 testes de lógica pura (combate, migrações de save, slots, finais, conteúdo, missão extra do Núcleo e expressões do rosto).
+- `npm run test:unit`: 26 testes de lógica pura (combate, migrações de save, slots, finais, conteúdo, missão extra do Núcleo e expressões do rosto).
 - `npm run sim`: simulador de balanceamento, com as metas verificadas.
-- `npm run test:e2e`: 33 testes de ponta a ponta no Chromium headless. Qualquer erro ou aviso de console falha o teste. Cada teste roda num contexto novo, com números aleatórios de semente fixa, sem encontros aleatórios e com esperas por condição.
-- `npm test`: tudo (57 testes no total).
+- `npm run test:e2e`: 34 testes de ponta a ponta no Chromium headless. Qualquer erro ou aviso de console falha o teste. Cada teste roda num contexto novo, com números aleatórios de semente fixa, sem encontros aleatórios e com esperas por condição.
+- `npm test`: tudo (61 testes no total).
 
 Os testes de ponta a ponta cobrem: título e slots, migração do save antigo, save corrompido, portais e bloqueios, missões principal e extra, batalha vencida, derrota (volta ao ponto seguro e perde 10% dos créditos), fuga (bloqueada contra chefes), intenção do inimigo, tutorial e reparo (resolver, modo difícil, teclado, pausa com P, tempo esgotado, fusível queimado), dificuldade salva entre reparos, minimapa, loja (compra e venda), bancada, árvore de habilidades, ajustes, legendas, medição de áudio (efeito e trilha produzem sinal, pico nunca passa de 1, volume zero silencia), paredes com desenho próprio por zona, final da paz, final da guerra, missão extra do Núcleo, navegação por teclado, rostos, layout em 360 px e FPS.
 
