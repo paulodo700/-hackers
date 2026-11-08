@@ -56,6 +56,10 @@ src/
   ui.js             HUD, diálogos com escolhas, menus, loja e bancada
   audio.js          som e trilha procedurais (Web Audio)
   settings.js       ajustes: som, vibração, tamanho do texto, alto contraste
+  combat.js         regras de combate puras (dano, intenção, fase 2), usadas também pelo simulador
+  face.js           rostos procedurais (olhos, boca, expressões)
+  nav.js            navegação por teclado nos menus
+  tests/            testes unitários, simulador de balanceamento e ponta a ponta
   input.js          teclado, mouse e toque
   textures.js       arte procedural (pisos, ícones, retratos de inimigos)
   loot.js           saques de baús e textos de requisitos
@@ -68,4 +72,15 @@ docs/
 
 ## Testes
 
-Não há build. Para testar em navegador headless, o jogo expõe `window.__anelZero` (estado, zona, jogador, `loadZone`, `beginBattle`, `interact`, `repairDebug`). Esse gancho serve para testes automatizados e pode ser removido numa versão final.
+Não há build. Os testes rodam em Node e usam o Chromium headless já instalado no ambiente (Playwright):
+
+```bash
+npm test                      # tudo: unitários, simulador e ponta a ponta
+npm run test:unit             # lógica pura, sem navegador
+npm run sim                   # tabela de balanceamento (taxa de vitória por nível)
+node tests/run.mjs e2e portal # só os testes de ponta a ponta cujo nome contém portal
+```
+
+Qualquer erro ou aviso de console falha o teste. Para preparar cenários, o jogo expõe `window.__anelZero` (estado, zona, jogador, `loadZone`, `beginBattle`, `interact`, `repairDebug`). Esse gancho pode ser removido numa versão final, mas os testes dependem dele.
+
+Detalhes do balanceamento e das decisões de design estão em `docs/GDD.md`.

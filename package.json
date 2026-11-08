@@ -1,0 +1,12 @@
+{
+  "name": "anel-zero",
+  "private": true,
+  "version": "0.3.0",
+  "description": "RPG 3D dentro de um processador (Three.js, sem build)",
+  "scripts": {
+    "test": "node tests/run.mjs",
+    "test:unit": "node tests/run.mjs unit",
+    "test:e2e": "node tests/run.mjs e2e",
+    "sim": "node tests/sim/sim.mjs"
+  }
+}

@@ -324,6 +324,45 @@ body.hc .item-row, body.hc .skill-row, body.hc .setting-row { border-color: #fff
   .menu-foot { justify-content: stretch; }
   .menu-foot button { flex: 1; }
 }
+/* ---------- Foco visível (navegação por teclado) ---------- */
+button:focus-visible, canvas[tabindex]:focus-visible {
+  outline: 3px solid var(--gold); outline-offset: 2px;
+}
+body.hc button:focus-visible { outline: 4px solid #ffff00; }
+
+/* ---------- Legendas visuais ---------- */
+#captions {
+  position: fixed; left: 50%; top: 18%; transform: translateX(-50%); z-index: 45;
+  background: rgba(0,0,0,.72); color: #fff; border: 1px solid var(--gold);
+  border-radius: 8px; padding: 6px 12px; font-size: 14px; font-weight: 700;
+  opacity: 0; pointer-events: none; transition: opacity .25s;
+}
+#captions.on { opacity: 1; }
+
+/* ---------- Minimapa ---------- */
+#minimap {
+  position: absolute; top: 12px; right: 12px; width: 168px; height: 112px;
+  background: rgba(4,14,20,.85); border: 1px solid var(--edge); border-radius: 8px;
+  image-rendering: pixelated; pointer-events: none;
+}
+@media (max-width: 720px) { #minimap { width: 120px; height: 80px; } }
+.hud-top { padding-right: 190px; }
+@media (max-width: 720px) { .hud-top { padding-right: 132px; } }
+
+/* ---------- Slots de save ---------- */
+.slot-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  border: 1px solid #1d5d68; border-radius: 10px; padding: 12px; margin-bottom: 10px;
+}
+.slot-row .info { color: var(--muted); font-size: 13px; line-height: 1.4; min-width: 0; }
+.slot-row .info b { color: var(--text); font-size: 15px; }
+.slot-row .acts { display: flex; gap: 8px; flex: none; }
+.slot-row .acts button { min-height: 40px; padding: 6px 12px; font-size: 13px; }
+
+/* ---------- Reparo: modo difícil e recorde ---------- */
+.rp-hard { margin-bottom: 8px; }
+#rp-best { color: var(--gold); }
+
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
 }

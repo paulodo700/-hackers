@@ -2,8 +2,12 @@
 // loja, criação, códex e salvamento versionado.
 import { ITEMS, QUESTS, QUEST_ORDER, RARITY, RECIPES, SHOP, SKILL_TREE, SKILLS } from './data/content.js';
 
-export const SAVE_VERSION = 2;
-const SAVE_KEY = 'anel-zero-save-v1'; // a chave é a mesma; o campo "version" controla a migração
+// Formato do save: 3 (slots). Migrações: 1 -> 2 (habilidades, reparos) e 2 -> 3 (mapa visitado).
+export const SAVE_VERSION = 3;
+export const SLOT_COUNT = 3;
+const SLOT_PREFIX = 'anel-zero-slot-';
+const LEGACY_KEY = 'anel-zero-save-v1'; // save único das versões 1 e 2; é copiado para o slot 1
+let currentSlot = 1;
 
 export function xpForLevel(lvl) {
   return Math.round(40 * Math.pow(lvl, 1.5));
@@ -23,6 +27,8 @@ function freshState() {
     quests: {},
     codex: { zones: {}, enemies: {} },
     repairBest: {},
+    visited: {},
+    savedAt: null,
     zone: 'cache',
     pos: null,
     playTime: 0,
@@ -253,6 +259,10 @@ export function gainXp(n) {
 }
 
 // ---- Reparo: melhor pontuação por zona ----
+export function repairBestOf(key) {
+  return state.repairBest[key] || 0;
+}
+
 export function recordRepairScore(zone, score) {
   const prev = state.repairBest[zone] || 0;
   if (score > prev) state.repairBest[zone] = score;
@@ -267,52 +277,112 @@ export function discoverEnemy(id) {
   state.codex.enemies[id] = true;
 }
 
-// ---- Salvamento (versionado) ----
-// v1 (sem "version"): ganha campos novos com valores padrão.
-// v2: formato atual.
-function migrate(data) {
+// ---- Salvamento: três slots, versão 3 ----
+// v1 (sem \"version\"): habilidades, mapa e reparos ganham valores padrão (migração 1 -> 2).
+// v2 -> v3: acrescenta o mapa visitado (migração 2 -> 3).
+export function migrate(data) {
+  let out = { ...freshState(), ...data };
   const v = data.version || 1;
-  const out = { ...freshState(), ...data };
   if (v < 2) {
     out.skills = {};
     out.repairBest = {};
     out.skillPoints = Math.max(0, (out.level || 1) - 1);
   }
+  if (v < 3) {
+    out.visited = {};
+  }
   out.version = SAVE_VERSION;
   return out;
 }
 
-export function saveGame() {
+export function getSlot() {
+  return currentSlot;
+}
+export function setSlot(n) {
+  if (n >= 1 && n <= SLOT_COUNT) currentSlot = n;
+}
+
+function slotKey(n) {
+  return `${SLOT_PREFIX}${n}`;
+}
+
+// Copia o save antigo (chave única) para o slot 1, se o slot 1 ainda estiver vazio.
+// A chave antiga é mantida como cópia de segurança.
+export function migrateLegacySave() {
   try {
-    localStorage.setItem(SAVE_KEY, JSON.stringify(state));
+    if (localStorage.getItem(slotKey(1))) return false;
+    const raw = localStorage.getItem(LEGACY_KEY);
+    if (!raw) return false;
+    const data = JSON.parse(raw);
+    if (!data || typeof data !== 'object') return false;
+    localStorage.setItem(slotKey(1), JSON.stringify(migrate(data)));
     return true;
   } catch (e) {
     return false;
   }
 }
 
-// Só considera "existe save" se o conteúdo for um objeto JSON válido
-export function hasSave() {
+// Resumo de um slot para a tela de escolha. null se vazio ou ilegível.
+export function slotInfo(n) {
   try {
-    const raw = localStorage.getItem(SAVE_KEY);
-    if (!raw) return false;
+    const raw = localStorage.getItem(slotKey(n));
+    if (!raw) return null;
     const data = JSON.parse(raw);
-    return !!data && typeof data === 'object';
+    if (!data || typeof data !== 'object') return null;
+    return {
+      zone: data.zone || 'cache',
+      level: data.level || 1,
+      gold: data.gold || 0,
+      savedAt: data.savedAt || null,
+    };
+  } catch (e) {
+    return null;
+  }
+}
+
+export function saveGame() {
+  try {
+    state.savedAt = new Date().toISOString();
+    localStorage.setItem(slotKey(currentSlot), JSON.stringify(state));
+    return true;
   } catch (e) {
     return false;
   }
 }
 
-export function loadGame() {
+export function deleteSlot(n) {
   try {
-    const raw = localStorage.getItem(SAVE_KEY);
+    localStorage.removeItem(slotKey(n));
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+export function hasSave(n = currentSlot) {
+  return slotInfo(n) !== null;
+}
+
+export function loadGame(n = currentSlot) {
+  try {
+    const raw = localStorage.getItem(slotKey(n));
     if (!raw) return false;
     const data = JSON.parse(raw);
     if (!data || typeof data !== 'object') return false;
+    currentSlot = n;
     Object.assign(state, migrate(data));
     clampVitals();
     return true;
   } catch (e) {
     return false;
   }
+}
+
+// ---- Mapa visitado (minimapa) ----
+export function markVisited(zoneId, c, r) {
+  if (!state.visited[zoneId]) state.visited[zoneId] = {};
+  state.visited[zoneId][`${c},${r}`] = 1;
+}
+export function isVisited(zoneId, c, r) {
+  return !!(state.visited[zoneId] && state.visited[zoneId][`${c},${r}`]);
 }

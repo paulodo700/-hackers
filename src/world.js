@@ -1,6 +1,7 @@
 // Constrói o mundo 3D de uma zona a partir do mapa em texto.
 import * as THREE from 'three';
-import { circuitFloorTexture, chipTopTexture } from './textures.js';
+import { circuitFloorTexture, chipTopTexture, FLOOR_STYLE_BY_DECOR, labelSprite } from './textures.js';
+import { ZONES } from './data/zones.js';
 
 export const TILE = 2;
 const COLS = 24;
@@ -130,7 +131,7 @@ export function buildZone(def, scene) {
   const cz = ((rows - 1) * TILE) / 2;
 
   // Piso
-  const floorTex = circuitFloorTexture(theme, hashStr(def.id));
+  const floorTex = circuitFloorTexture(theme, hashStr(def.id), 512, FLOOR_STYLE_BY_DECOR[def.decor] || 'grid');
   floorTex.repeat.set(cols / 4, rows / 4);
   const floor = new THREE.Mesh(
     new THREE.PlaneGeometry(cols * TILE, rows * TILE),
@@ -262,9 +263,21 @@ export function buildZone(def, scene) {
       new THREE.MeshBasicMaterial({ color: theme.accent, transparent: true, opacity: 0.18, side: THREE.DoubleSide, depthWrite: false }),
     );
     beam.position.y = 1.6;
-    pg.add(ring, beam);
+    // Halo de partículas e rótulo com o destino
+    const haloGeo = new THREE.BufferGeometry();
+    const hp = new Float32Array(32 * 3);
+    for (let k = 0; k < 32; k++) {
+      const a = (k / 32) * Math.PI * 2;
+      hp[k * 3] = Math.cos(a) * 1.05; hp[k * 3 + 1] = 0.1; hp[k * 3 + 2] = Math.sin(a) * 1.05;
+    }
+    haloGeo.setAttribute('position', new THREE.BufferAttribute(hp, 3));
+    const halo = new THREE.Points(haloGeo, new THREE.PointsMaterial({ color: theme.accent, size: 0.14, transparent: true, opacity: 0.9, depthWrite: false }));
+    const dest = ZONES[p.to];
+    const label = labelSprite(dest ? dest.name.split(' —')[0] : p.to, '#ffffff');
+    label.position.y = 3.4;
+    pg.add(ring, beam, halo, label);
     group.add(pg);
-    portalMeshes.push({ group: pg, ring, beam });
+    portalMeshes.push({ group: pg, ring, beam, halo });
   }
 
   // Decoração específica da zona (tipo definido em zones.js)
@@ -335,6 +348,7 @@ export function buildZone(def, scene) {
     for (const a of animated) a.obj.rotation.z = t * 0.001 * a.speed * 10;
     for (const pm of portalMeshes) {
       pm.ring.rotation.z = t * 0.0015;
+      pm.halo.rotation.y = t * 0.0008;
       pm.beam.material.opacity = 0.14 + Math.sin(t * 0.003) * 0.05;
     }
     const arr = particles.geometry.attributes.position;

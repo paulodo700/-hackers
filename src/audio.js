@@ -4,6 +4,9 @@ import { settings } from './settings.js';
 
 let ctx = null;
 let master = null;
+let limiter = null;
+// Teto do ganho de saída (amplitude). Nada passa de 1.0 no destino.
+export const MAX_OUT = 0.8;
 let sfxBus = null;
 let musicBus = null;
 let noiseBuf = null;
@@ -22,20 +25,32 @@ const ZONE_MUSIC = {
   battle: { root: 165, scale: [0, 1, 3, 6, 7], wave: 'sawtooth', tempo: 0.22, drone: 0.05 },
 };
 
+// Só cria o contexto depois de um gesto do jogador (evita o aviso do navegador)
+let unlocked = false;
+
 function ensure() {
   if (ctx) return ctx;
+  if (!unlocked) return null;
   try {
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) return null;
     ctx = new AC();
+    // Limitador de saída: o compressor impede picos acima do teto, e o ganho mestre nunca passa de MAX_OUT
+    limiter = ctx.createDynamicsCompressor();
+    limiter.threshold.value = -10;
+    limiter.knee.value = 6;
+    limiter.ratio.value = 12;
+    limiter.attack.value = 0.003;
+    limiter.release.value = 0.2;
+    limiter.connect(ctx.destination);
     master = ctx.createGain();
-    master.gain.value = settings.sound ? 0.8 : 0;
-    master.connect(ctx.destination);
+    master.gain.value = settings.sound ? MAX_OUT : 0;
+    master.connect(limiter);
     sfxBus = ctx.createGain();
-    sfxBus.gain.value = 0.6;
+    sfxBus.gain.value = 0.6 * settings.volSfx;
     sfxBus.connect(master);
     musicBus = ctx.createGain();
-    musicBus.gain.value = 0.35;
+    musicBus.gain.value = 0.35 * settings.volMusic;
     musicBus.connect(master);
     // Ruído branco para passos e impactos
     noiseBuf = ctx.createBuffer(1, ctx.sampleRate * 0.5, ctx.sampleRate);
@@ -49,6 +64,7 @@ function ensure() {
 
 // Deve ser chamada num clique/toque/tecla
 export function unlockAudio() {
+  unlocked = true;
   const c = ensure();
   if (c && c.state === 'suspended') {
     try { c.resume(); } catch (e) { /* ignorar */ }
@@ -59,8 +75,33 @@ export function unlockAudio() {
 export function setSoundEnabled(on) {
   settings.sound = !!on;
   if (master && ctx) {
-    master.gain.setTargetAtTime(on ? 0.8 : 0, ctx.currentTime, 0.05);
+    master.gain.setTargetAtTime(on ? MAX_OUT : 0, ctx.currentTime, 0.05);
   }
+}
+
+// Volume por tipo: 'music' ou 'sfx', valor entre 0 e 1
+export function setVolume(kind, v) {
+  const val = Math.max(0, Math.min(1, Number(v) || 0));
+  if (kind === 'music') { settings.volMusic = val; if (musicBus) musicBus.gain.setTargetAtTime(0.35 * val, ctx.currentTime, 0.05); }
+  if (kind === 'sfx') { settings.volSfx = val; if (sfxBus) sfxBus.gain.setTargetAtTime(0.6 * val, ctx.currentTime, 0.05); }
+}
+
+// Legendas visuais para sons importantes (aparecem mesmo com o som desligado)
+const CAPTIONS = {
+  chest: '🔓 Baú aberto', win: '★ Vitória', lose: '✖ Derrota', locked: '⛔ Caminho bloqueado',
+  portal: '⇄ Portal', heavy: '💥 Golpe pesado', repair: '🔧 Circuito restaurado', hurt: '💢 Dano recebido',
+};
+let capTimer = 0;
+function caption(name) {
+  if (!settings.captions || !CAPTIONS[name]) return;
+  try {
+    const el = document.getElementById('captions');
+    if (!el) return;
+    el.textContent = CAPTIONS[name];
+    el.classList.add('on');
+    clearTimeout(capTimer);
+    capTimer = setTimeout(() => el.classList.remove('on'), 1400);
+  } catch (e) { /* ignorar */ }
 }
 
 // ---- Efeitos ----
@@ -141,6 +182,7 @@ const SFX = {
 
 // Toca um efeito pelo nome. Silencioso se o áudio não estiver disponível.
 export function sfx(name) {
+  caption(name);
   const c = ensure();
   if (!c || !settings.sound) return;
   if (c.state === 'suspended') return;

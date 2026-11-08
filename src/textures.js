@@ -11,7 +11,7 @@ function rng(seed) {
 }
 
 // Piso de placa de circuito com trilhas que brilham.
-export function circuitFloorTexture(theme, seed = 7, size = 512) {
+export function circuitFloorTexture(theme, seed = 7, size = 512, style = 'grid') {
   const c = document.createElement('canvas');
   c.width = c.height = size;
   const g = c.getContext('2d');
@@ -36,6 +36,8 @@ export function circuitFloorTexture(theme, seed = 7, size = 512) {
     g.fillStyle = 'rgba(0,0,0,0.5)';
     g.beginPath(); g.arc(x, y, 3, 0, Math.PI * 2); g.fill();
   }
+
+  drawFloorStyle(g, style, theme, size, r);
 
   // Trilhas brilhantes em ângulos retos
   for (let i = 0; i < 9; i++) {
@@ -241,4 +243,85 @@ export function drawEnemyArt(canvas, glyph, color, t = 0) {
       g.beginPath(); g.arc(0, 0, 60, 0, Math.PI * 2); g.fill(); g.stroke();
   }
   g.restore();
+}
+
+// Padrão de piso próprio de cada zona (mesmo tema de cor, desenho diferente).
+export const FLOOR_STYLE_BY_DECOR = {
+  cells: 'grid', pins: 'hex', gears: 'gear', pipes: 'stripes', towers: 'bricks', lanes: 'lanes', rings: 'radial',
+};
+
+function drawFloorStyle(g, style, theme, size, r) {
+  g.save();
+  g.strokeStyle = theme.trace;
+  g.globalAlpha = 0.22;
+  g.lineWidth = 2;
+  const step = size / 8;
+  if (style === 'hex') {
+    for (let y = 0; y < size + step; y += step * 0.866) {
+      for (let x = 0; x < size + step; x += step) {
+        const ox = ((y / (step * 0.866)) % 2) * step / 2;
+        const cx = x + ox, cy = y;
+        g.beginPath();
+        for (let k = 0; k < 6; k++) {
+          const a = (k / 6) * Math.PI * 2;
+          const px = cx + Math.cos(a) * step * 0.5, py = cy + Math.sin(a) * step * 0.5;
+          k ? g.lineTo(px, py) : g.moveTo(px, py);
+        }
+        g.closePath(); g.stroke();
+      }
+    }
+  } else if (style === 'gear') {
+    for (let i = 1; i <= 4; i++) {
+      g.beginPath(); g.arc(size / 2, size / 2, i * step * 0.55, 0, Math.PI * 2); g.stroke();
+      for (let k = 0; k < 12; k++) {
+        const a = (k / 12) * Math.PI * 2;
+        g.beginPath(); g.moveTo(size / 2 + Math.cos(a) * i * step * 0.5, size / 2 + Math.sin(a) * i * step * 0.5);
+        g.lineTo(size / 2 + Math.cos(a) * i * step * 0.62, size / 2 + Math.sin(a) * i * step * 0.62); g.stroke();
+      }
+    }
+  } else if (style === 'stripes') {
+    for (let x = -size; x < size * 2; x += step * 0.7) {
+      g.beginPath(); g.moveTo(x, 0); g.lineTo(x + size, size); g.stroke();
+    }
+  } else if (style === 'bricks') {
+    for (let y = 0; y < size; y += step) {
+      const off = (Math.floor(y / step) % 2) * step / 2;
+      for (let x = -step; x < size + step; x += step) {
+        g.strokeRect(x + off, y, step, step);
+      }
+    }
+  } else if (style === 'lanes') {
+    for (let y = 0; y < size; y += step / 2) {
+      g.globalAlpha = 0.12 + (r() * 0.3);
+      g.fillStyle = theme.trace;
+      g.fillRect(0, y, size, 3);
+    }
+  } else if (style === 'radial') {
+    for (let k = 0; k < 24; k++) {
+      const a = (k / 24) * Math.PI * 2;
+      g.beginPath(); g.moveTo(size / 2, size / 2);
+      g.lineTo(size / 2 + Math.cos(a) * size, size / 2 + Math.sin(a) * size); g.stroke();
+    }
+  }
+  g.restore();
+}
+
+// Rótulo de texto em sprite (nome do destino dos portais e de locais)
+export function labelSprite(text, color = '#ffffff') {
+  const c = document.createElement('canvas');
+  c.width = 512; c.height = 96;
+  const g = c.getContext('2d');
+  g.font = 'bold 40px system-ui, sans-serif';
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  const w = Math.min(500, g.measureText(text).width + 40);
+  g.fillStyle = 'rgba(0,0,0,0.55)';
+  g.beginPath(); g.roundRect(256 - w / 2, 18, w, 60, 14); g.fill();
+  g.fillStyle = color;
+  g.fillText(text, 256, 50);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
+  sp.scale.set(2.6, 0.5, 1);
+  return sp;
 }

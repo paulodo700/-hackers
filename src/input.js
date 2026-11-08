@@ -26,6 +26,10 @@ export function createInput(canvas) {
 
   window.addEventListener('keydown', (e) => {
     if (input.onKey && input.onKey(e.code, 'down', e) === true) return;
+    // Com um botão focado, Espaço e Enter ativam o botão (navegação por teclado), sem virar ação do mundo
+    const focused = document.activeElement;
+    const onControl = !!focused && (focused.tagName === 'BUTTON' || focused.tagName === 'INPUT' || focused.tagName === 'SELECT' || (focused.tagName === 'CANVAS' && focused.hasAttribute('tabindex')));
+    if (onControl && (e.code === 'Space' || e.code === 'Enter')) return;
     if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
     keys.add(e.code);
     recomputeKeys();

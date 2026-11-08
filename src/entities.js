@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { TILE } from './world.js';
 import { NPCS, ENEMIES } from './data/content.js';
 import { hasFlag } from './state.js';
+import { createFace } from './face.js';
 
 // Rótulo de texto em sprite
 function nameSprite(text, color) {
@@ -53,6 +54,11 @@ function makeNpc(def, id) {
   g.userData.ring = ring;
   g.userData.head = head;
   g.userData.look = NPC_LOOK[id] || 'plain';
+  // Rosto na frente da cabeça
+  const face = createFace({ width: 0.42, height: 0.2, color: def.color || '#7dfff0', transparent: true });
+  face.mesh.position.set(0, 1.8, 0.4);
+  g.add(face.mesh);
+  g.userData.face = face;
   addLook(g, g.userData.look, col, metal, cloth);
   const label = nameSprite(def.name, def.color || '#7dfff0');
   label.position.y = 2.6;
@@ -340,6 +346,7 @@ export function animateEntities(entities, t) {
     if (e.type === 'npc') {
       e.obj.userData.ring.rotation.z = t * 0.002;
       e.obj.userData.head.position.y = 1.8 + Math.sin(t * 0.002 + e.c) * 0.03;
+      e.obj.userData.face.update(t, { talk: !!e.talk, mood: 'neutral' });
     }
     if (e.type === 'bench') e.obj.userData.lamp.material.emissiveIntensity = 1.6 + Math.sin(t * 0.005) * 0.6;
     if (e.type === 'repair') {

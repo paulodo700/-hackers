@@ -4,7 +4,7 @@
 //   reto, curva, T, ponta (fonte/destino): giram normalmente
 //   cruzamento: liga as 4 direções e não gira (encaixe fixo)
 //   fusível: gira, mas queima ao ser energizado e não pode mais ser girado
-import { recordRepairScore } from './state.js';
+import { recordRepairScore, repairBestOf as recordRepairScoreOf } from './state.js';
 import { sfx } from './audio.js';
 import { vibrate } from './settings.js';
 
@@ -199,6 +199,12 @@ function draw() {
     g.globalAlpha = 1;
     g.shadowBlur = 0;
   }
+  // Cursor do teclado
+  if (cur.keyboard) {
+    g.setLineDash([6, 4]); g.strokeStyle = '#ffffff'; g.lineWidth = 3;
+    g.strokeRect(cur.cursor.x * cell + 5, cur.cursor.y * cell + 5, cell - 10, cell - 10);
+    g.setLineDash([]);
+  }
   // Fonte (verde) e destino (magenta)
   const dot = (x, y, col) => {
     const cx = x * cell + cell / 2, cy = y * cell + cell / 2;
@@ -254,7 +260,7 @@ function onClick(ev) {
   if (solved(cur.puzzle) && !cur.done) {
     cur.done = true;
     const score = scoreNow();
-    const best = recordRepairScore(cur.zoneId || 'geral', score);
+    const best = recordRepairScore(scoreKey(), score);
     el('rp-title').textContent = best ? `Circuito Restaurado — recorde!` : 'Circuito Restaurado';
     el('rp-score').textContent = `Pontos: ${score}`;
     sfx('repair');
@@ -269,6 +275,7 @@ function finish(success, score = 0, reason = 'cancel') {
   clearInterval(cur && cur.timer);
   cur = null;
   el('rp-canvas').removeEventListener('click', onClick);
+  window.removeEventListener('keydown', onKey);
   el('repair').classList.add('hidden');
   cb && cb(success, score, reason);
 }
@@ -276,15 +283,97 @@ function finish(success, score = 0, reason = 'cancel') {
 // Inicia o reparo.
 //   size: 4..6 · timeLimit: segundos (0 ou ausente = sem limite) · zoneId: chave do recorde
 //   onDone(success, score)
-export function startRepair({ size = 4, title = 'Reparo de Trilha', zoneId = 'geral', timeLimit = 0, fuses = 1, onDone } = {}) {
-  const puzzle = buildPuzzle(size, Math.random, fuses);
-  cur = { puzzle, moves: 0, done: false, onDone, zoneId, timeLimit, startedAt: performance.now(), feedback: '' };
+// Tutorial exibido na primeira vez que o reparo abre (ver main.js)
+export const REPAIR_TUTORIAL = [
+  { s: 'Tutorial', t: 'Cada trilha partida precisa ligar a fonte verde ao destino magenta.' },
+  { s: 'Tutorial', t: 'Clique num segmento para girá-lo 90°. Pelo teclado: setas movem o cursor, Enter gira, H liga o modo difícil.' },
+  { s: 'Tutorial', t: 'Cruzamentos (quadrados) não giram. Fusíveis (F) queimam quando recebem energia e travam para sempre.' },
+  { s: 'Tutorial', t: 'Menos giros e menos tempo rendem mais pontos. Seu melhor resultado fica salvo na zona.' },
+];
+
+function sizeFor(size, hard) { return hard ? Math.min(7, size + 1) : size; }
+function fusesFor(fuses, hard) { return hard ? fuses + 1 : fuses; }
+
+// Chave do recorde: zona, com sufixo quando o modo difícil está ligado
+function scoreKey() {
+  return cur.hard ? `${cur.base.zoneId}-hard` : cur.base.zoneId;
+}
+
+function showBest() {
+  const best = recordRepairScoreOf(scoreKey());
+  el('rp-best').textContent = best ? `Recorde: ${best}` : 'Sem recorde ainda';
+}
+
+function updateHardButton() {
+  const b = el('rp-hard');
+  b.textContent = cur.hard ? 'Modo difícil: ligado (H)' : 'Modo difícil: desligado (H)';
+  b.setAttribute('aria-pressed', String(!!cur.hard));
+}
+
+function buildFor(hard) {
+  return buildPuzzle(sizeFor(cur.base.size, hard), Math.random, fusesFor(cur.base.fuses, hard));
+}
+
+export function startRepair({ size = 4, title = 'Reparo de Trilha', zoneId = 'geral', timeLimit = 0, fuses = 1, hard = false, onDone } = {}) {
+  cur = {
+    base: { size, fuses, zoneId },
+    hard: !!hard,
+    onDone, timeLimit, moves: 0, done: false,
+    startedAt: performance.now(), feedback: '',
+    cursor: { x: 0, y: 0 }, keyboard: false,
+  };
+  cur.puzzle = buildFor(cur.hard);
   el('rp-title').textContent = title;
   el('repair').classList.remove('hidden');
   el('rp-timer').classList.toggle('hidden', !timeLimit);
   el('rp-canvas').addEventListener('click', onClick);
+  window.addEventListener('keydown', onKey);
+  updateHardButton();
+  showBest();
   cur.timer = setInterval(tick, 250);
   tick();
+  el('rp-canvas').focus();
+}
+
+// Troca a dificuldade e recomeça o quebra-cabeça
+export function toggleHard() {
+  if (!cur || cur.done) return;
+  cur.hard = !cur.hard;
+  cur.puzzle = buildFor(cur.hard);
+  cur.moves = 0;
+  cur.startedAt = performance.now();
+  cur.cursor = { x: 0, y: 0 };
+  cur.feedback = cur.hard ? 'Modo difícil: quebra-cabeça novo.' : 'Modo normal: quebra-cabeça novo.';
+  updateHardButton();
+  showBest();
+  draw();
+}
+
+// Teclado: setas movem o cursor, Enter/Espaço giram, H alterna o modo difícil, Esc cancela
+function onKey(ev) {
+  if (!cur) return;
+  const n = cur.puzzle.n;
+  const handled = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter', 'Space', 'KeyH', 'Escape'].includes(ev.code);
+  if (!handled) return;
+  // Com um botão focado (ex.: Modo difícil), Enter/Espaço pertencem ao botão
+  if ((ev.code === 'Enter' || ev.code === 'Space') && document.activeElement && document.activeElement.tagName === 'BUTTON') return;
+  ev.preventDefault();
+  ev.stopPropagation();
+  cur.keyboard = true;
+  if (ev.code === 'ArrowUp') cur.cursor.y = Math.max(0, cur.cursor.y - 1);
+  if (ev.code === 'ArrowDown') cur.cursor.y = Math.min(n - 1, cur.cursor.y + 1);
+  if (ev.code === 'ArrowLeft') cur.cursor.x = Math.max(0, cur.cursor.x - 1);
+  if (ev.code === 'ArrowRight') cur.cursor.x = Math.min(n - 1, cur.cursor.x + 1);
+  if (ev.code === 'Enter' || ev.code === 'Space') {
+    // Mesmo caminho do clique: calcula o centro da célula e reaproveita onClick
+    const canvas = el('rp-canvas');
+    const rect = canvas.getBoundingClientRect();
+    const cs = rect.width / n;
+    onClick({ clientX: rect.left + (cur.cursor.x + 0.5) * cs, clientY: rect.top + (cur.cursor.y + 0.5) * cs });
+  }
+  if (ev.code === 'KeyH') toggleHard();
+  if (ev.code === 'Escape') { cancelRepair(); return; }
+  draw();
 }
 
 export function cancelRepair() {
@@ -303,4 +392,6 @@ export function repairDebug() {
 // Bind do botão cancelar, feito uma vez
 export function bindRepairUI() {
   el('rp-cancel').addEventListener('click', () => cancelRepair());
+  el('rp-hard').addEventListener('click', () => toggleHard());
+  el('rp-canvas').tabIndex = 0;
 }

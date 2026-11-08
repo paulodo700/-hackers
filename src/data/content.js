@@ -76,6 +76,10 @@ export const ITEMS = {
     name: 'Fragmento de Memória', slot: 'key', rarity: 'rare', glyph: 'frag', color: '#c084fc',
     desc: 'Um pedaço de um registro apagado. Item de história.',
   },
+  selo_vigia: {
+    name: 'Selo do Vigia', slot: 'key', rarity: 'epic', glyph: 'key', color: '#ff9fd2',
+    desc: 'Selo de vigilância. Só o Vigia sabe ouvi-lo.',
+  },
   trilha_mestra: {
     name: 'Trilha Mestra', slot: 'key', rarity: 'epic', glyph: 'key', color: '#ff3ea5',
     desc: 'Chave-mestra do Anel Zero.',
@@ -103,19 +107,19 @@ export const ENEMIES = {
     lore: 'Um setor de memória que esqueceu o que era. Lento e teimoso.',
   },
   sobrecarga: {
-    name: 'Sobrecarga', hp: 120, atk: 12, def: 4, spd: 8, xp: 90, gold: 40,
+    name: 'Sobrecarga', hp: 150, atk: 14, def: 4, spd: 8, xp: 90, gold: 40,
     color: '#ff7a3d', glyph: 'sobrecarga', scale: 1.3, boss: true,
     drops: [{ item: 'chave_forja', chance: 1 }],
     lore: 'O chefe da Forja. Uma tensão alta demais que ganhou vontade própria.',
   },
   ferrugem_titan: {
-    name: 'Titã da Ferrugem', hp: 230, atk: 16, def: 7, spd: 5, xp: 220, gold: 90,
+    name: 'Titã da Ferrugem', hp: 205, atk: 16, def: 7, spd: 5, xp: 220, gold: 90,
     color: '#ff8a4c', glyph: 'titan', scale: 1.7, boss: true,
     drops: [{ item: 'trilha_mestra', chance: 1 }, { item: 'lamina_ferrugem', chance: 1 }, { item: 'pinca_ressonante', chance: 0.5 }],
     lore: 'Oxidação viva que cresce nos barramentos. Dizem que foi um guardião.',
   },
   vigia: {
-    name: 'Vigia — o Guardião Esquecido', hp: 380, atk: 20, def: 9, spd: 10, xp: 500, gold: 0,
+    name: 'Vigia — o Guardião Esquecido', hp: 300, atk: 16, def: 9, spd: 10, xp: 500, gold: 0,
     color: '#ff3ea5', glyph: 'vigia', scale: 2, boss: true,
     drops: [{ item: 'dissipador_omega', chance: 1 }],
     lore: 'O sistema de vigilância do processador. Ele apagou a memória de Bit para protegê-lo.',
@@ -231,6 +235,18 @@ export const QUESTS = {
     reward: { xp: 0, gold: 0, items: [] },
   },
 
+  // ---- Missão extra do Núcleo: ouvir o Vigia antes do final ----
+  sq_nucleo: {
+    title: 'Vozes do Vigia', side: true,
+    gate: { quest: 'q_nucleo', minStage: 1 },
+    stages: [
+      { text: 'Fale com a Arquivista sobre o Vigia.', flag: 'sq_nucleo_talk' },
+      { text: 'Encontre o Selo do Vigia no núcleo.', count: 'collect_selo_vigia', n: 1 },
+      { text: 'Mostre o selo à Arquivista.', flag: 'sq_nucleo_done' },
+    ],
+    reward: { xp: 250, gold: 100, items: [['capsula_energia', 3]] },
+  },
+
   // ---- Missões secundárias: uma por zona. Liberadas após o início da missão principal. ----
   sq_cache: {
     title: 'Fio para os Jardins', side: true,
@@ -296,7 +312,7 @@ export const QUESTS = {
 
 export const QUEST_ORDER = [
   'q_primeiros_reparos', 'sq_cache', 'q_caminho_registros', 'sq_regs', 'q_forja', 'sq_alu',
-  'q_pipeline', 'sq_pipe', 'q_memoria', 'sq_mem', 'q_barramento', 'sq_bus', 'q_nucleo',
+  'q_pipeline', 'sq_pipe', 'q_memoria', 'sq_mem', 'q_barramento', 'sq_bus', 'q_nucleo', 'sq_nucleo',
 ];
 
 // Diálogos. Cada NPC tem uma lista de "cenas". A primeira cuja condição "when" é atendida é usada.
@@ -521,6 +537,18 @@ export const NPCS = {
     name: 'Arquivista', color: '#e1c6ff',
     scenes: [
       {
+        when: { quest: 'sq_nucleo', stage: 2 },
+        lines: [{ s: 'Arquivista', t: 'O selo ressoa. O Vigia está ouvindo você agora, bit.' }],
+        actions: [{ set: 'sq_nucleo_done' }],
+      },
+      {
+        when: { quest: 'sq_nucleo', stage: 0, gate: { quest: 'q_nucleo', minStage: 1 } },
+        lines: [
+          { s: 'Arquivista', t: 'Antes do Vigia decidir, ele precisa ouvir alguém. Há um selo dele guardado no fundo do núcleo.' },
+        ],
+        actions: [{ set: 'sq_nucleo_talk' }, { start: 'sq_nucleo' }],
+      },
+      {
 
         lines: [
           { s: 'Arquivista', t: 'Você conseguiu. Esse é o Anel Zero, o último anel de privilégio do processador.' },
@@ -590,5 +618,24 @@ export const ENDINGS = {
     { s: 'Narrador', t: 'FINAL DA GUERRA. O processador funciona de novo, mas nenhuma trilha lembra o que se perdeu.' },
   ],
 };
+
+// Texto do final conforme a missão extra do Núcleo foi cumprida (state.flags.sq_nucleo_done)
+export function endingLines(kind, flags = {}) {
+  const base = [...ENDINGS[kind]];
+  const selo = !!flags.sq_nucleo_done;
+  if (kind === 'paz' && selo) {
+    base.splice(base.length - 1, 0, { s: 'Vigia', t: 'Os selos que você trouxe são as minhas próprias chaves. Eu guardo uma cópia sua no anel.' });
+  }
+  if (kind === 'paz' && !selo) {
+    base.splice(base.length - 1, 0, { s: 'Vigia', t: 'Você voltou sem ouvir a minha voz. A paz existe, mas ainda está incompleta.' });
+  }
+  if (kind === 'guerra' && selo) {
+    base.splice(1, 0, { s: 'Bit', t: 'O selo dizia que você queria ser ouvido. Eu vou lembrar disso.' });
+  }
+  if (kind === 'guerra' && !selo) {
+    base.splice(1, 0, { s: 'Narrador', t: 'Sem ouvir o Vigia, o novo núcleo nasce surdo. Nenhum selo ecoa nas trilhas.' });
+  }
+  return base;
+}
 
 export const ENDING_RESUME = 'Obrigado por jogar Anel Zero! Os caminhos restantes continuam abertos.';

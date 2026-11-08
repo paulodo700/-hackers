@@ -12,6 +12,9 @@ export const settings = {
   vibe: true,
   text: 'normal', // normal | lg | xl
   hc: false,      // alto contraste
+  volMusic: 1,    // volume da trilha (0 a 1)
+  volSfx: 1,      // volume dos efeitos (0 a 1)
+  captions: true, // legendas visuais para sons importantes
 };
 
 export function loadSettings() {

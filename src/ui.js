@@ -7,7 +7,9 @@ import {
 import { ITEMS, RARITY, QUESTS, QUEST_ORDER, CODEX, SKILL_TREE, SKILLS, RECIPES, SHOP } from './data/content.js';
 import { drawItemIcon } from './textures.js';
 import { settings, saveSettings, applySettings, TEXT_SIZES, announce } from './settings.js';
-import { setSoundEnabled, sfx } from './audio.js';
+import { setSoundEnabled, setVolume, sfx } from './audio.js';
+import { focusFirst } from './nav.js';
+import { isVisited } from './state.js';
 
 const el = (id) => document.getElementById(id);
 
@@ -24,8 +26,38 @@ export function updateHud() {
   el('txt-lvl').textContent = `Nv ${state.level} · ${state.gold} cr${state.skillPoints ? ` · ◆${state.skillPoints}` : ''}`;
 }
 
-export function setZoneName(name) {
-  el('zone-name').textContent = name;
+export function setZoneName(name, best = 0) {
+  el('zone-name').textContent = best ? `${name} · ★ ${best}` : name;
+}
+
+// Minimapa: só mostra o que o jogador já visitou (névoa de guerra)
+export function drawMinimap(zone, tile) {
+  const c = el('minimap');
+  if (!c || !zone) return;
+  const g = c.getContext('2d');
+  const cw = c.width / zone.cols, ch = c.height / zone.rows;
+  g.fillStyle = '#04111a';
+  g.fillRect(0, 0, c.width, c.height);
+  const portals = new Set(zone.portals.map((p) => `${p.c},${p.r}`));
+  for (let r = 0; r < zone.rows; r++) {
+    for (let col = 0; col < zone.cols; col++) {
+      if (!isVisited(zone.id, col, r)) continue;
+      const k = zone.map[r][col];
+      if (k === '#') g.fillStyle = '#2a3a48';
+      else if (k === '~') g.fillStyle = '#1b6f80';
+      else if (k === '_') g.fillStyle = '#000000';
+      else g.fillStyle = zone.theme.trace + '66';
+      g.fillRect(col * cw, r * ch, cw, ch);
+      if (portals.has(`${col},${r}`)) {
+        g.fillStyle = zone.theme.accent;
+        g.fillRect(col * cw + cw * 0.25, r * ch + ch * 0.25, cw * 0.5, ch * 0.5);
+      }
+    }
+  }
+  if (tile) {
+    g.fillStyle = '#ffffff';
+    g.beginPath(); g.arc((tile.c + 0.5) * cw, (tile.r + 0.5) * ch, Math.max(3, cw * 0.45), 0, Math.PI * 2); g.fill();
+  }
 }
 
 export function updateQuestBox() {
@@ -176,6 +208,7 @@ export function openMenu(tab, actions = {}) {
   if (tab) menuTab = tab;
   el('menu').classList.remove('hidden');
   renderMenu();
+  focusFirst('#menu .tab.active');
 }
 
 export function closeMenu() {
@@ -403,6 +436,23 @@ function renderConfig(body) {
     saveSettings();
     renderMenu();
   }));
+  const pct = (v) => `${Math.round(v * 100)}%`;
+  const nextVol = (v) => (v >= 1 ? 0 : v >= 0.5 ? 1 : 0.5);
+  body.appendChild(setting('Volume da trilha', 'Música de fundo e de batalha.', pct(settings.volMusic), () => {
+    setVolume('music', nextVol(settings.volMusic));
+    saveSettings();
+    renderMenu();
+  }));
+  body.appendChild(setting('Volume dos efeitos', 'Passos, golpes, baús e vitória.', pct(settings.volSfx), () => {
+    setVolume('sfx', nextVol(settings.volSfx));
+    saveSettings();
+    renderMenu();
+  }));
+  body.appendChild(setting('Legendas visuais', 'Mostra na tela os sons importantes (baú, vitória, bloqueio).', settings.captions ? 'Ligadas' : 'Desligadas', () => {
+    settings.captions = !settings.captions;
+    saveSettings();
+    renderMenu();
+  }));
   body.appendChild(setting('Alto contraste', 'Fundo preto, bordas e textos de alto contraste.', settings.hc ? 'Ligado' : 'Desligado', () => {
     settings.hc = !settings.hc;
     applySettings();
@@ -419,7 +469,7 @@ function renderConfig(body) {
 // Ligações de abas
 export function bindMenuUI() {
   document.querySelectorAll('.tab[data-tab]').forEach((b) => {
-    b.addEventListener('click', () => { menuTab = b.dataset.tab; renderMenu(); });
+    b.addEventListener('click', () => { menuTab = b.dataset.tab; renderMenu(); b.focus(); });
   });
 }
 
@@ -433,6 +483,7 @@ export function openShop(mode, { title = 'Caixa de Peças', onChange } = {}) {
   el('shop-title').textContent = title;
   el('shop').classList.remove('hidden');
   renderShop();
+  focusFirst('#shop .tab.active');
 }
 
 export function closeShop() {

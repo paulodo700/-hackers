@@ -8,6 +8,7 @@ import {
 import { drawEnemyArt } from './textures.js';
 import { sfx } from './audio.js';
 import { vibrate } from './settings.js';
+import { INTENTS, PHASE2_ATK, dmgFrom, pickIntent as pickIntentRule, shouldEnterPhase2 } from './combat.js';
 
 const el = (id) => document.getElementById(id);
 let active = null;
@@ -78,17 +79,8 @@ function cmd(label, onClick, disabled = false, title = '') {
 
 // ---- Intenção do inimigo ----
 // Escolhe o próximo golpe e mostra ao jogador antes da sua escolha.
-const INTENTS = {
-  normal: { text: 'Vai atacar.', mult: 1 },
-  pesado: { text: '⚠ Prepara um golpe pesado!', mult: 1.8 },
-  reparar: { text: 'Vai se reparar (+15 HP).', mult: 0 },
-};
-
 function pickIntent() {
-  const e = active.def;
-  if (active.phase2 && Math.random() < 0.4) return 'pesado';
-  if (e.boss && active.eHp < e.hp * 0.3 && Math.random() < 0.35) return 'reparar';
-  return Math.random() < 0.22 ? 'pesado' : 'normal';
+  return pickIntentRule({ boss: !!active.def.boss, eHp: active.eHp, maxHp: active.def.hp, phase2: active.phase2 });
 }
 
 function showIntent() {
@@ -100,6 +92,8 @@ function renderCmds() {
   const box = el('battle-cmds');
   box.innerHTML = '';
   if (!active || active.busy || active.over) return;
+  // Navegação por teclado: foca o primeiro comando disponível (após os botões serem criados)
+  setTimeout(() => { const f = box.querySelector('button:not([disabled])'); if (f && !box.contains(document.activeElement)) f.focus(); }, 0);
   if (active.menu === 'skills') {
     for (const s of SKILLS) {
       const ok = state.level >= s.level;
@@ -128,10 +122,6 @@ function renderCmds() {
   box.appendChild(cmd('Fugir', () => playerFlee(), active.def.boss, active.def.boss ? 'Chefes não permitem fuga.' : 'Chance de escapar.'));
 }
 
-function dmgFrom(attack, defense, mult = 1) {
-  const base = attack * mult - defense * 0.6;
-  return Math.max(1, Math.round(base * rand(0.9, 1.1)));
-}
 
 function damageEnemy(d, label, kind = '') {
   active.eHp -= d;
@@ -205,7 +195,7 @@ function afterPlayerAction() {
   bars();
   if (active.eHp <= 0) return victory();
   // Segunda fase: chefe com menos da metade da vida
-  if (active.def.boss && !active.phase2 && active.eHp <= active.def.hp * 0.5) {
+  if (shouldEnterPhase2(!!active.def.boss, active.eHp, active.def.hp, active.phase2)) {
     active.phase2 = true;
     el('enemy-art').classList.add('phase2');
     log(`${active.def.name} entra na FASE 2! Ataque aumentado.`, 'hit');
@@ -230,7 +220,7 @@ function enemyTurn() {
     sfx('heal');
     bars();
   } else {
-    const mult = INTENTS[intent].mult * (active.phase2 ? 1.15 : 1);
+    const mult = INTENTS[intent].mult * (active.phase2 ? PHASE2_ATK : 1);
     let d = dmgFrom(e.atk, def(), mult);
     if (active.guard) { d = Math.max(1, Math.round(d * 0.45)); active.guard = false; }
     state.hp -= d;

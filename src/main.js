@@ -2,14 +2,15 @@
 import * as THREE from 'three';
 import { ZONES, START_ZONE } from './data/zones.js';
 import {
-  NPCS, QUESTS, ENEMIES, ITEMS, INTRO_TEXT, ENDINGS, VIGIA_CHOICE, VIGIA_CHOICES, ENDING_RESUME,
+  NPCS, QUESTS, ENEMIES, ITEMS, INTRO_TEXT, endingLines, VIGIA_CHOICE, VIGIA_CHOICES, ENDING_RESUME,
 } from './data/content.js';
 import {
   state, resetState, saveGame, loadGame, hasSave, maxHp, maxEn, gainXp, addItem,
   setFlag, hasFlag, bump, meets, questStage, startQuest, checkQuests,
   discoverZone, clampVitals, activeQuestId, sceneMatches, questStatus,
+  SLOT_COUNT, setSlot, slotInfo, deleteSlot, migrateLegacySave, markVisited, repairBestOf,
 } from './state.js';
-import { buildZone } from './world.js';
+import { buildZone, TILE } from './world.js';
 import {
   createMarkerEntities, createRoamers, updateRoamers, animateEntities, refreshEntity, removeEntity,
 } from './entities.js';
@@ -17,10 +18,11 @@ import { createPlayer } from './player.js';
 import { createInput } from './input.js';
 import * as UI from './ui.js';
 import { startBattle, closeBattleScreen, isBattleOpen } from './battle.js';
-import { startRepair, isRepairOpen, bindRepairUI, repairDebug } from './repair.js';
+import { startRepair, isRepairOpen, bindRepairUI, repairDebug, REPAIR_TUTORIAL } from './repair.js';
+import { initNav, focusFirst } from './nav.js';
 import { CHEST_LOOT, requirementText } from './loot.js';
 import { settings, loadSettings, applySettings, saveSettings, vibrate } from './settings.js';
-import { unlockAudio, sfx, setMusicZone, setSoundEnabled } from './audio.js';
+import { unlockAudio, sfx, setMusicZone, setSoundEnabled, MAX_OUT } from './audio.js';
 
 const el = (id) => document.getElementById(id);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -80,6 +82,10 @@ let camDist = 11;
 let lastTile = null;
 let prompt = null;
 let bgYaw = 0;
+let talkingEntity = null; // NPC que está falando agora (anima o rosto)
+let minimapTick = 0;
+// Sinalizadores de depuração usados pelos testes (desligam encontros aleatórios)
+const debugFlags = { noEncounters: false };
 
 // ---------- Utilidades ----------
 function autosave() {
@@ -148,7 +154,7 @@ function loadZone(id, fromId = null, tile = null, quiet = false) {
     state.zone = id;
     discoverZone(id);
     if (id === 'core') setFlag('entered_core');
-    UI.setZoneName(def.name);
+    UI.setZoneName(def.name, repairBestOf(id));
     UI.toast(def.name, 2400);
     UI.updateQuestBox();
     UI.updateHud();
@@ -213,7 +219,8 @@ function interact(e) {
       const q = QUESTS[aid];
       lines.push({ s: 'Diário', t: `Objetivo — ${q.title}: ${q.stages[questStage(aid)].text}` });
     }
-    UI.openDialog(lines, () => applyActions(sc.actions));
+    talkingEntity = e;
+    UI.openDialog(lines, () => { talkingEntity = null; applyActions(sc.actions); });
     return;
   }
   if (e.type === 'bench') {
@@ -235,6 +242,8 @@ function interact(e) {
   }
   if (e.type === 'repair') {
     if (hasFlag(`repaired_${e.id}`)) return UI.toast('Esta trilha já foi restaurada.');
+    // Primeira vez no reparo: mostra o tutorial antes de abrir o tabuleiro
+    if (!hasFlag('tut_repair')) return UI.openDialog(REPAIR_TUTORIAL, () => { setFlag('tut_repair'); interact(e); });
     const cfg = REPAIR_CFG[zone.id] || REPAIR_CFG.cache;
     startRepair({
       size: cfg.size,
@@ -246,6 +255,7 @@ function interact(e) {
         if (!ok) { sfx('locked'); return UI.toast(reason === 'timeout' ? 'Tempo esgotado. Tente de novo.' : 'Reparo interrompido.'); }
         setFlag(`repaired_${e.id}`);
         bump(`repair_${zone.id}`);
+        UI.setZoneName(zone.name, repairBestOf(zone.id));
         refreshEntity(e);
         const xp = 20 + Math.round(score / 50);
         gainXp(xp);
@@ -281,7 +291,7 @@ function interactVigia(e) {
 }
 
 function playEnding(kind) {
-  const lines = ENDINGS[kind];
+  const lines = endingLines(kind, state.flags);
   UI.openDialog(lines, () => {
     setFlag(`ending_${kind}`);
     UI.toast(ENDING_RESUME, 4200);
@@ -404,7 +414,8 @@ bindRepairUI();
 
 // ---------- Título ----------
 function showScreen(id) {
-  for (const s of ['title', 'menu', 'battle', 'repair', 'controls', 'shop']) el(s).classList.toggle('hidden', s !== id);
+  for (const s of ['title', 'slots', 'menu', 'battle', 'repair', 'controls', 'shop']) el(s).classList.toggle('hidden', s !== id);
+  if (id) focusFirst(`#${id}`);
 }
 
 function enterGame() {
@@ -419,7 +430,14 @@ function updateTouchVisibility() {
   el('touch').style.display = running && input.touchEnabled ? 'block' : 'none';
 }
 
-el('btn-new').addEventListener('click', () => {
+// ---------- Título, slots e áudio ----------
+function formatDate(iso) {
+  if (!iso) return '—';
+  try { return new Date(iso).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }); } catch (e) { return '—'; }
+}
+
+function startNewGame(n) {
+  setSlot(n);
   unlockAudio();
   resetState();
   showScreen(null);
@@ -429,17 +447,66 @@ el('btn-new').addEventListener('click', () => {
   UI.openDialog(INTRO_TEXT, () => {
     UI.toast('Use WASD/Setas ou o joystick para explorar. N liga e desliga o som.', 3800);
   });
-});
+}
 
-el('btn-continue').addEventListener('click', () => {
+function continueGame(n) {
   unlockAudio();
-  if (!loadGame()) return;
+  if (!loadGame(n)) { UI.toast('Este slot não pôde ser lido.'); return; }
   showScreen(null);
   const pos = state.pos && ZONES[state.zone] ? state.pos : null;
   loadZone(ZONES[state.zone] ? state.zone : START_ZONE, null, pos, false);
   enterGame();
-});
+}
 
+// Lista os três slots: continuar/novo e apagar (com confirmação em dois cliques)
+function renderSlots() {
+  const list = el('slots-list');
+  list.innerHTML = '';
+  for (let n = 1; n <= SLOT_COUNT; n++) {
+    const info = slotInfo(n);
+    const row = document.createElement('div');
+    row.className = 'slot-row';
+    const txt = document.createElement('div');
+    txt.className = 'info';
+    if (info) {
+      txt.innerHTML = `<b>Slot ${n}</b><br>`;
+      txt.append(`${ZONES[info.zone]?.name || info.zone} · Nv ${info.level} · ${info.gold} cr`);
+      txt.append(document.createElement('br'), `Salvo em ${formatDate(info.savedAt)}`);
+    } else {
+      txt.innerHTML = `<b>Slot ${n}</b><br>Vazio`;
+    }
+    const acts = document.createElement('div');
+    acts.className = 'acts';
+    const main = document.createElement('button');
+    main.textContent = info ? 'Continuar' : 'Novo jogo';
+    main.setAttribute('aria-label', `${main.textContent} no slot ${n}`);
+    main.addEventListener('click', () => (info ? continueGame(n) : startNewGame(n)));
+    acts.appendChild(main);
+    if (info) {
+      const del = document.createElement('button');
+      del.textContent = 'Apagar';
+      let armed = false;
+      del.addEventListener('click', () => {
+        if (!armed) {
+          armed = true;
+          del.textContent = 'Confirmar?';
+          setTimeout(() => { armed = false; del.textContent = 'Apagar'; }, 3000);
+          return;
+        }
+        deleteSlot(n);
+        UI.toast(`Slot ${n} apagado.`);
+        renderSlots();
+        focusFirst('#slots');
+      });
+      acts.appendChild(del);
+    }
+    row.append(txt, acts);
+    list.appendChild(row);
+  }
+}
+
+el('btn-play').addEventListener('click', () => { renderSlots(); showScreen('slots'); sfx('ui'); });
+el('slots-back').addEventListener('click', () => showScreen('title'));
 el('btn-controls').addEventListener('click', () => showScreen('controls'));
 el('btn-controls-back').addEventListener('click', () => showScreen('title'));
 
@@ -447,13 +514,12 @@ el('btn-controls-back').addEventListener('click', () => showScreen('title'));
 window.addEventListener('pointerdown', () => unlockAudio(), { once: true });
 window.addEventListener('keydown', () => unlockAudio(), { once: true });
 
-// Mostra os botões de título e atualiza o aviso de save
+// Aviso no título sobre progresso salvo
 function refreshTitle() {
-  const cont = el('btn-continue');
-  cont.disabled = !hasSave();
-  el('title-hint').textContent = hasSave()
-    ? 'Progresso salvo encontrado neste navegador.'
-    : 'Dica: o progresso fica salvo no seu navegador.';
+  const any = [1, 2, 3].some((n) => hasSave(n));
+  el('title-hint').textContent = any
+    ? 'Há progresso salvo neste navegador. Escolha um slot para continuar.'
+    : 'Até três jogos separados ficam salvos neste navegador.';
 }
 
 // ---------- Laço principal ----------
@@ -503,7 +569,7 @@ function frame(now) {
 
     // Glitches que perseguem
     const hits = updateRoamers(roamers, zone, { x: player.x, z: player.z }, dt, now);
-    if (hits.length && !isBattleOpen() && !battlePending) {
+    if (hits.length && !isBattleOpen() && !battlePending && !debugFlags.noEncounters) {
       const rm = hits[0];
       rm.alive = false;
       scene.remove(rm.obj);
@@ -515,6 +581,13 @@ function frame(now) {
     player.update(dt, { moveX: 0, moveY: 0 }, zone, now);
     updateRoamers(roamers, zone, { x: player.x, z: player.z }, 0, now);
   }
+
+  // Áreas visitadas (minimapa) e expressões
+  const pt = player.tile();
+  markVisited(zone.id, pt.c, pt.r);
+  if (++minimapTick % 6 === 0) UI.drawMinimap(zone, pt);
+  player.talking = UI.isDialogOpen();
+  for (const en of entities) en.talk = en === talkingEntity && UI.isDialogOpen();
 
   // Prompt de interação
   const near = running && !busy() ? nearestEntity() : null;
@@ -541,11 +614,18 @@ window.__anelZero = {
   scene, camera, state, loadZone, beginBattle, interact, nearestEntity, repairDebug,
   get zone() { return zone; }, get player() { return player; }, get entities() { return entities; },
   get transitioning() { return transitioning; },
+  flags: debugFlags,
+  audio: () => ({ maxOut: MAX_OUT, music: settings.volMusic, sfx: settings.volSfx, captions: settings.captions }),
+  zoneFloor: () => (zone ? zone.theme.trace : null),
 };
 
 // Ajustes salvos, aplicados antes de desenhar a tela
 loadSettings();
 applySettings();
+migrateLegacySave();
+initNav();
+
+focusFirst('#title');
 
 // Carrega o fundo do título e inicia o laço
 loadZone(START_ZONE, null, null, true);

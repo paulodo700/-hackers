@@ -27,11 +27,20 @@
     <p class="blurb">Um bit de manutenção acorda no meio de um chip em colapso.
       Conserte os circuitos, reconstrua o núcleo e descubra quem apagou a memória do sistema.</p>
     <div class="menu">
-      <button id="btn-new" class="primary">Novo Jogo</button>
-      <button id="btn-continue">Continuar</button>
+      <button id="btn-play" class="primary">Jogar</button>
       <button id="btn-controls">Controles</button>
     </div>
     <p class="hint" id="title-hint"></p>
+  </div>
+</section>
+
+<!-- Escolha de slot de save (três slots) -->
+<section id="slots" class="screen hidden">
+  <div class="panel">
+    <h2>Escolha um slot</h2>
+    <p class="hint" id="slots-hint">Cada slot guarda um jogo separado neste navegador.</p>
+    <div id="slots-list"></div>
+    <div class="menu-foot"><button id="slots-back">Voltar</button></div>
   </div>
 </section>
 
@@ -44,6 +53,7 @@
       <div class="quest-obj" id="quest-obj"></div>
     </div>
   </div>
+  <canvas id="minimap" width="168" height="112" aria-label="Mapa das áreas visitadas" role="img"></canvas>
   <div class="hud-left">
     <div class="bar"><span class="label">HP</span><div class="track"><div class="fill hp" id="bar-hp"></div></div><span id="txt-hp"></span></div>
     <div class="bar"><span class="label">EN</span><div class="track"><div class="fill en" id="bar-en"></div></div><span id="txt-en"></span></div>
@@ -55,6 +65,9 @@
   </div>
   <div id="toast" class="toast hidden"></div>
 </div>
+
+<!-- Legendas visuais para sons importantes -->
+<div id="captions" aria-hidden="true"></div>
 
 <div id="prompt" class="hidden" role="status" aria-live="polite"></div>
 
@@ -81,13 +94,13 @@
 <section id="menu" class="screen hidden">
   <div class="panel">
     <h2>Sistema</h2>
-    <div class="tabs">
-      <button data-tab="status" class="tab active">Status</button>
-      <button data-tab="inv" class="tab">Inventário</button>
-      <button data-tab="skills" class="tab">Árvore</button>
-      <button data-tab="quests" class="tab">Missões</button>
-      <button data-tab="codex" class="tab">Códex</button>
-      <button data-tab="config" class="tab">Ajustes</button>
+    <div class="tabs" role="tablist">
+      <button data-tab="status" class="tab active" role="tab">Status</button>
+      <button data-tab="inv" class="tab" role="tab">Inventário</button>
+      <button data-tab="skills" class="tab" role="tab">Árvore</button>
+      <button data-tab="quests" class="tab" role="tab">Missões</button>
+      <button data-tab="codex" class="tab" role="tab">Códex</button>
+      <button data-tab="config" class="tab" role="tab">Ajustes</button>
     </div>
     <div id="menu-body"></div>
     <div class="menu-foot">
@@ -101,10 +114,10 @@
 <section id="shop" class="screen hidden">
   <div class="panel">
     <h2 id="shop-title">Caixa de Peças</h2>
-    <div class="tabs">
-      <button data-shop="buy" class="tab active">Comprar</button>
-      <button data-shop="sell" class="tab">Vender</button>
-      <button data-shop="craft" class="tab">Criar</button>
+    <div class="tabs" role="tablist">
+      <button data-shop="buy" class="tab active" role="tab">Comprar</button>
+      <button data-shop="sell" class="tab" role="tab">Vender</button>
+      <button data-shop="craft" class="tab" role="tab">Criar</button>
     </div>
     <p class="hint" id="shop-gold"></p>
     <div id="shop-body"></div>
@@ -142,9 +155,11 @@
       <span id="rp-timer" class="hidden"></span>
       <span id="rp-moves"></span>
       <span id="rp-score"></span>
+      <span id="rp-best"></span>
     </div>
+    <button id="rp-hard" class="rp-hard" aria-pressed="false">Modo difícil (H)</button>
     <p class="hint" id="rp-help"></p>
-    <canvas id="rp-canvas" width="480" height="480"></canvas>
+    <canvas id="rp-canvas" width="480" height="480" aria-label="Tabuleiro do reparo. Setas movem o cursor, Enter gira."></canvas>
     <div class="menu-foot">
       <button id="rp-cancel">Cancelar</button>
     </div>
@@ -161,7 +176,9 @@
       <li><b>Câmera:</b> arraste com o botão direito · arraste a metade direita da tela</li>
       <li><b>Menu:</b> M / Esc · botão MENU</li>
       <li><b>Som:</b> N liga e desliga o som</li>
-      <li><b>Reparo:</b> clique nos segmentos para girá-los. Fusíveis queimam ao ser energizados.</li>
+      <li><b>Menus:</b> Tab e setas navegam · Enter ativa · Esc volta</li>
+      <li><b>Escolhas:</b> 1, 2 ou 3 · ou Tab + Enter</li>
+      <li><b>Reparo:</b> clique ou setas + Enter · H modo difícil · Esc cancela</li>
     </ul>
     <div class="menu-foot"><button id="btn-controls-back">Voltar</button></div>
   </div>

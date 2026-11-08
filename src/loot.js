@@ -18,6 +18,7 @@ export const CHEST_LOOT = {
   mem_c1: [['pasta_termica', 2]],
   mem_c2: [['capsula_energia', 2]],
   mem_c3: [['capacitor', 2], ['kit_solda', 1]],
+  core_selo: [['selo_vigia', 1]],
   mem_frag1: [['fragmento_memoria', 1]],
   mem_frag2: [['fragmento_memoria', 1]],
   mem_frag3: [['fragmento_memoria', 1]],

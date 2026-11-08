@@ -2,6 +2,7 @@
 // Ações de animação: 'attack', 'victory', 'hurt'. Repouso: respiração e piscar do visor.
 import * as THREE from 'three';
 import { TILE } from './world.js';
+import { createFace } from './face.js';
 
 const RADIUS = 0.32;
 const SPEED = 4.2;
@@ -83,6 +84,10 @@ export function createPlayer(scene) {
   bodyPivot.add(box(0.1, 0.06, 0.36, shellDark, 0, 1.79, 0));       // crista
   const visor = box(0.3, 0.1, 0.04, visorMat, 0, 1.62, 0.18);
   bodyPivot.add(visor);
+  // Rosto no visor: olhos que piscam, boca que se move ao falar
+  const face = createFace({ width: 0.28, height: 0.1, color: '#1fe6d0' });
+  face.mesh.position.set(0, 1.62, 0.205);
+  bodyPivot.add(face.mesh);
   bodyPivot.add(box(0.26, 0.02, 0.02, trace, 0, 1.62, 0.2));        // faixa de luz
   bodyPivot.add(box(0.05, 0.1, 0.36, shellDark, 0.19, 1.6, 0));     // orelhas laterais
   bodyPivot.add(box(0.05, 0.1, 0.36, shellDark, -0.19, 1.6, 0));
@@ -115,6 +120,10 @@ export function createPlayer(scene) {
     ring,
     visorMat,
     walk: 0,
+    face,
+    talking: false,
+    mood: 'neutral',
+    moodT: 0,
     action: null,      // { name, t, dur }
     stepAcc: 0,
     stepReady: false,
@@ -142,6 +151,8 @@ export function createPlayer(scene) {
     const dur = { attack: 0.45, victory: 1.2, hurt: 0.35 }[name];
     if (!dur) return;
     p.action = { name, t: 0, dur };
+    p.mood = name === 'hurt' ? 'hurt' : name === 'victory' ? 'happy' : 'neutral';
+    p.moodT = dur;
   };
 
   // Retorna true uma vez por passo dado (para o som)
@@ -229,6 +240,9 @@ export function createPlayer(scene) {
     // Piscar do visor a cada ~4 segundos
     const blink = (t % 4000) < 120 ? 0.2 : 1;
     visorMat.emissiveIntensity = (1.2 + Math.sin(t * 0.006) * 0.4) * blink;
+    // Expressão volta a neutra quando a ação termina
+    if (p.moodT > 0) { p.moodT -= dt; if (p.moodT <= 0) p.mood = 'neutral'; }
+    face.update(t, { talk: p.talking, mood: p.mood });
   };
 
   p.tile = () => ({ c: Math.round(p.x / TILE), r: Math.round(p.z / TILE) });
