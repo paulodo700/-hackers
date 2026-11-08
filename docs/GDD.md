@@ -206,6 +206,33 @@ Outras mudanças anteriores: Sobrecarga com 150 de vida e 14 de ataque; Titã co
 
 Os testes de ponta a ponta cobrem: título e slots, migração do save antigo, save corrompido, portais e bloqueios, missões principal e extra, batalha vencida, derrota (volta ao ponto seguro e perde 10% dos créditos), fuga (bloqueada contra chefes), intenção do inimigo, tutorial e reparo (resolver, modo difícil, teclado, pausa com P, tempo esgotado, fusível queimado), dificuldade salva entre reparos, minimapa, loja (compra e venda), bancada, árvore de habilidades, ajustes, legendas, medição de áudio (efeito e trilha produzem sinal, pico nunca passa de 1, volume zero silencia), paredes com desenho próprio por zona, final da paz, final da guerra, missão extra do Núcleo, navegação por teclado, rostos, layout em 360 px e FPS.
 
+## Plataformas: web para celular e Python para PC
+
+**Decisão:** o jogo tem duas versões que usam os mesmos dados e as mesmas regras.
+
+- **Versão web (raiz do repositório).** É a versão para celular e para navegador. Roda em qualquer aparelho sem instalação, com toque e tela pequena (layout adaptado, testado em 360 px). Continua recebendo as funções novas primeiro, porque é a versão mais completa.
+- **Versão Python (`python/`).** É a versão para PC, feita com Panda3D 1.10. Roda em janela 3D com teclado, sem depender de navegador. Não é alvo de celular: o Panda3D não tem build para Android ou iOS neste projeto.
+
+**Por que as duas:** a versão web atinge celular, que é a plataforma principal do público. A versão Python dá mais controle sobre desempenho e iluminação no PC e serve de base para o cliente de mesa. As regras não são escritas duas vezes: o conteúdo (itens, inimigos, missões, falas) é exportado da versão web por `tools/export_data.mjs` para JSON, e os mapas são gerados com o mesmo algoritmo e conferidos byte a byte por teste (`python/tests/test_mapgen.py`).
+
+**O que é igual nas duas:** conteúdo, mapas, regras de combate e de missões, saves em formato compatível (versão 3, com migração das versões 1 e 2) e a lógica de diálogos.
+
+**O que é diferente:**
+
+| Parte | Web | Python (PC) |
+|---|---|---|
+| Plataforma | navegador, celular e PC | janela de PC |
+| Renderização | Three.js | Panda3D, malha única por zona |
+| Reparo (puzzle de cruzamentos) | sim | ainda não; reparo é instantâneo no Python |
+| Batalhas por turno | sim | ainda não no Python (há só a luta em tempo real) |
+| Loja | sim | ainda não no Python |
+| Áudio | síntese procedural | ainda não no Python (sem som) |
+| Saves | localStorage por slot | arquivos JSON em `~/.anelzero/saves` |
+
+**Estado do cliente Python:** título, cena de abertura com o Vigia, exploração 3D com colisão, coleta de itens, portais entre zonas, NPCs com diálogo digitado e escolhas numeradas, baús, reparo, combate em tempo real (F), inimigos com barra de vida e partículas, menus (status, inventário com usar/equipar/vender, habilidades, missões e viagem rápida), minimapa com névoa, e salvamento em três slots. Os testes headless rodam o cliente sob `xvfb-run` e cobrem título, coleta, portal, salvamento, diálogo, combate, menu e minimapa.
+
+**Limites conhecidos do cliente Python:** sombras são manchas de contato (não sombra projetada em tempo real); o céu em gradiente existe mas só aparece quando a câmera olha para cima; o áudio ainda não existe.
+
 ## Estado atual
 
 - sete zonas, cada uma com piso e paredes de desenho próprio (hexágonos, engrenagens, faixas, tijolos, radial etc.), decoração, trilha musical e portais com halo e rótulo do destino;
@@ -217,6 +244,7 @@ Os testes de ponta a ponta cobrem: título e slots, migração do save antigo, s
 - missão extra do Núcleo (Vozes do Vigia), com os finais da paz e da guerra mudando conforme ela foi cumprida;
 - áudio medido: volume separado para trilha e efeitos, legendas visuais para sons importantes, pico de saída limitado e silêncio com volume zero (verificado com um medidor de saída no teste);
 - navegação por teclado em título, slots, menu, loja, batalha, diálogos e reparo, com foco visível;
+- Cliente Python (PC) com exploração, diálogos, combate em tempo real, menus e salvamento, testado em modo headless (ver seção Plataformas)
 - FPS medido em 360 px com renderização por software: cerca de 25 quadros por segundo (informativo; em aparelho real o valor será outro).
 
 ## Rodada 5 (resumo)
@@ -236,3 +264,4 @@ Os testes de ponta a ponta cobrem: título e slots, migração do save antigo, s
 - **Dificuldade das batalhas não calibrada com jogadores.** Fácil, normal e difícil mudam o dano dos inimigos (×0,75, ×1, ×1,25) e a chance de drop (×1,25, ×1, ×0,8), mas os valores não foram testados com pessoas. O simulador só mede o modo normal.
 - **Vibração** depende do navegador; no PC não tem efeito.
 - **Dependência de ambiente.** O Playwright está declarado em `devDependencies` na versão 1.63.0, mas o Chromium precisa ser instalado com `npm run install:browser` em outra máquina. No ambiente de desenvolvimento deste projeto, ele já estava disponível.
+- **Cliente Python incompleto.** Faltam as batalhas por turno, a loja, o reparo com puzzle, o áudio e as cenas de história além da abertura. Cada uma está descrita em Plataformas.

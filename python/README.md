@@ -22,6 +22,13 @@ python3 -m unittest discover -s tests -v
 ```
 Os testes cobrem geração de mapas (paridade com o JavaScript), estado e salvamento, regras de combate, alcance das zonas e colisão.
 
+Os testes do cliente (`tests/test_client.py`) abrem o jogo sem tela e simulam teclas. Eles precisam de um display virtual:
+```
+xvfb-run -a -s "-screen 0 1280x720x24" python3 -m unittest discover -s tests -v
+```
+
+Capturas de tela para conferir o visual: `python -m anelzero --novo --shot tela.png` (tela de jogo, pulando o título).
+
 ## Estrutura
 - `anelzero/data/` — JSON exportado da versão JS por `tools/export_data.mjs`
 - `anelzero/mapgen.py` — gerador determinístico de mapas
