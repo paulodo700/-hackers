@@ -12,6 +12,7 @@ from . import settings as T
 KINDS = ("item", "enemy", "skill", "talent")
 NEUTRAL_ZONE = "neutra"
 ICON_SIZE = 160
+ICON_VERSION = 2  # sobe quando os modelos mudam (invalida o cache antigo)
 SHAPE_BY_SLOT = {"weapon": "blade", "armor": "plate", "consumable": "capsule", "key": "chip", "material": "cluster"}
 
 
@@ -55,7 +56,7 @@ def icon_file(kind, ident, zone_id=None, root=None):
         raise ValueError(f"tipo de ícone desconhecido: {kind}")
     base = pathlib.Path(root) if root else cache_root()
     zone = zone_id if zone_id in C.ZONES else NEUTRAL_ZONE
-    return base / zone / f"{kind}_{ident}.png"
+    return base / zone / f"{kind}_{ident}_v{ICON_VERSION}.png"
 
 
 def item_shape(item_id):

@@ -64,6 +64,64 @@ class Mesh:
         self.quad([(x0, y0, z0), (x0, y1, z0), (x0, y1, z1), (x0, y0, z1)], (-1, 0, 0), col)
         self.quad([(x1, y0, z0), (x1, y1, z0), (x1, y1, z1), (x1, y0, z1)], (1, 0, 0), col)
 
+    def tri(self, pts, normal, col):
+        """Triângulo com a mesma orientação automática de quad()."""
+        a, b, c = pts
+        cr = _cross((b[0] - a[0], b[1] - a[1], b[2] - a[2]), (c[0] - a[0], c[1] - a[1], c[2] - a[2]))
+        if cr[0] * normal[0] + cr[1] * normal[1] + cr[2] * normal[2] < 0:
+            pts = [a, c, b]
+        base = len(self.verts)
+        for p in pts:
+            self.verts.append(p)
+            self.normals.append(normal)
+            self.colors.append(col)
+        self.tris.append((base, base + 1, base + 2))
+
+    def cone(self, cx, cy, z0, z1, r0, r1, col, sides=12, caps=True):
+        """Cilindro ou cone (raio r0 em z0 e r1 em z1), com tampas planas."""
+        import math
+        ring0, ring1 = [], []
+        for i in range(sides):
+            a = 2 * math.pi * i / sides
+            ca, sa = math.cos(a), math.sin(a)
+            ring0.append((cx + ca * r0, cy + sa * r0, z0))
+            ring1.append((cx + ca * r1, cy + sa * r1, z1))
+        for i in range(sides):
+            j = (i + 1) % sides
+            a = 2 * math.pi * (i + .5) / sides
+            n = (math.cos(a), math.sin(a), 0.0)
+            self.quad([ring0[i], ring0[j], ring1[j], ring1[i]], n, col)
+        if caps:
+            top = (cx, cy, z1)
+            bottom = (cx, cy, z0)
+            for i in range(sides):
+                j = (i + 1) % sides
+                if r1 > 0:
+                    self.tri([top, ring1[i], ring1[j]], (0, 0, 1), col)
+                if r0 > 0:
+                    self.tri([bottom, ring0[j], ring0[i]], (0, 0, -1), col)
+
+    def sphere(self, cx, cy, cz, r, col, rings=6, sides=10):
+        """Esfera em faixas (latitude e longitude)."""
+        import math
+        pts = []
+        for ri in range(rings + 1):
+            phi = math.pi * ri / rings
+            row = []
+            for si in range(sides):
+                th = 2 * math.pi * si / sides
+                row.append((math.sin(phi) * math.cos(th), math.sin(phi) * math.sin(th), math.cos(phi)))
+            pts.append(row)
+        for ri in range(rings):
+            for si in range(sides):
+                sj = (si + 1) % sides
+                a, b = pts[ri][si], pts[ri][sj]
+                c, d = pts[ri + 1][sj], pts[ri + 1][si]
+                P = lambda u: (cx + u[0] * r, cy + u[1] * r, cz + u[2] * r)  # noqa: E731
+                self.quad([P(a), P(b), P(c), P(d)], ((a[0] + b[0] + c[0] + d[0]) / 4,
+                                                      (a[1] + b[1] + c[1] + d[1]) / 4,
+                                                      (a[2] + b[2] + c[2] + d[2]) / 4), col)
+
     def disc(self, cx, cy, z, r, col, segments=14):
         """Disco plano (usado nas sombras): centro transparente só na borda."""
         edge = (col[0], col[1], col[2], 0.0)

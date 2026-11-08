@@ -336,3 +336,19 @@ Cada sistema novo foi medido com os dois robôs, cada um no seu motor. `tools/be
 Observação: a medição acima é do estado do commit `b2ab640`, que reúne os três sistemas (o commit foi feito de uma vez, e não separado por sistema). Por isso não há uma medição isolada para cada um deles. Os próximos sistemas serão commitados e medidos separadamente.
 
 **Ajuste do áudio pelo que se ouve: pendente.** Os arquivos estão em `python/audio_samples/` e as medições de pico, duração e RMS estão na Rodada 10. O volume de cada efeito só pode ser decidido ouvindo: este ambiente não tem dispositivo de som.
+
+## Rodada 12: modelos 3D próprios de itens e inimigos
+
+- **Modelos únicos:** cada um dos 18 itens e dos 9 inimigos (mais o Vigia, que reaproveita o modelo da abertura) tem construção própria, em `python/anelzero/models.py`. As formas usam cilindros, cones, esferas e triângulos (novas primitivas em `scene.Mesh`), não só caixas. Exemplos: fio de cobre em hélice de tubo, pinça com mandíbulas curvas, liga com chanfros e marcas de fundição, cápsula com tampas esféricas, placa de circuito com trilhas e chip, Sobrecarga como núcleo com espinhos.
+- **Enquadramento automático dos ícones:** cada modelo é centralizado e escalado para caber no quadro (antes, itens altos saíam cortados).
+- **Cache versionado:** os ícones mudaram de nome (`_v2`), para não reaproveitar imagens da versão anterior.
+- **Limite honesto:** o trabalho ainda não está no nível de detalhe pedido ("extremos detalhes", "formas bonitas"). Várias silhuetas são simples (pulga, ruído, bloco, larva, espectro). Telas 3D, animações de ataque e movimento, e variantes de armadura por zona ainda não foram feitos.
+
+### Desempenho medido nesta rodada
+
+| Robô | Motor e condição | Resultado |
+|---|---|---|
+| `tools/bench_shadows.py` | Panda3D, Xvfb, CPU; sombra desligada / ligada | 6,08 / 13,13 ms por quadro (+7,06 ms, +116%) |
+| `tests/perf.mjs` | Chromium headless, 360×740, software; cena inteira / só o jogador | 30,3 FPS (52 chamadas, 10 560 triângulos) / 60,2 FPS |
+
+Os dois motores não se comparam entre si. As variações em relação à rodada 11 estão no ruído da máquina.

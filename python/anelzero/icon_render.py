@@ -13,40 +13,16 @@ from . import scene as SC
 
 
 def _item_node(item_id, color):
-    shape = I.item_shape(item_id)
-    mesh = SC.Mesh()
-    c = SC.hex_rgba(color)
-    dark = SC.mix(c[:3], (0, 0, 0), 0.35) + (1.0,)
-    light = SC.mix(c[:3], (1, 1, 1), 0.35) + (1.0,)
-    if shape == "blade":
-        mesh.box(-.07, -.07, -0.5, .07, .07, 1.3, c)
-        mesh.box(-.3, -.09, -0.2, .3, .09, -0.05, dark)  # guarda
-    elif shape == "plate":
-        mesh.box(-.5, -.38, 0, .5, .38, .9, c)
-        mesh.box(-.5, -.4, .75, .5, .4, .9, light)
-    elif shape == "capsule":
-        for i, (w, z0, z1) in enumerate([(.36, 0, .25), (.42, .25, .55), (.36, .55, .85)]):
-            mesh.box(-w / 2, -w / 2, z0, w / 2, w / 2, z1, c if i != 1 else light)
-        mesh.box(-.1, -.1, .85, .1, .1, 1.05, dark)
-    elif shape == "chip":
-        mesh.box(-.6, -.6, 0, .6, .6, .14, c)
-        for dx in (-.4, 0, .4):
-            for dy in (-.4, .4):
-                mesh.box(dx - .05, dy - .05, .14, dx + .05, dy + .05, .22, light)
-    else:  # cluster: materiais
-        mesh.box(-.3, -.3, 0, .3, .3, .5, c)
-        mesh.box(.05, -.4, 0, .45, -.05, .35, light)
-        mesh.box(-.45, .05, 0, -.1, .4, .3, dark)
-    return mesh.node(f"item-{item_id}")
+    from . import models
+    return models.item_node(item_id, color)
 
 
 def _enemy_node(enemy_id, zone_id):
-    e = I.C.ENEMIES[enemy_id]
-    color = I.tinted(e["color"], zone_id)
-    scale = e.get("scale", 1.0) * (1.4 if I.enemy_is_boss(enemy_id) else 1.0)
-    body, _dark = SC.roamer_mesh(color, scale)
+    from . import models
+    color = I.tinted(I.C.ENEMIES[enemy_id]["color"], zone_id)
+    scale = 1.3 if I.enemy_is_boss(enemy_id) else 1.0
     root = NodePath(f"enemy-{enemy_id}")
-    body.reparentTo(root)
+    models.enemy_node(enemy_id, color, scale).reparentTo(root)
     return root
 
 
@@ -117,6 +93,21 @@ def _skill_node(skill_id):
     return holder
 
 
+FRAME_SIZE = 1.0  # maior dimensão do modelo dentro do quadro do ícone
+
+
+def fit_to_frame(node):
+    """Centraliza o modelo na origem e escala para que a maior dimensão caiba em FRAME_SIZE."""
+    lo, hi = node.getTightBounds()
+    if lo is None:
+        return
+    size = max(hi.x - lo.x, hi.y - lo.y, hi.z - lo.z, 1e-6)
+    k = FRAME_SIZE / size
+    center = (lo + hi) * 0.5
+    node.setScale(k)
+    node.setPos(-center.x * k, -center.y * k, -center.z * k + 0.0)
+
+
 class IconRenderer:
     def __init__(self, base, size=I.ICON_SIZE):
         self.base = base
@@ -138,7 +129,7 @@ class IconRenderer:
             lens = self.cam.node().getLens()
             lens.setFov(34)
             self.cam.setPos(2.3, -3.0, 2.0)
-            self.cam.lookAt(0, 0, 0.6)
+            self.cam.lookAt(0, 0, 0)
             amb = AmbientLight("icon-amb")
             amb.setColor((0.5, 0.55, 0.6, 1))
             self.root.setLight(self.root.attachNewNode(amb))
@@ -179,6 +170,7 @@ class IconRenderer:
         self.buf.setClearColor(bg)
         node = self._build(kind, ident, zone_id)
         node.reparentTo(self.root)
+        fit_to_frame(node)
         for _ in range(2):
             self.base.graphicsEngine.renderFrame()
         self.tex.write(Filename.from_os_specific(str(path)))

@@ -900,7 +900,8 @@ class Game(ShowBase):
                 elif kind == "boss" and m.get("id") in C.ENEMIES:
                     defeated = self.state.has_flag(f"boss_{m['id']}")
                     e = C.ENEMIES[m["id"]]
-                    body, _dark = SC.roamer_mesh(e["color"], e.get("scale", 1.0) * 1.3)
+                    from . import models
+                    body = models.enemy_node(m["id"], e["color"], 1.3)
                     node = self.zone_root.attachNewNode("boss")
                     body.reparentTo(node)
                     SC.blob_shadow(node, 0.5)
@@ -926,7 +927,8 @@ class Game(ShowBase):
 
     def _add_roamer_node(self, rm):
         root = self.zone_root.attachNewNode("roamer")
-        body, _dark = SC.roamer_mesh(rm.color, rm.scale)
+        from . import models
+        body = models.enemy_node(rm.id, rm.color, rm.scale)
         body.reparentTo(root)
         SC.blob_shadow(root, 0.35 * rm.scale)
         bar = SC.hp_bar(root, 1.25 * rm.scale, 1.0)
