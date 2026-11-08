@@ -330,7 +330,9 @@ Cada sistema novo foi medido com os dois robôs, cada um no seu motor. `tools/be
 
 | Sistema | Robô | Motor e condição | Resultado |
 |---|---|---|---|
-| Ícones de habilidades e talentos | `tools/bench_shadows.py` | Panda3D, Xvfb, CPU, sombra desligada / ligada | 5,67 / 11,45 ms por quadro (+5,79 ms, +102%) |
-| Ícones de habilidades e talentos | `tests/perf.mjs` | Chromium headless, 360×740, software | cena inteira 27,1 FPS (52 chamadas, 10 560 triângulos); só o jogador 60,2 FPS |
+| Estado após b2ab640 (ícones de habilidades e talentos, ícones na loja e Bit na abertura) | `tools/bench_shadows.py` | Panda3D, Xvfb, CPU, sombra desligada / ligada | 5,67 / 11,45 ms por quadro (+5,79 ms, +102%) |
+| Estado após b2ab640 (mesmos três sistemas) | `tests/perf.mjs` | Chromium headless, 360×740, software | cena inteira 27,1 FPS (52 chamadas, 10 560 triângulos); só o jogador 60,2 FPS |
+
+Observação: a medição acima é do estado do commit `b2ab640`, que reúne os três sistemas (o commit foi feito de uma vez, e não separado por sistema). Por isso não há uma medição isolada para cada um deles. Os próximos sistemas serão commitados e medidos separadamente.
 
 **Ajuste do áudio pelo que se ouve: pendente.** Os arquivos estão em `python/audio_samples/` e as medições de pico, duração e RMS estão na Rodada 10. O volume de cada efeito só pode ser decidido ouvindo: este ambiente não tem dispositivo de som.
