@@ -106,6 +106,18 @@ export const ENEMIES = {
     drops: [{ item: 'escudo_dissipador', chance: 0.12 }, { item: 'pinca_ressonante', chance: 0.08 }, { item: 'liga_ferrugem', chance: 0.4 }],
     lore: 'Um setor de memória que esqueceu o que era. Lento e teimoso.',
   },
+  verme: {
+    name: 'Verme de Cache', hp: 26, atk: 6, def: 2, spd: 7, xp: 14, gold: 4,
+    color: '#ffd27a', glyph: 'verme', scale: 0.8,
+    drops: [{ item: 'fio_cobre', chance: 0.5 }, { item: 'pasta_termica', chance: 0.15 }],
+    lore: 'Um verme de dados que se alimenta das trilhas de cache e deixa rastros de cobre.',
+  },
+  espectro: {
+    name: 'Espectro de Memória', hp: 40, atk: 8, def: 4, spd: 5, xp: 22, gold: 6,
+    color: '#c084fc', glyph: 'espectro', scale: 1,
+    drops: [{ item: 'liga_ferrugem', chance: 0.3 }, { item: 'capacitor', chance: 0.3 }],
+    lore: 'Uma lembrança apagada que ainda anda pela cidade dos bancos, procurando o próprio índice.',
+  },
   sobrecarga: {
     name: 'Sobrecarga', hp: 150, atk: 14, def: 4, spd: 8, xp: 90, gold: 40,
     color: '#ff7a3d', glyph: 'sobrecarga', scale: 1.3, boss: true,
@@ -577,6 +589,8 @@ export const CODEX = {
     bloco: 'Um setor de memória que esqueceu o que guardava.',
     sobrecarga: 'Tensão alta demais, consciente. Só desliga quando é derrotada.',
     ferrugem_titan: 'Oxidação que cresceu até tomar forma. Um dia foi um guardião de barramento.',
+    verme: 'Verme de dados que segue as trilhas de cache. Deixa rastros de cobre por onde passa.',
+    espectro: 'Lembrança apagada que ainda anda pela cidade dos bancos. Procura o índice que perdeu.',
     vigia: 'Guardião do processador. Protegeu Bit do colapso apagando sua memória.',
   },
 };

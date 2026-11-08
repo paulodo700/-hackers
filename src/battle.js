@@ -8,9 +8,15 @@ import {
 import { drawEnemyArt } from './textures.js';
 import { sfx } from './audio.js';
 import { vibrate } from './settings.js';
-import { INTENTS, PHASE2_ATK, dmgFrom, pickIntent as pickIntentRule, shouldEnterPhase2 } from './combat.js';
+import { INTENTS, PHASE2_ATK, DIFFICULTY, dmgFrom, pickIntent as pickIntentRule, shouldEnterPhase2 } from './combat.js';
+import { settings } from './settings.js';
 
 const el = (id) => document.getElementById(id);
+
+// Multiplicadores da dificuldade escolhida (ajustes)
+function diffOf() {
+  return DIFFICULTY[settings.battleDifficulty] || DIFFICULTY.normal;
+}
 let active = null;
 let raf = 0;
 
@@ -220,7 +226,7 @@ function enemyTurn() {
     sfx('heal');
     bars();
   } else {
-    const mult = INTENTS[intent].mult * (active.phase2 ? PHASE2_ATK : 1);
+    const mult = INTENTS[intent].mult * (active.phase2 ? PHASE2_ATK : 1) * diffOf().dmg;
     let d = dmgFrom(e.atk, def(), mult);
     if (active.guard) { d = Math.max(1, Math.round(d * 0.45)); active.guard = false; }
     state.hp -= d;
@@ -252,7 +258,7 @@ function victory() {
   if (ups) log(`Nível ${state.level}! Vitalidade e energia restauradas.`, 'good');
   const drops = [];
   for (const dr of e.drops || []) {
-    if (Math.random() < dr.chance) {
+    if (Math.random() < dr.chance * diffOf().drop) {
       addItem(dr.item, 1);
       drops.push(dr.item);
     }

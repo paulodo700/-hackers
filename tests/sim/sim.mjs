@@ -30,7 +30,7 @@ function loadoutFor(level) {
 }
 
 // Uma batalha. Retorna { win, turns, potionsUsed }.
-export function simulateBattle(enemyId, level, { seed = 1, potions = 2 } = {}) {
+export function simulateBattle(enemyId, level, { seed = 1, potions = 2, skills = false } = {}) {
   const rng = seededRng(seed);
   const e = ENEMIES[enemyId];
   const L = loadoutFor(level);
@@ -41,13 +41,22 @@ export function simulateBattle(enemyId, level, { seed = 1, potions = 2 } = {}) {
   let intent = pickIntent({ boss: !!e.boss, eHp, maxHp: e.hp, phase2 }, rng);
   let turns = 0;
   let potionsUsed = 0;
+  // Energia do jogador (sem regeneração): habilidades gastam EN
+  let en = 30 + (level - 1) * 5;
   let guard = false;
   while (turns < 200) {
     turns++;
     // Turno do jogador
-    if (hp < p.maxHp * 0.35 && potions > 0) {
+    // Prioridade: Reparo Rápido (habilidade) com pouca vida; depois poção; depois Rajada a cada dois turnos; senão ataque
+    if (skills && hp < p.maxHp * 0.35 && level >= 2 && en >= 10) {
+      en -= 10;
+      hp = Math.min(p.maxHp, hp + 25);
+    } else if (hp < p.maxHp * 0.35 && potions > 0) {
       potions--; potionsUsed++;
       hp = Math.min(p.maxHp, hp + 35);
+    } else if (skills && level >= 3 && en >= 8 && turns % 2 === 0) {
+      en -= 8;
+      eHp -= dmgFrom(p.atk, e.def, 1.7, rng);
     } else {
       eHp -= dmgFrom(p.atk, e.def, 1, rng);
     }
@@ -68,10 +77,10 @@ export function simulateBattle(enemyId, level, { seed = 1, potions = 2 } = {}) {
 }
 
 // Taxa de vitória sobre N sementes para um inimigo em um nível.
-export function winRate(enemyId, level, runs = 400) {
+export function winRate(enemyId, level, runs = 400, opts = {}) {
   let wins = 0, turns = 0;
   for (let s = 1; s <= runs; s++) {
-    const r = simulateBattle(enemyId, level, { seed: s * 7919 + level });
+    const r = simulateBattle(enemyId, level, { seed: s * 7919 + level, ...opts });
     if (r.win) { wins++; turns += r.turns; }
   }
   return { rate: wins / runs, avgTurns: wins ? turns / wins : 0 };
@@ -85,11 +94,11 @@ export const RECOMMENDED = {
 // Níveis em que cada inimigo é verificado: a faixa de preparação.
 export const LEVELS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
-export function fullReport() {
+export function fullReport(opts = {}) {
   const out = {};
   for (const id of Object.keys(ENEMIES)) {
     out[id] = {};
-    for (const lv of LEVELS) out[id][lv] = winRate(id, lv);
+    for (const lv of LEVELS) out[id][lv] = winRate(id, lv, 400, opts);
   }
   return out;
 }
@@ -117,7 +126,9 @@ export function checkTargets(report = fullReport()) {
 const isMain = import.meta.url === `file://${process.argv[1]}`;
 if (isMain) {
   const asJson = process.argv.includes('--json');
-  const report = fullReport();
+  // --skills: mostra a sensibilidade com o jogador que usa habilidades (não é a referência das metas)
+  const withSkills = process.argv.includes('--skills');
+  const report = fullReport(withSkills ? { skills: true } : {});
   if (asJson) {
     console.log(JSON.stringify({ report, fails: checkTargets(report) }));
   } else {
@@ -125,7 +136,11 @@ if (isMain) {
     for (const id of Object.keys(ENEMIES)) {
       console.log(id.padEnd(20) + LEVELS.map((l) => `${Math.round(report[id][l].rate * 100)}%`.padStart(6)).join(''));
     }
-    const fails = checkTargets(report);
-    console.log(fails.length ? 'FALHAS:\n - ' + fails.join('\n - ') : 'Todas as metas de balanceamento atendidas.');
+    if (withSkills) {
+      console.log('Sensibilidade: jogador que usa habilidades. Não é a referência das metas (ver GDD).');
+    } else {
+      const fails = checkTargets(report);
+      console.log(fails.length ? 'FALHAS:\n - ' + fails.join('\n - ') : 'Todas as metas de balanceamento atendidas.');
+    }
   }
 }

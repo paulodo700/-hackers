@@ -123,6 +123,7 @@ export function createPlayer(scene) {
     face,
     talking: false,
     talkMood: null,
+    lowHp: false,
     mood: 'neutral',
     moodT: 0,
     action: null,      // { name, t, dur }
@@ -243,7 +244,9 @@ export function createPlayer(scene) {
     visorMat.emissiveIntensity = (1.2 + Math.sin(t * 0.006) * 0.4) * blink;
     // Expressão volta a neutra quando a ação termina
     if (p.moodT > 0) { p.moodT -= dt; if (p.moodT <= 0) p.mood = 'neutral'; }
-    face.update(t, { talk: p.talking, mood: p.talkMood && p.moodT <= 0 ? p.talkMood : p.mood });
+    // Prioridade: fala > ação > cansaço (vida baixa) > neutro
+    const faceMood = p.talkMood && p.moodT <= 0 ? p.talkMood : p.moodT > 0 ? p.mood : p.lowHp ? 'tired' : 'neutral';
+    face.update(t, { talk: p.talking, mood: faceMood });
   };
 
   p.tile = () => ({ c: Math.round(p.x / TILE), r: Math.round(p.z / TILE) });

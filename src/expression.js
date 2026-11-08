@@ -6,3 +6,8 @@ export function moodForLine(text = '') {
   if (t.endsWith('!')) return 'surprised';
   return 'neutral';
 }
+
+// Cansaço: abaixo de 30% da vida máxima, o rosto de Bit fica exausto.
+export function moodForVitals(hp, maxHp) {
+  return maxHp > 0 && hp / maxHp < 0.3 ? 'tired' : null;
+}

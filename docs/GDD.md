@@ -139,10 +139,10 @@ Outras mudanças anteriores: Sobrecarga com 150 de vida e 14 de ataque; Titã co
 
 ## Testes
 
-- `npm run test:unit`: 21 testes de lógica pura (combate, migrações de save, slots, finais, conteúdo, missão extra do Núcleo e expressões do rosto).
+- `npm run test:unit`: 23 testes de lógica pura (combate, migrações de save, slots, finais, conteúdo, missão extra do Núcleo e expressões do rosto).
 - `npm run sim`: simulador de balanceamento, com as metas verificadas.
-- `npm run test:e2e`: 32 testes de ponta a ponta no Chromium headless. Qualquer erro ou aviso de console falha o teste. Cada teste roda num contexto novo, com números aleatórios de semente fixa, sem encontros aleatórios e com esperas por condição.
-- `npm test`: tudo (54 testes no total).
+- `npm run test:e2e`: 33 testes de ponta a ponta no Chromium headless. Qualquer erro ou aviso de console falha o teste. Cada teste roda num contexto novo, com números aleatórios de semente fixa, sem encontros aleatórios e com esperas por condição.
+- `npm test`: tudo (57 testes no total).
 
 Os testes de ponta a ponta cobrem: título e slots, migração do save antigo, save corrompido, portais e bloqueios, missões principal e extra, batalha vencida, derrota (volta ao ponto seguro e perde 10% dos créditos), fuga (bloqueada contra chefes), intenção do inimigo, tutorial e reparo (resolver, modo difícil, teclado, pausa com P, tempo esgotado, fusível queimado), dificuldade salva entre reparos, minimapa, loja (compra e venda), bancada, árvore de habilidades, ajustes, legendas, medição de áudio (efeito e trilha produzem sinal, pico nunca passa de 1, volume zero silencia), paredes com desenho próprio por zona, final da paz, final da guerra, missão extra do Núcleo, navegação por teclado, rostos, layout em 360 px e FPS.
 
@@ -159,11 +159,20 @@ Os testes de ponta a ponta cobrem: título e slots, migração do save antigo, s
 - navegação por teclado em título, slots, menu, loja, batalha, diálogos e reparo, com foco visível;
 - FPS medido em 360 px com renderização por software: cerca de 25 quadros por segundo (informativo; em aparelho real o valor será outro).
 
+## Rodada 5 (resumo)
+
+- **Dificuldade das batalhas** nos ajustes: fácil, normal e difícil. Não altera o reparo nem a fase 2 dos chefes.
+- **Novos inimigos comuns:** Verme de Cache (zona da Cache) e Espectro de Memória (zona da Memória), com arte própria e entrada no códex. Um teste garante que todo inimigo comum aparece numa zona.
+- **Expressão de cansaço:** o rosto do Bit fica exausto abaixo de 30% da vida.
+- **Simulador com habilidades** como análise de sensibilidade (opção `--skills`).
+- **Roteiro de playtest** em `docs/PLAYTEST.md`.
+- **Versão jogável** publicada como artefato privado (ver mensagem de entrega). Não foi possível verificar, daqui, se o visualizador do artefato executa os módulos do jogo.
+
 ## Lacunas conhecidas
 
 - **Timbre sem escuta real.** O áudio é medido em amplitude, mas o timbre e o equilíbrio entre trilha e efeitos só podem ser avaliados por uma pessoa ouvindo.
 - **Rostos simples.** São olhos e boca numa textura pequena, com cinco expressões no total.
-- **Sem playtest com pessoas.** O equilíbrio é verificado pelo simulador, que assume um jogador que ataca sempre e usa poções, sem habilidades.
-- **Dificuldade só no reparo.** O modo difícil existe no minijogo, mas não há dificuldade para as batalhas.
+- **Sem playtest com pessoas.** O equilíbrio é verificado pelo simulador. A referência das metas assume um jogador que ataca sempre e usa poções, sem habilidades. Com habilidades (`npm run sim -- --skills`), o jogador fica bem mais forte e as metas dos chefes deixam de valer; esse modo é só sensibilidade. O roteiro está em `docs/PLAYTEST.md`, ainda sem sessões realizadas.
+- **Dificuldade das batalhas não calibrada com jogadores.** Fácil, normal e difícil mudam o dano dos inimigos (×0,75, ×1, ×1,25) e a chance de drop (×1,25, ×1, ×0,8), mas os valores não foram testados com pessoas. O simulador só mede o modo normal.
 - **Vibração** depende do navegador; no PC não tem efeito.
 - **Dependência de ambiente.** O Playwright está declarado em `devDependencies` na versão 1.63.0, mas o Chromium precisa ser instalado com `npm run install:browser` em outra máquina. No ambiente de desenvolvimento deste projeto, ele já estava disponível.

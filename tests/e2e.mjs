@@ -779,6 +779,43 @@ export default [
     },
   },
   {
+    name: 'dificuldade das batalhas: o ajuste cicla e muda o dano aplicado',
+    async run({ page, base }) {
+      await newGame(page, base, 1);
+      await page.keyboard.press('KeyM');
+      await page.waitForTimeout(200);
+      if (!(await visible(page, '#menu'))) throw new Error('menu não abriu com M');
+      await page.click('.tab[data-tab="config"]');
+      await page.waitForTimeout(150);
+      const idx = await page.$$eval('#menu-body .setting-row', (r) => Array.from(r).findIndex((x) => x.textContent.includes('Dificuldade das batalhas')));
+      if (idx < 0) throw new Error('linha de dificuldade ausente; linhas: ' + (await page.$$eval('#menu-body .setting-row', (r) => Array.from(r).map((x) => x.textContent).join(' | '))));
+      const btn = async () => { const bs = await page.$$('#menu-body .setting-row button'); if (!bs[idx]) throw new Error(`idx ${idx} de ${bs.length} botões`); return bs[idx]; };
+      await (await btn()).click();
+      const first = await state(page, () => JSON.parse(localStorage.getItem('anel-zero-settings-v1')).battleDifficulty);
+      if (first !== 'dificil') throw new Error('primeiro ciclo deveria ser difícil: ' + first);
+      await (await btn()).click();
+      const second = await state(page, () => JSON.parse(localStorage.getItem('anel-zero-settings-v1')).battleDifficulty);
+      if (second !== 'facil') throw new Error('ciclo deveria voltar a fácil: ' + second);
+      await page.click('#btn-close');
+      await page.waitForTimeout(300);
+      await page.evaluate(() => { window.__anelZero.state.hp = 200; window.__anelZero.beginBattle('bloco', null); });
+      await page.waitForTimeout(200);
+      await page.click('#battle-cmds button:not([disabled])');
+      // Espera um golpe normal do inimigo (a intenção é sorteada; golpes pesados e reparos são ignorados)
+      for (let i = 0; i < 8; i++) {
+        const normal = await page.evaluate(() => /Bloco Corrompido ataca e causa \d+ de dano/.test(document.getElementById('battle-log').textContent));
+        if (normal) break;
+        const b = await page.$('#battle-cmds button:not([disabled])');
+        if (b) await b.click();
+        await page.waitForTimeout(900);
+      }
+      const log = await page.$$eval('#battle-log p', (ps) => Array.from(ps).map((p) => p.textContent).join(' | '));
+      const m = log.match(/Bloco Corrompido ataca e causa (\d+) de dano/);
+      if (!m) throw new Error(`registro ausente (aberta: ${await visible(page, '#battle')}, html: ${(await page.evaluate(() => document.getElementById('battle-log').innerHTML)).slice(0, 160)}, tests: ${await page.evaluate(() => document.querySelectorAll('#battle-log p').length)})`);
+      if (Number(m[1]) > 6) throw new Error('dano no modo fácil acima do esperado: ' + m[1]);
+    },
+  },
+  {
     name: 'FPS medido em 360 px (informativo, com renderização por software)',
     async run({ browser, base, report }) {
       const ctx = await browser.newContext({ viewport: { width: 360, height: 740 }, isMobile: true, hasTouch: true });

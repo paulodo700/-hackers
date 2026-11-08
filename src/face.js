@@ -5,7 +5,7 @@ import * as THREE from 'three';
 const FRAME_EVERY = 3; // redesenha a cada 3 quadros para economizar CPU em celulares
 
 // Cria um rosto. color: cor dos olhos. Retorna { mesh, update(t, opts) }.
-// opts: { talk: boolean, mood: 'neutral' | 'happy' | 'hurt' | 'surprised' | 'doubt' }
+// opts: { talk: boolean, mood: 'neutral' | 'happy' | 'hurt' | 'surprised' | 'doubt' | 'tired' }
 export function createFace({ width = 0.3, height = 0.12, color = '#1fe6d0', transparent = false, bg = '#0a1116' } = {}) {
   const canvas = document.createElement('canvas');
   canvas.width = 128;
@@ -43,6 +43,10 @@ export function createFace({ width = 0.3, height = 0.12, color = '#1fe6d0', tran
       g.beginPath(); g.roundRect(28, 24, 22, 26, 6); g.fill();
       g.beginPath(); g.roundRect(78, 16, 22, 24, 6); g.fill();
       g.beginPath(); g.moveTo(76, 12); g.lineTo(104, 20); g.stroke();
+    } else if (mood === 'tired') {
+      // Pálpebras pesadas: retângulos finos na metade de cima dos olhos
+      g.beginPath(); g.roundRect(28, 30, 22, 8, 3); g.fill();
+      g.beginPath(); g.roundRect(78, 30, 22, 8, 3); g.fill();
     } else if (mood === 'hurt') {
       g.beginPath(); g.moveTo(28, 22); g.lineTo(50, 34); g.lineTo(28, 42); g.stroke();
       g.beginPath(); g.moveTo(100, 22); g.lineTo(78, 34); g.lineTo(100, 42); g.stroke();
@@ -56,6 +60,8 @@ export function createFace({ width = 0.3, height = 0.12, color = '#1fe6d0', tran
       g.beginPath(); g.ellipse(64, 54, 12, open, 0, 0, Math.PI * 2); g.fill();
     } else if (mood === 'surprised') {
       g.beginPath(); g.arc(64, 52, 6, 0, Math.PI * 2); g.stroke();
+    } else if (mood === 'tired') {
+      g.beginPath(); g.moveTo(54, 56); g.lineTo(74, 56); g.stroke();
     } else if (mood === 'doubt') {
       g.beginPath(); g.moveTo(54, 52); g.lineTo(74, 48); g.stroke();
     } else if (mood === 'happy') {

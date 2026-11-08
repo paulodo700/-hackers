@@ -9,6 +9,14 @@ export const INTENTS = {
 
 export const PHASE2_ATK = 1.15;
 
+// Dificuldade das batalhas: dano dos inimigos e chance de drop. O normal é a referência do simulador.
+export const DIFFICULTY = {
+  facil: { label: 'Fácil', dmg: 0.75, drop: 1.25 },
+  normal: { label: 'Normal', dmg: 1, drop: 1 },
+  dificil: { label: 'Difícil', dmg: 1.25, drop: 0.8 },
+};
+export const DIFFICULTY_ORDER = ['facil', 'normal', 'dificil'];
+
 // Dano base: ataque * multiplicador - defesa * 0.6, com variação de ±10%.
 export function dmgFrom(attack, defense, mult = 1, rng = Math.random) {
   const base = attack * mult - defense * 0.6;

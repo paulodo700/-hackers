@@ -20,7 +20,7 @@ import * as UI from './ui.js';
 import { startBattle, closeBattleScreen, isBattleOpen } from './battle.js';
 import { startRepair, isRepairOpen, bindRepairUI, repairDebug, REPAIR_TUTORIAL } from './repair.js';
 import { initNav, focusFirst } from './nav.js';
-import { moodForLine } from './expression.js';
+import { moodForLine, moodForVitals } from './expression.js';
 import { CHEST_LOOT, requirementText } from './loot.js';
 import { settings, loadSettings, applySettings, saveSettings, vibrate } from './settings.js';
 import { unlockAudio, sfx, setMusicZone, setSoundEnabled, setVolume, outputPeak, MAX_OUT } from './audio.js';
@@ -588,6 +588,7 @@ function frame(now) {
   markVisited(zone.id, pt.c, pt.r);
   if (++minimapTick % 6 === 0) UI.drawMinimap(zone, pt);
   player.talking = UI.isDialogOpen();
+  player.lowHp = moodForVitals(state.hp, maxHp()) === 'tired';
   // Expressão pelo texto da fala: Bit reage quando fala; a NPC reage quando é a vez dela
   const line = UI.currentLine();
   const mood = line ? moodForLine(line.t) : 'neutral';

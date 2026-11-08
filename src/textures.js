@@ -232,6 +232,20 @@ export function drawEnemyArt(canvas, glyph, color, t = 0) {
       for (let i = 0; i < 9; i++) g.fillRect(-60 + i * 14, 30 + (i % 3) * 8, 10, 6);
       eye(-30, -20, 12); eye(30, -20, 12);
       break;
+    case 'verme': // corpo segmentado com cabeça
+      for (let i = 4; i >= 0; i--) {
+        g.beginPath(); g.arc(-50 + i * 25, 20 * Math.sin(i * 1.2), 22 - i * 1.5, 0, Math.PI * 2); g.fill(); g.stroke();
+      }
+      eye(-60, -10, 8); eye(-45, -14, 8);
+      break;
+    case 'espectro': // silhueta de fantasma com barra inferior ondulada
+      g.beginPath(); g.moveTo(-60, 60);
+      g.lineTo(-60, -20); g.quadraticCurveTo(-60, -80, 0, -80); g.quadraticCurveTo(60, -80, 60, -20);
+      g.lineTo(60, 60);
+      for (let k = 0; k < 4; k++) g.lineTo(60 - (k + 1) * 30, 60 + (k % 2 ? -14 : 14));
+      g.closePath(); g.fill(); g.stroke();
+      eye(-22, -30, 9); eye(22, -30, 9);
+      break;
     case 'vigia': // anel com olho central
       g.beginPath(); g.arc(0, 0, 80, 0, Math.PI * 2); g.fill(); g.stroke();
       g.beginPath(); g.arc(0, 0, 58, 0, Math.PI * 2); g.stroke();

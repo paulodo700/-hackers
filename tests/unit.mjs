@@ -185,6 +185,21 @@ t('expressão do rosto segue a pontuação da fala', async () => {
   assert.equal(moodForLine('Olá.'), 'neutral');
 });
 
+t('cansaço do rosto aparece só com vida abaixo de 30%', async () => {
+  const { moodForVitals } = await import('../src/expression.js');
+  assert.equal(moodForVitals(29, 100), 'tired');
+  assert.equal(moodForVitals(30, 100), null);
+  assert.equal(moodForVitals(0, 0), null);
+});
+
+t('todo inimigo comum aparece em pelo menos uma zona', async () => {
+  const { ZONES } = await import('../src/data/zones.js');
+  const used = new Set(Object.values(ZONES).flatMap((z) => z.enemies));
+  for (const [id, e] of Object.entries(content.ENEMIES)) {
+    if (!e.boss) assert.ok(used.has(id), `inimigo sem zona: ${id}`);
+  }
+});
+
 export async function runUnit() {
   let pass = 0;
   const failures = [];

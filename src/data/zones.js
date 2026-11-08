@@ -14,7 +14,7 @@ export const ZONES = {
   cache: {
     id: 'cache', name: 'Jardim da Cache L1', music: 'calm', decor: 'cells', encounter: 0.02,
     theme: { ground: '#0c2b2a', trace: '#1fe6d0', fog: '#06181b', sky: '#071f22', accent: '#7dfff0' },
-    enemies: ['pulga'],
+    enemies: ['pulga', 'verme'],
     map: [
       '########################',
       '#S.....=====...........#',
@@ -148,7 +148,7 @@ export const ZONES = {
   memory: {
     id: 'memory', name: 'Cidade dos Bancos de Memória', music: 'city', decor: 'towers', encounter: 0.03,
     theme: { ground: '#1c1a2e', trace: '#c084fc', fog: '#0c0a18', sky: '#15122a', accent: '#e1c6ff' },
-    enemies: ['bloco'],
+    enemies: ['bloco', 'espectro'],
     map: [
       '########################',
       '#B...........#........#',

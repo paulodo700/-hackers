@@ -7,6 +7,7 @@ import {
 import { ITEMS, RARITY, QUESTS, QUEST_ORDER, CODEX, SKILL_TREE, SKILLS, RECIPES, SHOP } from './data/content.js';
 import { drawItemIcon } from './textures.js';
 import { settings, saveSettings, applySettings, TEXT_SIZES, announce } from './settings.js';
+import { DIFFICULTY, DIFFICULTY_ORDER } from './combat.js';
 import { setSoundEnabled, setVolume, sfx } from './audio.js';
 import { focusFirst } from './nav.js';
 import { isVisited } from './state.js';
@@ -450,6 +451,12 @@ function renderConfig(body) {
   }));
   body.appendChild(setting('Volume dos efeitos', 'Passos, golpes, baús e vitória.', pct(settings.volSfx), () => {
     setVolume('sfx', nextVol(settings.volSfx));
+    saveSettings();
+    renderMenu();
+  }));
+  body.appendChild(setting('Dificuldade das batalhas', 'Dano dos inimigos e chance de drop. Não muda o reparo.', DIFFICULTY[settings.battleDifficulty].label, () => {
+    const i = DIFFICULTY_ORDER.indexOf(settings.battleDifficulty);
+    settings.battleDifficulty = DIFFICULTY_ORDER[(i + 1) % DIFFICULTY_ORDER.length];
     saveSettings();
     renderMenu();
   }));

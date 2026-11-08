@@ -16,6 +16,7 @@ export const settings = {
   volSfx: 1,      // volume dos efeitos (0 a 1)
   captions: true, // legendas visuais para sons importantes
   repairHard: false, // última escolha de dificuldade do reparo
+  battleDifficulty: 'normal', // facil | normal | dificil (batalhas)
 };
 
 export function loadSettings() {
