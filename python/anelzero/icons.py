@@ -9,10 +9,41 @@ import pathlib
 from . import content as C
 from . import settings as T
 
-KINDS = ("item", "enemy", "skill")
+KINDS = ("item", "enemy", "skill", "talent")
 NEUTRAL_ZONE = "neutra"
 ICON_SIZE = 160
 SHAPE_BY_SLOT = {"weapon": "blade", "armor": "plate", "consumable": "capsule", "key": "chip", "material": "cluster"}
+
+
+# Cor e forma de cada habilidade: a forma traduz o papel (golpe, golpe forte, cura, golpe que ignora defesa)
+SKILL_STYLE = {
+    "golpe": ("#7dfff0", "diamond"),
+    "rajada": ("#ffd166", "cone"),
+    "reparo": ("#b6ff6a", "cross"),
+    "curto": ("#ff6b8a", "spike"),
+}
+
+
+# Cor e forma de cada talento da árvore (aba Habilidades do menu)
+TALENT_STYLE = {
+    "vigor": ("#ff6b8a", "cube"),
+    "fonte": ("#ffd166", "prism"),
+    "lamina": ("#7dfff0", "spike"),
+    "couraca": ("#9ab8ff", "plate"),
+    "eficiencia": ("#b6ff6a", "ring"),
+}
+
+
+def talent_style(talent_id):
+    if talent_id not in TALENT_STYLE:
+        raise KeyError(talent_id)
+    return TALENT_STYLE[talent_id]
+
+
+def skill_style(skill_id):
+    if skill_id not in SKILL_STYLE:
+        raise KeyError(skill_id)
+    return SKILL_STYLE[skill_id]
 
 
 def cache_root():
@@ -75,4 +106,5 @@ def all_icon_specs():
     out = [("item", i) for i in C.ITEMS]
     out += [("enemy", e) for e in C.ENEMIES]
     out += [("skill", s["id"]) for s in C.SKILLS]
+    out += [("talent", t["id"]) for t in C.SKILL_TREE]
     return out

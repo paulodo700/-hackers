@@ -65,3 +65,32 @@ class Paths(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SkillStyle(unittest.TestCase):
+    def test_every_skill_has_color_and_shape(self):
+        for skill in C.SKILLS:
+            with self.subTest(skill=skill["id"]):
+                color, shape = I.skill_style(skill["id"])
+                self.assertTrue(color.startswith("#") and len(color) == 7)
+                self.assertIn(shape, {"diamond", "cone", "cross", "spike"})
+
+    def test_skills_are_visually_distinct(self):
+        styles = {I.skill_style(s["id"]) for s in C.SKILLS}
+        self.assertEqual(len(styles), len(C.SKILLS))
+
+    def test_unknown_skill_rejected(self):
+        with self.assertRaises(KeyError):
+            I.skill_style("nao_existe")
+
+
+class TalentStyle(unittest.TestCase):
+    def test_every_talent_has_style_and_they_differ(self):
+        styles = {I.talent_style(t["id"]) for t in C.SKILL_TREE}
+        self.assertEqual(len(styles), len(C.SKILL_TREE))
+        for t in C.SKILL_TREE:
+            self.assertIn(I.talent_style(t["id"])[1], {"cube", "prism", "spike", "plate", "ring"})
+
+    def test_talents_are_in_icon_spec(self):
+        talents = [s for s in I.all_icon_specs() if s[0] == "talent"]
+        self.assertEqual(len(talents), len(C.SKILL_TREE))

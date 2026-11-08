@@ -244,7 +244,7 @@ class ShopScreen:
     def __init__(self, parent, ar, scale_mult=1.0):
         self.panel = Panel(parent, 0, 0, ar, 1.0, alpha=0.9)
         self.header = Text(parent, "", -ar + 0.1, 0.9, 0.055, color=(1, 0.9, 0.5, 1), scale_mult=scale_mult)
-        self.rows = Text(parent, "", -ar + 0.1, 0.75, 0.04, color=(1, 1, 1, 1), scale_mult=scale_mult, width=86)
+        self.rows = ListView(-ar + 0.1, 0.75, row_h=0.085, icon=0.04, scale=0.04, width=86)
         self.detail = Text(parent, "", -ar + 0.1, -0.5, 0.04, color=(0.7, 0.9, 0.9, 1), scale_mult=scale_mult,
                            width=86)
         self.help = Text(parent, "", -ar + 0.1, -0.92, 0.035, color=(0.6, 0.7, 0.7, 1), scale_mult=scale_mult)
@@ -262,14 +262,11 @@ class ShopScreen:
             t.hide()
         self.preview.hide()
 
-    def render(self, shop, title):
+    def render(self, shop, title, icon_for=None):
         self.header.set(f"{title}   {shop.header()}")
         rows = shop.rows()
-        lines = []
-        for i, r in enumerate(rows):
-            mark = ">" if i == shop.cursor else " "
-            lines.append(f"{mark} {r['label']}")
-        self.rows.set("\n".join(lines))
+        icons = [icon_for("item", r["id"]) if (icon_for and r["id"]) else None for r in rows]
+        self.rows.render([r["label"] for r in rows], shop.cursor, icons)
         detail = rows[shop.cursor]["detail"] if rows else ""
         self.detail.set(detail)
         self.help.set((shop.message + "   " if shop.message else "")

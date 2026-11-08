@@ -324,3 +324,13 @@ A medição da sombra subiu de 6,0 e 12,1 ms (rodada 9) para 5,4 e 13,0 ms: a di
 
 Todos estão entre os limites de pico (0,2 a 0,95) e de duração (0,03 s a 9 s). **O ajuste de volume de cada som pelo que se ouve não foi feito**: este ambiente não tem dispositivo de som, e a decisão de volume depende de escuta. Os arquivos em `python/audio_samples/` podem ser ouvidos num computador com som para esse ajuste; os valores ajustados devem ser registrados aqui depois.
 
+## Rodada 11: ícones por tipo, loja, Bit na abertura e medições por sistema
+
+Cada sistema novo foi medido com os dois robôs, cada um no seu motor. `tools/bench_shadows.py` mede o Panda3D (cliente Python, mediana por quadro, sombra ligada e desligada). `tests/perf.mjs` mede o jogo web no Chromium (Playwright, FPS da cena inteira e só do jogador). Os valores de um motor não se comparam com os do outro.
+
+| Sistema | Robô | Motor e condição | Resultado |
+|---|---|---|---|
+| Ícones de habilidades e talentos | `tools/bench_shadows.py` | Panda3D, Xvfb, CPU, sombra desligada / ligada | 5,67 / 11,45 ms por quadro (+5,79 ms, +102%) |
+| Ícones de habilidades e talentos | `tests/perf.mjs` | Chromium headless, 360×740, software | cena inteira 27,1 FPS (52 chamadas, 10 560 triângulos); só o jogador 60,2 FPS |
+
+**Ajuste do áudio pelo que se ouve: pendente.** Os arquivos estão em `python/audio_samples/` e as medições de pico, duração e RMS estão na Rodada 10. O volume de cada efeito só pode ser decidido ouvindo: este ambiente não tem dispositivo de som.

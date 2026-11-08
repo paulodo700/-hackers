@@ -51,8 +51,9 @@ CAM_BACK = 6.0      # distância atrás do Bit (medida: deixa o céu com degrad�
 CAM_HEIGHT = 2.0   # altura da câmera
 CAM_AIM_AHEAD = 4.0  # o ponto de mira fica à frente do Bit
 CAM_AIM_HEIGHT = 0.9
-INTRO_FAR = 4.6
-INTRO_NEAR = 3.1
+INTRO_FAR = 6.0
+INTRO_NEAR = 4.4
+INTRO_BIT_X = 1.3  # posição do Bit ao lado do Vigia (que fica na origem)
 INTERACT_RANGE = 1.3
 PICKUP_RANGE = 0.7
 ROAMER_RESPAWN_S = 30.0
@@ -574,8 +575,13 @@ class Game(ShowBase):
         self.sfx.play_music()
         self._show_title(False)
         self.vigia.show()
-        self.player.hide()
-        self.player_shadow.hide()
+        # O Bit aparece ao lado do Vigia, virado para a câmera (a visor fica na frente, em +y)
+        self.player.setPos(INTRO_BIT_X, 0, 0)
+        self.player.setH(180)
+        self.player.setScale(1)
+        self.player.show()
+        self.player_shadow.setPos(INTRO_BIT_X, 0, 0)
+        self.player_shadow.show()
         self.letter_top.show()
         self.open_dialog(C.INTRO_TEXT, title="Abertura", color="#7dfff0",
                          after=lambda _value=None: self.begin_transition(
@@ -613,6 +619,7 @@ class Game(ShowBase):
         self.state = state
         self.mode = "play"
         self.sfx.stop_music()
+        self.player.setScale(1)
         self.sun.setColor((0.95, 0.97, 1, 1))
         if self.zone_root is not None:
             self.zone_root.show()
@@ -692,7 +699,7 @@ class Game(ShowBase):
         tabs = " | ".join(("[" + t + "]") if i == self.menu.tab else t for i, t in enumerate(M.TABS))
         rows = self.menu.rows()
         cursor = self.menu.cursor[self.menu.tab]
-        kind = {1: "item", 2: "skill"}.get(self.menu.tab)
+        kind = {1: "item", 2: "talent"}.get(self.menu.tab)
         icon_paths = [self.icon_for(kind, r["id"]) if kind else None for r in rows]
         # Cabeçalho e rodapé em texto; a lista com ícones fica ao lado
         self.menu_text.setText(tabs)
@@ -832,7 +839,7 @@ class Game(ShowBase):
         row = rows[self.shop.cursor] if rows else None
         self.shop_screen.preview.set(self.icon_for("item", row["id"]) if row and row["id"] else None)
         title = "Bancada de criação" if self.shop.modes == ["criar"] else "Lojista"
-        self.shop_screen.render(self.shop, title)
+        self.shop_screen.render(self.shop, title, icon_for=self.icon_for)
 
     # ---- Zonas ----
     def load_zone(self, zid, pos=None):
@@ -1161,10 +1168,12 @@ class Game(ShowBase):
                 k = 1.0
             dist = INTRO_FAR + (INTRO_NEAR - INTRO_FAR) * k
             self.camera.setPos(1.6 + math.cos(a * 0.2) * 0.2, -dist, 1.7 + 0.2 * k)
-            self.camera.lookAt(0, 0, 1.45)
+            self.camera.lookAt(INTRO_BIT_X / 2, 0, 1.4)
             # O Vigia respira (ciclo de 3,2 s), mais forte no começo; com movimento reduzido, fica parado
             breath = 0.0 if self.settings.get("reduced_motion") else 0.02 * (1 - k * 0.5)
-            self.vigia.setScale(1 + breath * math.sin(2 * math.pi * t / 3.2))
+            wave = breath * math.sin(2 * math.pi * t / 3.2)
+            self.vigia.setScale(1 + wave)
+            self.player.setScale(1 + wave)  # o Bit respira junto com o Vigia
             pulse = 0.85 + 0.15 * math.sin(2 * math.pi * t / 2.4)
             self.sun.setColor((0.95 * pulse, 0.97 * pulse, 1.0 * pulse, 1))
             self.intro_t = t + dt
