@@ -10,8 +10,8 @@ import {
   UP, DOWN, GOAL, SPAWN, PICKUP_ITEMS, FOE_CHARS,
 } from './grid.js';
 
-export const MAP_W = 19;
-export const MAP_H = 11;
+export const MAP_W = 31;
+export const MAP_H = 21;
 export const START = [1, 1];
 export const EXIT = [MAP_W - 2, MAP_H - 2];
 // Sala do chefe: 3x3 no canto inferior direito, com a saída dentro. Um anel de parede a fecha.

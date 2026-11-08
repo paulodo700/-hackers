@@ -92,12 +92,12 @@ function menuInventario(game) {
     const label = `${nomeItem(game, id)} x${qtd}`;
     if (item?.tipo === 'consumivel') {
       const usavel = (item.uso?.em ?? 'ambos') !== 'combate';
-      return { label, detalhe: item.descricao, ativo: usavel, acao: usavel ? { tipo: 'usar', id } : NADA };
+      return { label, detalhe: item.descricao, ativo: usavel, acao: usavel ? { tipo: 'usar', id } : NADA, icone: id };
     }
     if (item?.tipo === 'equipamento') {
-      return { label, detalhe: `Equipar no slot ${SLOTS[item.equipamento.slot]}`, ativo: true, acao: { tipo: 'equipar', id } };
+      return { label, detalhe: `Equipar no slot ${SLOTS[item.equipamento.slot]}`, ativo: true, acao: { tipo: 'equipar', id }, icone: id };
     }
-    return info(label, item?.descricao ?? '');
+    return { ...info(label, item?.descricao ?? ''), icone: id };
   });
 }
 
@@ -113,6 +113,7 @@ function menuHabilidades(game) {
         detalhe,
         ativo: !aprendida && pode.ok,
         acao: !aprendida && pode.ok ? { tipo: 'aprender', id: h.id } : NADA,
+        icone: h.sprite,
       };
     });
 }
@@ -141,6 +142,7 @@ function menuCriar(game) {
       detalhe: `${custo}${ciclos}${check.ok ? '' : ` (${check.motivo})`}`,
       ativo: check.ok,
       acao: check.ok ? { tipo: 'criar', id: r.id ?? r.produz } : NADA,
+      icone: r.produz,
     };
   });
 }
@@ -151,6 +153,7 @@ function menuLoja(game, lojaId) {
     detalhe: o.estoque === null ? 'estoque ilimitado' : `restam ${o.estoque}`,
     ativo: game.ciclos >= o.preco && (o.estoque === null || o.estoque > 0),
     acao: { tipo: 'comprar', loja: lojaId, id: o.item },
+    icone: o.item,
   }));
   const loja = game.catalog.lojas[lojaId];
   const venda = Object.keys(game.inv).filter((id) => {
@@ -161,6 +164,7 @@ function menuLoja(game, lojaId) {
     detalhe: `ciclos: ${game.ciclos}`,
     ativo: true,
     acao: { tipo: 'vender', loja: lojaId, id },
+    icone: id,
   }));
   return [...compra, ...venda, info(`Ciclos: ${game.ciclos}`)];
 }
@@ -208,6 +212,7 @@ function menuBatalhaItem(game) {
     detalhe: game.catalog.itens[id].descricao,
     ativo: true,
     acao: { tipo: 'batalha', acao: 'item', arg: id },
+    icone: id,
   }));
   return lista.length ? lista : [info('(nenhum item de combate)')];
 }

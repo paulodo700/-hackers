@@ -20,10 +20,15 @@ test('teclas viram comandos; Ctrl, Alt e Meta são deixados para o navegador', (
 
 test('na exploração: setas andam e E fala com quem está na frente', () => {
   const g = novoJogo(1);
-  const x = g.player.c;
+  const camada = g.player.camada;
+  g.world[camada].grid = new Grid(['#####', '#S..#', '#####']);
+  g.world[camada].entities = [];
+  g.world[camada].npcs = [];
+  Object.assign(g.player, { c: 1, r: 1, fc: 1, fr: 0 });
+  g.reveal();
   executarComando(g, 'right');
-  assert.equal(g.player.c, x + 1);
-  assert.equal(executarComando(g, 'confirm').tipo, 'nada');
+  assert.equal(g.player.c, 2);
+  assert.equal(executarComando(g, 'confirm').tipo, 'nada', 'nada na frente de Bit');
 });
 
 test('no combate: 1 ataca, 4 defende, 5 foge (e chefe não foge); movimento fica parado', () => {

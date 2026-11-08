@@ -7,7 +7,7 @@
   <style>
     html, body { margin: 0; background: #07090d; color: #dfe9f3; font-family: monospace; }
     body { display: flex; flex-direction: column; align-items: center; min-height: 100vh; padding: 8px; box-sizing: border-box; }
-    canvas { display: block; width: 100%; max-width: 720px; height: auto; border: 1px solid #1d2a36; touch-action: none; }
+    canvas { display: block; width: 100%; max-width: 960px; height: auto; border: 1px solid #1d2a36; touch-action: none; }
     p.hint { font-size: 12px; color: #7b8a99; margin: 8px 0 0; }
     .pad { display: none; width: 100%; max-width: 720px; margin-top: 10px; gap: 8px 10px; grid-template-columns: auto minmax(0, 1fr); align-items: start; user-select: none; -webkit-user-select: none; }
     body.touch .pad { display: grid; }
@@ -29,7 +29,7 @@
   </style>
 </head>
 <body>
-  <canvas id="game" width="720" height="640"></canvas>
+  <canvas id="game" width="960" height="720"></canvas>
   <div id="pad" class="pad" aria-label="Controles de toque">
     <div id="dpad" class="dpad" aria-label="Andar"></div>
     <div id="acoes" class="acoes" aria-label="Ações"></div>

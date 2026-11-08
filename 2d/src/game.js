@@ -59,6 +59,7 @@ export class Game {
     this.world = {};
     LAYER_ORDER.forEach((id, ordem) => { this.world[id] = this.montarCamada(id, ordem); });
     this.placeAt(LAYER_ORDER[0], SPAWN);
+    this.say('Bit acorda no dissipador de calor. Fale com os técnicos e siga para a saída.');
   }
 
   // ---------- Mundo ----------

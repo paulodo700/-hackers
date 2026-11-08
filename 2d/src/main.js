@@ -2,7 +2,7 @@
 // Toda regra fica no núcleo (game.js, commands.js, systems/). Este arquivo só traduz entradas e saídas.
 import { Game } from './game.js';
 import { CATALOGO } from './catalog.js';
-import { draw } from './render.js';
+import { draw, atualizarCamera } from './render.js';
 import { comandoDaTecla, executarComando, botoesDeToque, COMANDOS_DE_MOVIMENTO } from './commands.js';
 import { browserStorage, createSaver, loadGame, clearSave } from './save.js';
 import { AudioEngine } from './audio/index.js';
@@ -61,7 +61,7 @@ function processarEventos() {
 
 function render() {
   window.__game = game;
-  draw(ctx, game, { saveStatus: statusSalvamento(), floats, tremor });
+  draw(ctx, game, { saveStatus: statusSalvamento(), floats, tremor, t: performance.now() });
   renderToque();
 }
 
@@ -157,22 +157,16 @@ window.addEventListener('keydown', (ev) => {
 window.addEventListener('pagehide', persist);
 document.addEventListener('visibilitychange', () => { if (document.hidden) persist(); });
 
-// Animação: números flutuantes sobem e somem; o tremor diminui. Só redesenha enquanto há animação.
+// Quadro a quadro: câmera, animações e números flutuantes. Desenha sempre (a visão de cima anima).
 let anterior = performance.now();
 function quadro(agora) {
-  const dt = agora - anterior;
+  const dt = Math.min(64, agora - anterior);
   anterior = agora;
-  let animando = false;
-  if (floats.length) {
-    for (const f of floats) f.idade += dt / 16;
-    floats = floats.filter((f) => f.idade < 45);
-    animando = true;
-  }
-  if (tremor > 0) {
-    tremor = Math.max(0, tremor - dt * 0.03);
-    animando = true;
-  }
-  if (animando) draw(ctx, game, { saveStatus: statusSalvamento(), floats, tremor });
+  for (const f of floats) f.idade += dt / 16;
+  floats = floats.filter((f) => f.idade < 45);
+  if (tremor > 0) tremor = Math.max(0, tremor - dt * 0.03);
+  atualizarCamera(game, dt);
+  draw(ctx, game, { saveStatus: statusSalvamento(), floats, tremor, t: agora });
   requestAnimationFrame(quadro);
 }
 
