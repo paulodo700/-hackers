@@ -466,3 +466,20 @@ A cidade só existe na versão Python. O robô da web mede a cena inteira da zon
 | `tests/perf.mjs` | Chromium headless, 360×740, software; cena inteira / só o jogador | 30,6 FPS (52 chamadas, 10 560 triângulos) / 60,3 FPS |
 
 As ferramentas são uma aba de menu, então a exploração não muda. Os números variam dentro do ruído da máquina.
+
+## Rodada 19: primeiros assets 3D feitos no Blender
+
+- **Ferramenta:** o Blender roda aqui pelo `bpy` (CPU, sem placa de vídeo). `tools/blender/build_assets.py` gera os assets e exporta `.glb` em `python/anelzero/assets/models/`.
+- **Assets entregues:** Bit (corpo de bloco com bisel, visor na frente em +Y, antena com ponta luminosa), módulo de piso, módulo de parede (altura 1,0) e módulo de canto. Todos seguem o guia `docs/ASSETS_BLENDER.md`.
+- **Carregador:** `anelzero/assets.py` lê os `.glb` pelo Panda3D. Se o arquivo não existir, o jogo usa o modelo procedural atual, então nada quebra.
+- **Bit no jogo:** usa o `bit.glb` quando existe. O visor fica na frente (verificado pelos limites do modelo carregado).
+- **Limites:** os módulos de mapa ainda não montam as zonas (o mapa continua gerado em código). Os ícones ainda são procedurais. A altura do Bit é 1,14, acima dos 0,9 do guia.
+
+### Desempenho medido nesta rodada
+
+| Robô | Motor e condição | Resultado |
+|---|---|---|
+| `tools/bench_shadows.py` | Panda3D, Xvfb, CPU; sombra desligada / ligada | 6,68 / 12,89 ms por quadro (+6,21 ms, +93%) |
+| `tests/perf.mjs` | Chromium headless, 360×740, software; cena inteira / só o jogador | 30,3 FPS (52 chamadas, 10 560 triângulos) / 60,3 FPS |
+
+A versão web não usa os `.glb`, então a medição dela é a da cena inteira, sem o Bit do Blender.

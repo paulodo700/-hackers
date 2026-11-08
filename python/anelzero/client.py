@@ -165,11 +165,17 @@ class Game(ShowBase):
         self.sky = None
         self._set_sky("#0b0f14", "#122410")
 
-        mesh = SC.Mesh()
-        mesh.box(-.22, -.22, 0, .22, .22, .9, (0.2, 0.9, 1, 1))
-        mesh.box(-.14, .23, .6, .14, .24, .75, (0.05, 0.1, 0.15, 1))  # visor na frente (+y)
-        self.player = mesh.node("bit")
-        self.player.reparentTo(self.render)
+        from . import assets as AS
+        bit = AS.load_model(self.loader, "bit")
+        if bit is not None:  # modelo do Blender, se existir
+            self.player = bit
+            self.player.reparentTo(self.render)
+        else:  # fallback procedural
+            mesh = SC.Mesh()
+            mesh.box(-.22, -.22, 0, .22, .22, .9, (0.2, 0.9, 1, 1))
+            mesh.box(-.14, .23, .6, .14, .24, .75, (0.05, 0.1, 0.15, 1))  # visor na frente (+y)
+            self.player = mesh.node("bit")
+            self.player.reparentTo(self.render)
         self.player_shadow = SC.blob_shadow(self.render, 0.32)
         self.player.hide()
         self.player_shadow.hide()
