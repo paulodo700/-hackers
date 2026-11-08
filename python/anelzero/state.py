@@ -327,6 +327,12 @@ class GameState:
             return True
         return False
 
+    def discover_enemy(self, enemy_id):
+        self.codex.setdefault("enemies", {})[enemy_id] = True
+
+    def enemy_discovered(self, enemy_id):
+        return bool(self.codex.get("enemies", {}).get(enemy_id))
+
     def mark_visited(self, zone_id, c, r):
         self.visited.setdefault(zone_id, {})[f"{c},{r}"] = 1
 
