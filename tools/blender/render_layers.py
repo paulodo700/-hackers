@@ -50,19 +50,19 @@ def make_material(name, color, metallic=0.0, roughness=0.4, emission=0.0):
 
 
 MATERIALS = {
-    "cobre": make_material("cobre", (0.85, 0.52, 0.3), 1.0, 0.22),
-    "cobre_polido": make_material("cobre_polido", (0.95, 0.66, 0.45), 1.0, 0.08),
-    "ouro": make_material("ouro", (0.9, 0.72, 0.35), 1.0, 0.25),
-    "ouro_emissivo": make_material("ouro_emissivo", (1.0, 0.8, 0.3), 1.0, 0.2, emission=2.5),
-    "prata": make_material("prata", (0.85, 0.87, 0.9), 1.0, 0.18),
-    "silicio_cache": make_material("silicio_cache", (0.12, 0.22, 0.38), 0.6, 0.35),
-    "silicio_bit": make_material("silicio_bit", (0.3, 0.55, 0.85), 0.5, 0.25, emission=0.4),
-    "silicio_logica": make_material("silicio_logica", (0.2, 0.42, 0.22), 0.5, 0.4),
-    "silicio_escuro": make_material("silicio_escuro", (0.05, 0.06, 0.08), 0.5, 0.5),
-    "silicio_exec": make_material("silicio_exec", (0.55, 0.38, 0.16), 0.6, 0.35),
-    "silicio_mem": make_material("silicio_mem", (0.4, 0.18, 0.5), 0.6, 0.3),
-    "silicio_energia": make_material("silicio_energia", (0.62, 0.22, 0.14), 0.5, 0.4),
-    "silicio_ponte": make_material("silicio_ponte", (0.25, 0.25, 0.6), 0.6, 0.3),
+    "cobre": make_material("cobre", (0.62, 0.36, 0.22), 1.0, 0.38),
+    "cobre_polido": make_material("cobre_polido", (0.7, 0.45, 0.3), 1.0, 0.25),
+    "ouro": make_material("ouro", (0.66, 0.5, 0.24), 1.0, 0.4),
+    "ouro_emissivo": make_material("ouro_emissivo", (1.0, 0.8, 0.3), 1.0, 0.3, emission=2.5),
+    "prata": make_material("prata", (0.42, 0.44, 0.47), 1.0, 0.5),
+    "silicio_cache": make_material("silicio_cache", (0.12, 0.22, 0.38), 0.05, 0.62),
+    "silicio_bit": make_material("silicio_bit", (0.3, 0.55, 0.85), 0.05, 0.62, emission=0.4),
+    "silicio_logica": make_material("silicio_logica", (0.2, 0.42, 0.22), 0.05, 0.62),
+    "silicio_escuro": make_material("silicio_escuro", (0.05, 0.06, 0.08), 0.05, 0.62),
+    "silicio_exec": make_material("silicio_exec", (0.55, 0.38, 0.16), 0.05, 0.62),
+    "silicio_mem": make_material("silicio_mem", (0.4, 0.18, 0.5), 0.05, 0.62),
+    "silicio_energia": make_material("silicio_energia", (0.62, 0.22, 0.14), 0.05, 0.62),
+    "silicio_ponte": make_material("silicio_ponte", (0.25, 0.25, 0.6), 0.05, 0.62),
     "substrato": make_material("substrato", (0.03, 0.1, 0.07), 0.0, 0.55),
 }
 
@@ -122,6 +122,7 @@ def setup_scene():
     sun = bpy.data.lights.new("sun", "SUN")
     sun.energy = 1.0
     sun.angle = math.radians(2.0)
+    sun.specular_factor = 0.3  # menos brilho especular: some o branco estourado nos metais
     sun_obj = bpy.data.objects.new("sun", sun)
     bpy.context.collection.objects.link(sun_obj)
     sun_obj.rotation_euler = (math.radians(48), math.radians(14), math.radians(32))

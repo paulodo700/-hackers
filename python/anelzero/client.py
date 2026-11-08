@@ -1362,11 +1362,32 @@ class Game(ShowBase):
         if name == "escape":
             self.close_layers()
             return
+        if name in CONFIRM_KEYS:
+            self.travel_to_layer(LY.LAYERS[self.layer_index]["id"])
+            return
         if name in ("arrow_right", "d", "arrow_down", "s"):
             self.layer_index = (self.layer_index + 1) % n
         elif name in ("arrow_left", "a", "arrow_up", "w"):
             self.layer_index = (self.layer_index - 1) % n
         self._refresh_layers()
+
+    def travel_to_layer(self, layer_id):
+        """Entra na zona jogável da camada (se a camada tiver uma)."""
+        zid = C.LAYER_ZONE_IDS.get(layer_id)
+        if zid is None:
+            self.say("Esta camada ainda não é uma zona jogável.", 2.5)
+            return
+        self.close_layers()
+        self.begin_transition(lambda z=zid: self._enter_zone(z))
+
+    def _enter_zone(self, zid):
+        self.mode = "play"
+        self._show_title(False)
+        self.player.show()
+        self.player_shadow.show()
+        self.minimap_img.show()
+        self.load_zone(zid, None)
+        self.say(C.ZONES[zid]["name"], 2.5)
 
     def _layer_texture(self, layer_id):
         """Textura da camada: a imagem renderizada no Blender, ou a grade própria se ela não existir."""

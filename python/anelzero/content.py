@@ -37,6 +37,14 @@ ZONE_LOOT = _loot["ZONE_LOOT"]
 ZONES = _zones["ZONES"]
 START_ZONE = _zones["START_ZONE"]
 
+# Zonas construídas a partir das camadas do processador (mesma grade da tela de camadas)
+from . import layers as _layers  # noqa: E402
+LAYER_ZONE_IDS = {}
+for _lid in ("llc",):
+    _entry = _layers.zone_entry(_lid, ZONES["cache"])
+    ZONES[_entry["id"]] = _entry
+    LAYER_ZONE_IDS[_lid] = _entry["id"]
+
 
 def ending_lines(kind, flags):
     """Texto do final conforme a missão extra do Núcleo foi cumprida (port de endingLines)."""

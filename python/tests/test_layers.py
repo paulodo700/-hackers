@@ -53,3 +53,38 @@ class Legend(unittest.TestCase):
     def test_layer_image_size(self):
         img = L.layer_image("dissipador", cell=4)
         self.assertEqual((img.getXSize(), img.getYSize()), (L.SIZE * 4, L.SIZE * 4))
+
+
+class LayerZone(unittest.TestCase):
+    """A zona construída a partir da camada de cache passa pelas mesmas regras das outras zonas."""
+
+    @classmethod
+    def setUpClass(cls):
+        from anelzero import content as C
+        cls.zone = C.ZONES[C.LAYER_ZONE_IDS["llc"]]
+        cls.rows = cls.zone["map"]
+
+    def test_is_registered_zone_with_map_and_theme(self):
+        self.assertEqual(self.zone["layer"], "llc")
+        self.assertEqual(len(self.rows), L.SIZE)
+        self.assertTrue(self.zone["theme"].get("trace"))
+
+    def test_spawn_and_portal_reachable(self):
+        from anelzero import world as W
+        z = W.load(self.zone["id"])
+        reach = z.reachable(z.spawn())
+        self.assertGreater(len(reach), 200)
+        for c, r, m in z.portals():
+            self.assertIn((c, r), reach)
+
+    def test_items_reachable(self):
+        from anelzero import world as W
+        z = W.load(self.zone["id"])
+        reach = z.reachable(z.spawn())
+        for c, r, m in z.pickups():
+            self.assertIn((c, r), reach)
+
+    def test_portal_goes_back_to_cache(self):
+        from anelzero import world as W
+        z = W.load(self.zone["id"])
+        self.assertTrue(all(m["to"] == "cache" for _c, _r, m in z.portals()))

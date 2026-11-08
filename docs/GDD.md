@@ -384,3 +384,22 @@ Os dois motores não se comparam entre si. As variações em relação à rodada
 | `tests/perf.mjs` | Chromium headless, 360×740, software; cena inteira / só o jogador | 28,3 FPS (54 chamadas, 10 584 triângulos) / 60,3 FPS |
 
 A tela de camadas não aparece durante a exploração, então as medições de exploração não mudam por causa dela. Os números variam dentro do ruído da máquina.
+
+## Rodada 15: o jogo é o processador (direção) e a zona da camada
+
+**Direção de design:** o jogo inteiro acontece dentro de um processador. Todo o mapa é o processador: cada camada (dissipador, fiação, cache, núcleo, memória, energia, interposer, substrato) é uma parte dele, e tudo o que existe no jogo (zonas, inimigos, itens, ferramentas) faz parte desse processador. O personagem usa ferramentas para melhorar o processador. Isso ainda não está implementado. O primeiro passo é a zona da camada de cache, e as ferramentas (reparo, reforço de cache, ajuste de energia) são a próxima etapa.
+
+- **Realismo no Blender:** os silícios passaram a dielétricos (metallic 0,05, rugosidade 0,62), o que eliminou o branco estourado nos blocos de energia e de lógica. Os metais (cobre, ouro) ganharam rugosidade maior, e a prata dos pinos ficou mais escura, com rugosidade 0,5. A luz especular do sol foi reduzida para 0,3. A comparação antes e depois está em `tools/blender/`: nos blocos vermelhos e verdes, o branco sumiu e a cor voltou.
+- **Limite:** ainda há um brilho leve nas esferas de solda da borda. Isso é esperado para metal e não foi tratado.
+- **Zona protótipo:** a camada de cache (LLC) virou uma zona jogável. Os bancos de cache são paredes, o substrato entre eles, as trilhas e as vias são caminhos, e o anel é a borda. O spawn, os itens e a passagem de volta são colocados em células alcançáveis. A paleta é a da zona de cache. A entrada é pela tela de camadas (Enter).
+- **Limites da zona:** as paredes são baixas em relação à câmera, e o corredor central domina a tela. Ainda não há inimigos específicos da camada, nem objetivos próprios.
+- **Testes:** a zona passa pelas regras das outras zonas (conectividade, itens alcançáveis, passagem de volta para a zona de cache).
+
+### Desempenho medido nesta rodada
+
+| Robô | Motor e condição | Resultado |
+|---|---|---|
+| `tools/bench_shadows.py` | Panda3D, Xvfb, CPU; sombra desligada / ligada | 6,87 / 13,31 ms por quadro (+6,43 ms, +94%) |
+| `tests/perf.mjs` | Chromium headless, 360×740, software; cena inteira / só o jogador | 32,5 FPS (52 chamadas, 10 560 triângulos) / 60,2 FPS |
+
+A zona da camada existe só na versão Python. O robô da web não tem essa zona, então não há medição dela no lado web. As medições acima são da cena inteira de cada versão, não da zona da camada.

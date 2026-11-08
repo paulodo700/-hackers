@@ -242,3 +242,96 @@ def layer_image(layer_id, cell=10):
                     img.setXel(x * cell + dx, y * cell + dy, r, g, b)
     return img
 
+
+
+# ---- Zona jogável a partir de uma camada ----
+
+WALL_CODES = {"x", "c", "C", "d", "R"}   # bancos de cache, bits e anel: bloqueiam
+FLOOR_CODES = {"G", "B", "v"}            # substrato entre os blocos, trilhas e vias: andam
+
+
+def _layer_zone_map(layer_id, seed_offset=0):
+    """Mapa jogável: paredes '#', caminhos '.', trilhas '=' (cores da zona)."""
+    rows = layer_rows(layer_id)
+    out = []
+    for row in rows:
+        line = []
+        for ch in row:
+            if ch in WALL_CODES:
+                line.append("#")
+            elif ch == "B":
+                line.append("=")
+            elif ch in FLOOR_CODES:
+                line.append(".")
+            else:
+                line.append("#")
+        out.append("".join(line))
+    return out
+
+
+def _bfs(rows, start):
+    seen = {start}
+    queue = [start]
+    while queue:
+        c, r = queue.pop(0)
+        for dc, dr in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            n = (c + dc, r + dr)
+            if n in seen or not (0 <= n[1] < len(rows) and 0 <= n[0] < len(rows[0])):
+                continue
+            if rows[n[1]][n[0]] in ".=":
+                seen.add(n)
+                queue.append(n)
+    return seen
+
+
+def zone_entry(layer_id, base_zone, zone_id=None, name=None):
+    """Entrada de zona (mesmo formato de zones.json) construída a partir de uma camada do processador.
+
+    base_zone: zona de referência (tema, inimigos e música). Paredes, caminhos, spawn, itens e a
+    passagem de volta ficam na grade da camada, então o mapa é o desenho da camada.
+    """
+    zone_id = zone_id or f"camada_{layer_id}"
+    rows = _layer_zone_map(layer_id)
+    h, w = len(rows), len(rows[0])
+    # ponto inicial: caminho alcançável mais próximo do centro da parte de baixo
+    floor = [(c, r) for r in range(h) for c in range(w) if rows[r][c] in ".="]
+    target = (w // 2, h - 4)
+    spawn = min(floor, key=lambda p: abs(p[0] - target[0]) + abs(p[1] - target[1]))
+    reach = sorted(_bfs(rows, spawn), key=lambda p: abs(p[0] - spawn[0]) + abs(p[1] - spawn[1]))
+    grid = [list(r) for r in rows]
+    gc, gr = spawn
+    grid[gr][gc] = "S"
+    # passagem de volta para a zona de cache: caminho mais distante, que ainda está alcançável
+    portal = reach[-1]
+    grid[portal[1]][portal[0]] = "A"
+    # itens espalhados pela área alcançável (espaçados por distância mínima)
+    placed = []
+    markers = {"S": {"type": "spawn"}, "A": {"type": "portal", "to": "cache"}}
+    item_chars = [("k", "capacitor"), ("f", "fio_cobre"), ("l", "liga_ferrugem"), ("q", "cristal_silicio")]
+    for k, (ch, item) in enumerate(item_chars):
+        for c, r in reach[len(reach) // 4:]:
+            if grid[r][c] != "." or any(abs(c - pc) + abs(r - pr) < 6 for pc, pr in placed):
+                continue
+            grid[r][c] = ch
+            placed.append((c, r))
+            markers[ch] = {"type": "pickup", "item": item}
+            break
+    # um baú extra num caminho alcançável
+    for c, r in reach[len(reach) // 2:]:
+        if grid[r][c] == ".":
+            grid[r][c] = "x"
+            markers["x"] = {"type": "chest", "extra": True}
+            break
+    base = base_zone or {}
+    return {
+        "id": zone_id,
+        "name": name or f"Camada: {next(l['name'] for l in LAYERS if l['id'] == layer_id)}",
+        "music": base.get("music", "wind"),
+        "encounter": base.get("encounter", 0.02),
+        "theme": dict(base.get("theme", {})),
+        "enemies": list(base.get("enemies", [])),
+        "decor": base.get("decor", "pins"),
+        "markers": markers,
+        "map": ["".join(r) for r in grid],
+        "layer": layer_id,
+    }
