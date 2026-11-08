@@ -1,243 +1,299 @@
-// Regras do jogo, sem DOM: movimento e colisão, troca de camada, combate, reparo, criação, mapa e depuração.
-// A renderização (render.js) só lê este estado. O salvamento (save.js) lê e restaura o mesmo estado.
+// Fachada do jogo: estado, mundo e entrada de comandos. As regras ficam em src/systems/; este arquivo liga tudo.
+// Sem DOM: a renderização lê este estado e os eventos (game.events) são consumidos pelo main.js.
 import { mulberry32 } from './rng.js';
 import {
-  Grid, FLOOR, BLOCKING, DOWN, UP, GOAL, SPAWN, NPC, PICKUP_ITEMS, FOE_CHARS, TOOL_CELLS, OPENED, cellKey,
+  Grid, FLOOR, BLOCKING, UP, DOWN, GOAL, SPAWN, NPC, MERCHANT, BOSS, FOE_CHARS, cellKey,
 } from './grid.js';
 import { LAYER_ORDER, LAYERS } from './layers.js';
 import { generateMap } from './mapgen.js';
+import { estatisticas } from './systems/stats.js';
 import {
-  FOES, RECIPES, REINFORCE_HP, RESPAWN_RATIO, MATERIAL_NOMES, TOOL_NOMES,
-} from './content.js';
+  efeitosDoPasso, coletarNaCelula, moverFalhas, contatoComFalha, interagir, usarFerramenta,
+} from './systems/world.js';
+import { iniciarBatalha, acaoJogador } from './systems/combat.js';
+import { progresso } from './systems/quests.js';
+import { avancarDialogo, escolherOpcao, encerrarDialogo } from './systems/dialogue.js';
+import { executarAcaoMenu, itensDoMenu } from './menus.js';
 
 const LOG_MAX = 6;
 
+const novoJogador = () => ({
+  nivel: 1, xp: 0, pontos: 0,
+  hp: 24, maxHp: 24, ep: 10, maxEp: 10,
+  atk: 4, def: 1, spd: 5, crit: 5,
+  camada: LAYER_ORDER[0], c: 1, r: 1, fc: 1, fr: 0,
+  habilidades: [],
+  equip: { dissipador: null, antena: null, modulo: null },
+  estados: [], escudo: 0, calor: 0, passos: 0,
+});
+
 export class Game {
-  constructor({ seed = 7 } = {}) {
+  constructor({ seed = 7, catalog } = {}) {
+    if (!catalog) throw new Error('o Game precisa de um catálogo de dados');
+    this.catalog = catalog;
+    this.seed = seed;
     this.rng = mulberry32(seed);
-    this.player = { hp: 20, maxHp: 20, atk: 4, def: 1, layer: LAYER_ORDER[0], c: 0, r: 0, fc: 1, fr: 0 };
-    this.materials = { liga_ferrugem: 0, fio_cobre: 0, cristal_silicio: 0 };
-    this.tools = { reparo_trilha: 0, ajuste_energia: 0, reforco_nucleo: 0 };
-    this.world = {};
-    LAYER_ORDER.forEach((id, i) => {
-      const rows = generateMap(LAYERS[id], 1000 + i * 101);
-      // origin é o mapa como foi gerado. Comparar com ele mostra o que o jogador mudou (reparos, vitórias, coletas).
-      this.world[id] = { grid: new Grid(rows), origin: rows.slice(), visited: new Set(), npc: 0 };
-    });
+    this.nextEntityId = 1;
+    this.player = novoJogador();
+    this.inv = {};
+    this.ciclos = 0;
+    this.flags = {};
+    this.missoes = {};
+    this.bestiario = {};
+    this.chefes = {};
+    this.bausAbertos = {};
+    this.lojas = {};
+    this.diario = [];
     this.battle = null;
     this.dialog = null;
-    this.craftOpen = false;
+    this.lojaPendente = null;
+    this.menu = null;
+    this.menuStack = [];
     this.mapOpen = false;
     this.debug = false;
     this.won = false;
+    this.events = [];
     this.log = [];
+    this.world = {};
+    LAYER_ORDER.forEach((id, ordem) => { this.world[id] = this.montarCamada(id, ordem); });
     this.placeAt(LAYER_ORDER[0], SPAWN);
   }
 
-  get layer() { return this.world[this.player.layer]; }
+  // ---------- Mundo ----------
+
+  // Gera o mapa da camada e separa as falhas, o chefe e os técnicos (que viram entidades e posições).
+  montarCamada(id, ordem) {
+    const lista = Object.values(this.catalog.npcs ?? {}).filter((n) => n.camada === id);
+    const mercadores = lista.filter((n) => n.tipo === 'mercador');
+    const outros = lista.filter((n) => n.tipo !== 'mercador');
+    const npcChars = [...outros.map(() => NPC), ...mercadores.map(() => MERCHANT)];
+    const rows = generateMap({ ...LAYERS[id], npcs: npcChars, boss: true }, 1000 + ordem * 101);
+    const grid = new Grid(rows);
+    const chefe = Object.values(this.catalog.falhas).find((f) => f.chefe && f.camada === id) ?? null;
+    const entidades = [];
+    const npcs = [];
+    const filaNpc = [...outros];
+    const filaMercador = [...mercadores];
+    for (let r = 0; r < grid.h; r++) {
+      for (let c = 0; c < grid.rows[r].length; c++) {
+        const ch = grid.at(c, r);
+        if (FOE_CHARS[ch]) {
+          entidades.push(this.novaEntidade(id, FOE_CHARS[ch], c, r, false));
+          grid.set(c, r, FLOOR);
+        } else if (ch === BOSS) {
+          if (chefe) entidades.push(this.novaEntidade(id, chefe.id, c, r, true));
+          grid.set(c, r, FLOOR);
+        } else if (ch === NPC) {
+          npcs.push({ id: filaNpc.shift()?.id ?? null, c, r });
+        } else if (ch === MERCHANT) {
+          npcs.push({ id: filaMercador.shift()?.id ?? null, c, r, mercador: true });
+        }
+      }
+    }
+    const totalFalhas = entidades.filter((e) => !e.boss).length;
+    return {
+      grid,
+      origin: grid.rows.slice(),
+      visited: new Set(),
+      entities: entidades,
+      npcs,
+      boss: chefe?.id ?? null,
+      totalFalhas,
+    };
+  }
+
+  novaEntidade(camada, foe, c, r, boss) {
+    const comp = boss ? 'estatico' : (this.catalog.falhas[foe]?.comportamento ?? 'estatico');
+    return { id: this.nextEntityId++, foe, camada, c, r, origem: [c, r], comp, boss, ignorar: 0 };
+  }
+
+  get layer() { return this.world[this.player.camada]; }
   get grid() { return this.layer.grid; }
-  front() { return [this.player.c + this.player.fc, this.player.r + this.player.fr]; }
+  layerState() { return this.world[this.player.camada]; }
+  layerOrdem(camada) { return LAYER_ORDER.indexOf(camada); }
+  estatisticas() { return estatisticas(this); }
+
+  // Coloca Bit numa célula do tipo ch (S, < ou >) da camada; se faltar, cai para outras entradas.
+  placeAt(camada, ch) {
+    const grid = this.world[camada].grid;
+    const found = grid.find(ch)[0] || grid.find(SPAWN)[0] || grid.find(UP)[0] || grid.find(DOWN)[0];
+    Object.assign(this.player, { camada, c: found[0], r: found[1] });
+    this.reveal();
+  }
+
+  // Névoa: marca a célula de Bit e as oito vizinhas como visitadas.
+  reveal() {
+    const { c, r } = this.player;
+    const visitadas = this.layer.visited;
+    for (let dr = -1; dr <= 1; dr++) {
+      for (let dc = -1; dc <= 1; dc++) {
+        if (this.grid.inside(c + dc, r + dr)) visitadas.add(cellKey(c + dc, r + dr));
+      }
+    }
+  }
+
+  frente() { return [this.player.c + this.player.fc, this.player.r + this.player.fr]; }
+
+  // Remove uma entidade (falha vencida ou chefe derrotado) da camada atual.
+  removerEntidade(id) {
+    const camada = this.world[this.player.camada];
+    camada.entities = camada.entities.filter((e) => e.id !== id);
+  }
+
+  // Após fugir, a falha ignora Bit por alguns passos (senão o combate começa de novo na hora).
+  ignorarEntidade(id, passos) {
+    const e = this.layerState().entities.find((x) => x.id === id);
+    if (e) e.ignorar = this.player.passos + passos;
+  }
+
+  // ---------- Eventos e registro ----------
 
   say(text) {
     this.log.push(text);
     if (this.log.length > LOG_MAX) this.log.shift();
   }
 
-  // Coloca o jogador numa célula do tipo ch (S, < ou >) da camada; cai para outras entradas se faltar.
-  placeAt(layerId, ch) {
-    const grid = this.world[layerId].grid;
-    const found = grid.find(ch)[0] || grid.find(SPAWN)[0] || grid.find(UP)[0] || grid.find(DOWN)[0];
-    Object.assign(this.player, { layer: layerId, c: found[0], r: found[1] });
-    this.reveal();
+  emit(evento) {
+    this.events.push(evento);
   }
 
-  // Névoa: marca a célula do jogador e as oito vizinhas como visitadas.
-  reveal() {
-    const { c, r } = this.player;
-    for (let dr = -1; dr <= 1; dr++) {
-      for (let dc = -1; dc <= 1; dc++) {
-        if (this.grid.inside(c + dc, r + dr)) this.layer.visited.add(cellKey(c + dc, r + dr));
-      }
-    }
-  }
+  // ---------- Movimento ----------
 
-  // Com o mapa do chip aberto o jogo fica parado: nada anda, fala, usa ou cria.
-  paused() {
-    return { type: 'paused' };
-  }
-
-  // Movimento de uma célula. Bater numa parede vira a direção; bater numa falha começa o combate.
+  // Um passo. Bloqueios, falhas, saídas, materiais, calor, inimigos e contato com inimigos, nessa ordem.
   move(dc, dr) {
     const p = this.player;
     p.fc = dc;
     p.fr = dr;
     if (this.won) return { type: 'won' };
-    if (this.mapOpen) return this.paused();
+    if (this.menu || this.dialog || this.mapOpen) return { type: 'paused' };
     if (this.battle) return { type: 'battle' };
-    this.dialog = null;
     const nc = p.c + dc, nr = p.r + dr;
     const ch = this.grid.at(nc, nr);
-    if (FOE_CHARS[ch]) return this.startBattle(nc, nr, ch);
-    if (ch === UP) return this.changeLayer(-1);
-    if (ch === DOWN) return this.changeLayer(1);
+    if (ch === UP) return this.trocarCamada(-1);
+    if (ch === DOWN) return this.trocarCamada(1);
     if (BLOCKING.has(ch)) return { type: 'blocked', ch };
     if (ch === GOAL) {
-      p.c = nc; p.r = nr;
+      p.c = nc;
+      p.r = nr;
       this.won = true;
       this.say('Você alcançou o anel zero!');
+      this.emit({ tipo: 'sfx', id: 'vitoria' });
       return { type: 'won' };
     }
-    const item = PICKUP_ITEMS[ch];
-    if (item) {
-      this.materials[item]++;
-      this.grid.set(nc, nr, FLOOR);
-      this.say(`+1 ${MATERIAL_NOMES[item]}`);
-    }
-    p.c = nc; p.r = nr;
+    p.c = nc;
+    p.r = nr;
     this.reveal();
-    return { type: item ? 'pickup' : 'moved', item };
+    const coletado = coletarNaCelula(this);
+    if (efeitosDoPasso(this)) return { type: 'derrota' };
+    moverFalhas(this);
+    const contato = contatoComFalha(this);
+    if (contato && !this.battle) iniciarBatalha(this, { ...contato, camada: p.camada });
+    return { type: coletado ? 'pickup' : 'moved', item: coletado };
   }
 
-  // Troca de camada: descer entra pelo '<' da próxima, subir entra pelo '>' da anterior.
-  changeLayer(step) {
-    const i = LAYER_ORDER.indexOf(this.player.layer) + step;
-    if (i < 0 || i >= LAYER_ORDER.length) return { type: 'blocked', ch: step < 0 ? UP : DOWN };
-    const target = LAYER_ORDER[i];
-    this.placeAt(target, step > 0 ? UP : DOWN);
-    this.say(`Camada: ${LAYERS[target].nome}`);
-    return { type: 'layer', layer: target };
+  // Troca de camada: descer entra pela entrada '<' da próxima; subir entra pela saída '>' da anterior.
+  trocarCamada(passo) {
+    const i = LAYER_ORDER.indexOf(this.player.camada) + passo;
+    if (i < 0 || i >= LAYER_ORDER.length) return { type: 'blocked', ch: passo < 0 ? UP : DOWN };
+    const alvo = LAYER_ORDER[i];
+    this.placeAt(alvo, passo > 0 ? UP : DOWN);
+    this.say(`Camada: ${LAYERS[alvo].nome}`);
+    this.emit({ tipo: 'camada', camada: alvo });
+    this.emit({ tipo: 'musica', id: alvo });
+    progresso(this, { tipo: 'chegou', camada: alvo });
+    return { type: 'layer', layer: alvo };
   }
 
-  startBattle(c, r, ch) {
-    const foe = FOE_CHARS[ch];
-    this.battle = { c, r, foe, hp: FOES[foe].hp, defend: false };
-    this.say(`${FOES[foe].nome} aparece!`);
-    return { type: 'battle', foe };
+  // ---------- Ações na exploração ----------
+
+  // E: fala, abre loja ou baú. Com diálogo ou menu aberto, confirma a escolha.
+  confirmar() {
+    if (this.dialog) return this.dialog.opcoes?.length ? escolherOpcao(this, this.dialog.cursor ?? 0) : avancarDialogo(this);
+    if (this.menu) return this.selecionarMenu();
+    return interagir(this);
   }
 
-  roll() {
-    return Math.floor(this.rng() * 3) - 1; // -1, 0 ou +1
-  }
+  interact() { return this.confirmar(); }
 
-  // Ações: 'atacar', 'defender', 'fugir'. Cada ação que não vence dá o turno à falha.
-  battleAction(action) {
-    if (this.mapOpen) return this.paused();
-    const b = this.battle;
-    if (!b) return { type: 'none' };
-    const p = this.player, foe = FOES[b.foe];
-    if (action === 'fugir') {
-      if (this.rng() < 0.5) {
-        this.battle = null;
-        this.say('Você fugiu.');
-        return { type: 'fled' };
-      }
-      this.say('Não conseguiu fugir.');
-    } else if (action === 'defender') {
-      b.defend = true;
-      this.say('Você se defende.');
-    } else if (action === 'atacar') {
-      const dmg = Math.max(1, p.atk - foe.def + this.roll());
-      b.hp -= dmg;
-      this.say(`Você causa ${dmg} de dano.`);
-      if (b.hp <= 0) return this.win();
-    } else {
-      return { type: 'none' };
-    }
-    this.foeTurn();
-    if (p.hp <= 0) return this.lose();
-    return { type: 'turn' };
-  }
-
-  foeTurn() {
-    const b = this.battle, foe = FOES[b.foe], p = this.player;
-    let dmg = Math.max(1, foe.atk - p.def + this.roll());
-    if (b.defend) dmg = Math.max(1, Math.floor(dmg / 2));
-    b.defend = false;
-    p.hp = Math.max(0, p.hp - dmg);
-    this.say(`${foe.nome} causa ${dmg} de dano.`);
-  }
-
-  win() {
-    const b = this.battle, foe = FOES[b.foe];
-    this.grid.set(b.c, b.r, FLOOR);
-    this.battle = null;
-    this.say(`${foe.nome} foi derrotado.`);
-    const drops = [];
-    for (const [item, chance] of Object.entries(foe.drop)) {
-      if (this.rng() < chance) {
-        this.materials[item]++;
-        drops.push(item);
-        this.say(`+1 ${MATERIAL_NOMES[item]}`);
-      }
-    }
-    return { type: 'won', foe: b.foe, drops };
-  }
-
-  lose() {
-    const p = this.player;
-    this.battle = null;
-    p.hp = Math.max(1, Math.floor(p.maxHp * RESPAWN_RATIO));
-    this.placeAt(p.layer, SPAWN);
-    this.say('Você caiu. Renasceu no ponto inicial da camada.');
-    return { type: 'defeated' };
-  }
-
-  // Fala com o técnico que está na frente do jogador.
-  interact() {
-    if (this.mapOpen) return this.paused();
-    if (this.battle) return { type: 'battle' };
-    const [c, r] = this.front();
-    if (this.grid.at(c, r) !== NPC) return { type: 'none' };
-    const lines = LAYERS[this.player.layer].dialogo;
-    const text = lines[this.layer.npc % lines.length];
-    this.layer.npc++;
-    this.dialog = { speaker: LAYERS[this.player.layer].nome, text };
-    return { type: 'dialog' };
-  }
-
-  // Usa a ferramenta certa na célula da frente: reparo (x), ajuste de energia (g) ou reforço (o).
   useTool() {
-    if (this.mapOpen) return this.paused();
-    if (this.battle) return { type: 'battle' };
-    const [c, r] = this.front();
-    const ch = this.grid.at(c, r);
-    const tool = TOOL_CELLS[ch];
-    if (!tool) return { type: 'none' };
-    if (this.tools[tool] < 1) {
-      this.say(`Falta: ${TOOL_NOMES[tool]}`);
-      return { type: 'missing', tool };
-    }
-    this.tools[tool]--;
-    this.grid.set(c, r, OPENED[ch]);
-    if (tool === 'reforco_nucleo') {
-      this.player.maxHp += REINFORCE_HP;
-      this.player.hp += REINFORCE_HP;
-    }
-    this.say(`${TOOL_NOMES[tool]} aplicado.`);
-    return { type: 'used', tool, c, r };
+    if (this.menu || this.dialog || this.mapOpen) return { type: 'paused' };
+    return usarFerramenta(this);
   }
 
-  // Cria uma ferramenta com os materiais. Nada é gasto se faltar algum material.
-  craft(tool) {
-    if (this.mapOpen) return this.paused();
-    if (this.battle) return { type: 'battle' };
-    const recipe = RECIPES[tool];
-    if (!recipe) return { type: 'none' };
-    const missing = Object.entries(recipe).filter(([m, n]) => this.materials[m] < n).map(([m]) => m);
-    if (missing.length) {
-      this.say('Materiais insuficientes.');
-      return { type: 'missing_materials', missing };
-    }
-    for (const [m, n] of Object.entries(recipe)) this.materials[m] -= n;
-    this.tools[tool]++;
-    this.say(`Criado: ${TOOL_NOMES[tool]}`);
-    return { type: 'crafted', tool };
+  // ---------- Diálogo ----------
+
+  navegarDialogo(delta) {
+    if (!this.dialog?.opcoes?.length) return { type: 'nada' };
+    const n = this.dialog.opcoes.length;
+    this.dialog.cursor = ((this.dialog.cursor ?? 0) + delta + n) % n;
+    return { type: 'cursor', cursor: this.dialog.cursor };
   }
 
-  toggleCraft() {
-    if (this.mapOpen) return this.paused();
-    this.craftOpen = !this.craftOpen;
-    return { type: 'craft', open: this.craftOpen };
+  escolherDialogoNumero(numero) {
+    if (!this.dialog?.opcoes?.length) return { type: 'nada' };
+    return escolherOpcao(this, numero - 1);
+  }
+
+  // Esc durante o diálogo: encerra a conversa.
+  sairDialogo() { return encerrarDialogo(this); }
+
+  // ---------- Combate ----------
+
+  acao(tipo, arg) {
+    if (this.mapOpen) return { type: 'paused' };
+    return acaoJogador(this, tipo, arg);
+  }
+
+  // ---------- Menus e telas ----------
+
+  abrirMenu(tipo, dados = {}) {
+    if (this.menu) this.menuStack.push(this.menu);
+    this.menu = { tipo, cursor: 0, dados };
+    return { type: 'menu', tipo };
+  }
+
+  // Voltar: sobe um nível de menu ou fecha o último.
+  voltarMenu() {
+    if (!this.menu) return { type: 'nada' };
+    this.menu = this.menuStack.pop() ?? null;
+    return { type: 'voltou' };
+  }
+
+  fecharMenu() {
+    this.menu = null;
+    this.menuStack = [];
+    return { type: 'fechado' };
+  }
+
+  navegarMenu(delta) {
+    if (!this.menu) return { type: 'nada' };
+    const itens = itensDoMenu(this);
+    if (!itens.length) return { type: 'nada' };
+    const n = itens.length;
+    this.menu.cursor = (this.menu.cursor + delta + n) % n;
+    return { type: 'cursor', cursor: this.menu.cursor };
+  }
+
+  // Número escolhe o item de mesma posição (1 = primeiro).
+  escolherMenuNumero(numero) {
+    if (!this.menu) return { type: 'nada' };
+    const itens = itensDoMenu(this);
+    const item = itens[numero - 1];
+    if (!item) return { type: 'nada' };
+    this.menu.cursor = numero - 1;
+    return this.selecionarMenu();
+  }
+
+  selecionarMenu() {
+    if (!this.menu) return { type: 'nada' };
+    const item = itensDoMenu(this)[this.menu.cursor];
+    if (!item || item.acao?.tipo === 'nada') return { type: 'nada' };
+    return executarAcaoMenu(this, item.acao);
+  }
+
+  toggleMap() {
+    this.mapOpen = !this.mapOpen;
+    return { type: 'map', open: this.mapOpen };
   }
 
   toggleDebug() {
@@ -245,35 +301,30 @@ export class Game {
     return { type: 'debug', on: this.debug };
   }
 
-  // Abre ou fecha o mapa do chip. Abrir não gasta tempo nem muda o jogo.
-  toggleMap() {
-    this.mapOpen = !this.mapOpen;
-    return { type: 'map', open: this.mapOpen };
-  }
-
-  // Esc: fecha o mapa, o menu de criação e o diálogo.
+  // Esc: fecha mapa, menu, diálogo. Em combate não fecha nada (não há como fugir por Esc).
   closeAll() {
+    const algo = !!(this.mapOpen || this.menu || this.dialog);
     this.mapOpen = false;
-    this.craftOpen = false;
-    this.dialog = null;
-    return { type: 'closed' };
+    this.fecharMenu();
+    if (this.dialog) encerrarDialogo(this);
+    return { type: 'closed', algo };
   }
 
-  // Visão de depuração: a grade com névoa (células não visitadas viram '?') e a posição do jogador.
+  // Visão de depuração: a grade com névoa (células não visitadas viram '?') e a posição de Bit.
   debugView() {
-    const g = this.grid, p = this.player, visited = this.layer.visited;
+    const g = this.grid, p = this.player, visitadas = this.layer.visited;
     const lines = [];
-    let walkable = 0;
+    let caminhaveis = 0;
     for (let r = 0; r < g.h; r++) {
       let s = '';
       for (let c = 0; c < g.rows[r].length; c++) {
         const ch = g.rows[r][c];
-        if (!BLOCKING.has(ch) && ch !== '#') walkable++;
+        if (!BLOCKING.has(ch) && ch !== '#') caminhaveis++;
         if (c === p.c && r === p.r) s += '@';
-        else s += visited.has(cellKey(c, r)) ? ch : '?';
+        else s += visitadas.has(cellKey(c, r)) ? ch : '?';
       }
       lines.push(s);
     }
-    return { lines, visitedCount: visited.size, walkableCount: walkable, player: { c: p.c, r: p.r } };
+    return { lines, visitedCount: visitadas.size, walkableCount: caminhaveis, player: { c: p.c, r: p.r } };
   }
 }

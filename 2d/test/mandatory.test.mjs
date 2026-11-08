@@ -21,7 +21,8 @@ function reachFrom(grid, start, closed) {
 }
 
 test('cada camada com bloqueio exige a ferramenta: sem ela, a saída fica inalcançável', () => {
-  const TOOL_BLOCKERS = new Set(['x', 'g', 'o']);
+  // Sem as ferramentas, as células de ferramenta e a porta da sala continuam fechadas.
+  const TOOL_BLOCKERS = new Set(['x', 'g', 'o', 'D']);
   LAYER_ORDER.forEach((id, i) => {
     const spec = LAYERS[id];
     if (!(spec.blockers ?? []).length) return;

@@ -12,9 +12,8 @@
     .pad { display: none; width: 100%; max-width: 720px; margin-top: 10px; gap: 8px 10px; grid-template-columns: auto minmax(0, 1fr); align-items: start; user-select: none; -webkit-user-select: none; }
     body.touch .pad { display: grid; }
     .dpad { display: grid; grid-template-columns: repeat(3, 58px); grid-template-rows: repeat(3, 52px); gap: 6px; }
-    .ctx { grid-column: 2; grid-row: 1; display: flex; flex-direction: column; gap: 6px; justify-content: flex-start; }
-    .ctx[hidden] { display: none; }
-    .acts { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+    .acoes { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+    
     button {
       font-family: monospace; font-size: 15px; color: #dfe9f3; background: #101820;
       border: 1px solid #34495e; border-radius: 8px; padding: 8px 6px; min-height: 48px;
@@ -32,11 +31,10 @@
 <body>
   <canvas id="game" width="720" height="640"></canvas>
   <div id="pad" class="pad" aria-label="Controles de toque">
-    <div id="dpad" class="dpad" aria-label="Mover"></div>
-    <div id="ctx" class="ctx" aria-label="Ação do combate ou da criação"></div>
-    <div id="acts" class="acts" aria-label="Ações"></div>
+    <div id="dpad" class="dpad" aria-label="Andar"></div>
+    <div id="acoes" class="acoes" aria-label="Ações"></div>
   </div>
-  <p class="hint">Setas ou WASD mover · E falar · R usar · C criar · M mapa do chip · F3 depurar · N novo jogo</p>
+  <p class="hint">Setas ou WASD andar · E falar/abrir · R usar · C criar · I inventário · K habilidades · J diário · B bestiário · Tab menu · M mapa · F3 depurar · N novo jogo</p>
   <script type="module" src="./src/main.js"></script>
 </body>
 </html>

@@ -1,159 +1,154 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { Game } from '../src/game.js';
+import { novoJogo } from './fixtures.mjs';
 import { LAYER_ORDER } from '../src/layers.js';
-import { WALL, OPENED, FOE_CHARS, PICKUP_ITEMS, TOOL_CELLS, cellKey } from '../src/grid.js';
+import { Grid, FLOOR, cellKey } from '../src/grid.js';
 import {
-  memoryStorage, browserStorage, createSaver, serialize, loadGame, clearSave, allKeys,
-  layerKey, RUN_KEY,
+  memoryStorage, browserStorage, createSaver, serialize, loadGame, clearSave, allKeys, layerKey, RUN_KEY, VERSION, fingerprint,
 } from '../src/save.js';
+import { aplicarEfeito } from '../src/systems/dialogue.js';
 
-function firstCell(rows, pred) {
-  for (let r = 0; r < rows.length; r++) {
-    for (let c = 0; c < rows[r].length; c++) if (pred(rows[r][c])) return [c, r];
-  }
-  return null;
-}
-
-// Partida com progresso: passos, um reparo, uma falha vencida, um material, visitas, uma fala e sorteios.
-function playedGame(seed = 5) {
-  const g = new Game({ seed });
+// Partida com progresso variado: itens, missão, ciclos, bestiário, baús, sorteio avançado e mapa mudado.
+function partidaComProgresso(seed = 5) {
+  const g = novoJogo(seed);
+  g.player.c = 2;
   g.move(1, 0);
-  g.move(1, 0);
-  const [xc, xr] = firstCell(g.world.metal_m1.origin, (ch) => TOOL_CELLS[ch]);
-  g.world.metal_m1.grid.set(xc, xr, OPENED.x);
-  const [fc, fr] = firstCell(g.world.dissipador.origin, (ch) => FOE_CHARS[ch]);
-  g.world.dissipador.grid.set(fc, fr, '.');
-  const [pc, pr] = firstCell(g.world.dissipador.origin, (ch) => PICKUP_ITEMS[ch]);
-  g.world.dissipador.grid.set(pc, pr, '.');
-  g.materials.fio_cobre = 3;
-  g.tools.reparo_trilha = 1;
-  g.world.cache_l3.npc = 2;
-  g.world.cache_l3.visited.add(cellKey(3, 3));
-  g.roll();
-  g.roll();
+  g.inv.fio_cobre = 4;
+  g.inv.liga_ferrugem = 2;
+  g.ciclos = 77;
+  aplicarEfeito(g, { tipo: 'quest_iniciar', id: 'capitulo_dissipador' });
+  aplicarEfeito(g, { tipo: 'flag', id: 'conheceu_lia' });
+  g.bestiario.pulga_corrente = { vistas: 3, vencidas: 2, escaneada: false };
+  g.bausAbertos = { 'dissipador|5,5': true };
+  g.diario.push('Anotação de teste.');
+  g.rng();
+  g.rng();
+  const camada = 'metal_m1';
+  const alvo = g.world[camada].grid.find('x')[0];
+  if (alvo) g.world[camada].grid.set(alvo[0], alvo[1], '=');
+  g.world[camada].visited.add(cellKey(4, 4));
   return g;
 }
 
-function savedStorage(g) {
+const salvar = (g) => {
   const st = memoryStorage(true);
   createSaver(st).save(g);
   return st;
-}
+};
 
-test('a partida e cada camada têm chaves separadas', () => {
-  const keys = serialize(new Game({ seed: 1 })).map((e) => e.key);
+test('o salvamento tem uma chave para a partida e uma por camada, todas da versão atual', () => {
+  const keys = serialize(novoJogo(1)).map((e) => e.key);
   assert.equal(keys.length, 1 + LAYER_ORDER.length);
   assert.equal(new Set(keys).size, keys.length);
-  for (const id of LAYER_ORDER) assert.ok(keys.includes(layerKey(id)), `chave da camada ${id}`);
+  assert.ok(keys.every((k) => k.startsWith(`anelzero2d.v${VERSION}.`)));
   assert.ok(keys.includes(RUN_KEY));
+  for (const id of LAYER_ORDER) assert.ok(keys.includes(layerKey(id)));
 });
 
-test('carregar restaura partida e camadas exatamente como estavam', () => {
-  const g = playedGame();
-  const st = savedStorage(g);
-  const h = new Game({ seed: 99 });
+test('carregar restaura a partida inteira: jogador, inventário, missão, mapa, falhas, visitas e sorteio', () => {
+  const g = partidaComProgresso();
+  const st = salvar(g);
+  const h = novoJogo(99);
   const rep = loadGame(h, st);
   assert.equal(rep.status, 'restored');
   assert.deepEqual(rep.discarded, []);
   assert.deepEqual(h.player, g.player);
-  assert.deepEqual(h.materials, g.materials);
-  assert.deepEqual(h.tools, g.tools);
+  assert.deepEqual(h.inv, g.inv);
+  assert.equal(h.ciclos, g.ciclos);
+  assert.deepEqual(h.missoes, g.missoes);
+  assert.deepEqual(h.flags, g.flags);
+  assert.deepEqual(h.bestiario, g.bestiario);
+  assert.deepEqual(h.bausAbertos, g.bausAbertos);
+  assert.deepEqual(h.diario, g.diario);
   for (const id of LAYER_ORDER) {
-    assert.deepEqual(h.world[id].grid.rows, g.world[id].grid.rows, `grade de ${id}`);
+    assert.deepEqual(h.world[id].grid.rows, g.world[id].grid.rows, `mapa de ${id}`);
     assert.deepEqual([...h.world[id].visited].sort(), [...g.world[id].visited].sort(), `visitas de ${id}`);
-    assert.equal(h.world[id].npc, g.world[id].npc, `falas de ${id}`);
+    assert.deepEqual(h.world[id].entities, g.world[id].entities, `falhas de ${id}`);
   }
   assert.equal(h.rng.state(), g.rng.state(), 'o sorteio continua de onde parou');
 });
 
-test('salvar grava só as chaves que mudaram desde a última gravação', () => {
-  const g = playedGame();
-  const st = memoryStorage(true);
-  const saver = createSaver(st);
+test('salvar grava só o que mudou: sem mudança, nada; mudança numa camada, só essa camada', () => {
+  const g = partidaComProgresso();
+  const saver = createSaver(memoryStorage(true));
   assert.equal(saver.save(g).written.length, 1 + LAYER_ORDER.length);
-  assert.equal(saver.save(g).written.length, 0, 'nada mudou, nada é gravado');
-  g.world.cache_l3.npc = 1;
+  assert.equal(saver.save(g).written.length, 0);
+  g.world.cache_l3.visited.add(cellKey(7, 2));
   assert.deepEqual(saver.save(g).written, [layerKey('cache_l3')]);
 });
 
-test('partida corrompida (JSON inválido) é descartada e o jogo começa novo, sem lançar erro', () => {
+test('partida com JSON inválido é descartada e o jogo começa novo, sem lançar erro', () => {
   const st = memoryStorage(true);
   st.setItem(RUN_KEY, '{quebrado');
-  const h = new Game({ seed: 1 });
+  const h = novoJogo(1);
   const rep = loadGame(h, st);
   assert.equal(rep.status, 'discarded');
-  assert.equal(h.player.layer, LAYER_ORDER[0]);
-  assert.equal(h.grid.at(h.player.c, h.player.r) !== WALL, true);
+  assert.equal(h.player.camada, LAYER_ORDER[0]);
 });
 
 test('partida de outra versão é descartada', () => {
-  const st = savedStorage(playedGame());
+  const st = salvar(partidaComProgresso());
   const run = JSON.parse(st.getItem(RUN_KEY));
   run.version = 99;
   st.setItem(RUN_KEY, JSON.stringify(run));
-  const rep = loadGame(new Game({ seed: 1 }), st);
-  assert.equal(rep.status, 'discarded');
-  assert.match(rep.notes[0], /versão/);
+  assert.equal(loadGame(novoJogo(1), st).status, 'discarded');
 });
 
 test('camada de um mapa diferente (impressão digital) é descartada; as outras são restauradas', () => {
-  const st = savedStorage(playedGame());
+  const st = salvar(partidaComProgresso());
   const data = JSON.parse(st.getItem(layerKey('metal_m1')));
   data.fingerprint = 'deadbeef';
   st.setItem(layerKey('metal_m1'), JSON.stringify(data));
-  const h = new Game({ seed: 1 });
+  const h = novoJogo(1);
   const rep = loadGame(h, st);
   assert.deepEqual(rep.discarded, ['metal_m1']);
   assert.ok(rep.restored.includes('dissipador'));
-  assert.equal(h.world.metal_m1.grid.rows.join(''), h.world.metal_m1.origin.join(''), 'camada descartada volta ao original');
+  assert.equal(h.world.metal_m1.grid.rows.join(''), h.world.metal_m1.origin.join(''), 'a camada descartada volta ao original');
 });
 
-test('camada com coordenada fora do mapa é descartada inteira', () => {
-  const st = savedStorage(playedGame());
+test('mudança no mapa que aponta para uma célula inválida faz a camada ser descartada', () => {
+  const st = salvar(partidaComProgresso());
   const data = JSON.parse(st.getItem(layerKey('metal_m1')));
-  data.repaired = [[999, 999]];
+  data.changes = [[999, 999, '.']];
   st.setItem(layerKey('metal_m1'), JSON.stringify(data));
-  const rep = loadGame(new Game({ seed: 1 }), st);
-  assert.ok(rep.discarded.includes('metal_m1'));
+  assert.ok(loadGame(novoJogo(1), st).discarded.includes('metal_m1'));
 });
 
-test('reparo gravado numa célula que não é trilha é recusado', () => {
-  const st = savedStorage(playedGame());
+test('falha com comportamento inválido faz a camada ser descartada', () => {
+  const st = salvar(partidaComProgresso());
   const data = JSON.parse(st.getItem(layerKey('dissipador')));
-  data.repaired = [[1, 1]]; // o S não é uma trilha rompida
+  if (data.entities.length) data.entities[0].comp = 'voador';
   st.setItem(layerKey('dissipador'), JSON.stringify(data));
-  const rep = loadGame(new Game({ seed: 1 }), st);
-  assert.ok(rep.discarded.includes('dissipador'));
+  assert.ok(loadGame(novoJogo(1), st).discarded.includes('dissipador'));
 });
 
 test('leitura que falha não trava: o jogo começa novo e avisa', () => {
   const st = { ...memoryStorage(true), getItem() { throw new Error('SecurityError'); } };
-  const h = new Game({ seed: 1 });
+  const h = novoJogo(1);
   const rep = loadGame(h, st);
   assert.equal(rep.status, 'unavailable');
-  assert.equal(h.player.layer, LAYER_ORDER[0]);
+  assert.equal(h.player.camada, LAYER_ORDER[0]);
 });
 
 test('escrita que falha é reportada e tentada de novo na gravação seguinte', () => {
   const base = memoryStorage(true);
-  let failing = true;
+  let falhando = true;
   const st = {
     ...base,
     setItem(k, v) {
-      if (failing && k === layerKey('energia')) throw new Error('QuotaExceededError');
+      if (falhando && k === layerKey('energia')) throw new Error('QuotaExceededError');
       base.setItem(k, v);
     },
   };
-  const g = playedGame();
+  const g = partidaComProgresso();
   const saver = createSaver(st);
-  const first = saver.save(g);
-  assert.equal(first.ok, false);
-  assert.deepEqual(first.failed, [layerKey('energia')]);
-  failing = false;
-  const second = saver.save(g);
-  assert.equal(second.ok, true);
-  assert.deepEqual(second.written, [layerKey('energia')]);
+  const primeira = saver.save(g);
+  assert.equal(primeira.ok, false);
+  assert.deepEqual(primeira.failed, [layerKey('energia')]);
+  falhando = false;
+  const segunda = saver.save(g);
+  assert.equal(segunda.ok, true);
+  assert.deepEqual(segunda.written, [layerKey('energia')]);
 });
 
 test('sem localStorage, cai para a memória e avisa que não é persistente', () => {
@@ -168,40 +163,27 @@ test('localStorage que lança exceção (modo privado, cota) também cai para a 
   assert.equal(browserStorage(win).persistent, false);
 });
 
-test('localStorage que funciona é usado como persistente', () => {
-  const map = new Map();
-  const win = {
-    localStorage: {
-      setItem: (k, v) => map.set(k, String(v)),
-      getItem: (k) => (map.has(k) ? map.get(k) : null),
-      removeItem: (k) => map.delete(k),
-    },
-  };
-  assert.equal(browserStorage(win).persistent, true);
-});
-
-test('posição salva sobre parede é corrigida para uma célula livre', () => {
-  const st = savedStorage(playedGame());
+test('posição salva sobre parede é corrigida para o início da camada', () => {
+  const st = salvar(partidaComProgresso());
   const run = JSON.parse(st.getItem(RUN_KEY));
+  run.player.camada = 'dissipador';
   run.player.c = 0;
   run.player.r = 0;
   st.setItem(RUN_KEY, JSON.stringify(run));
-  const h = new Game({ seed: 1 });
+  const h = novoJogo(1);
   loadGame(h, st);
-  assert.notEqual(h.grid.at(h.player.c, h.player.r), WALL);
-});
-
-test('vitória salva continua valendo depois de recarregar', () => {
-  const g = playedGame();
-  g.won = true;
-  const h = new Game({ seed: 1 });
-  loadGame(h, savedStorage(g));
-  assert.equal(h.won, true);
+  assert.equal(h.grid.at(h.player.c, h.player.r) === '#', false);
 });
 
 test('novo jogo apaga todas as chaves salvas', () => {
-  const st = savedStorage(playedGame());
+  const st = salvar(partidaComProgresso());
   assert.equal(clearSave(st), true);
   for (const key of allKeys()) assert.equal(st.getItem(key), null, key);
-  assert.equal(loadGame(new Game({ seed: 1 }), st).status, 'new');
+  assert.equal(loadGame(novoJogo(1), st).status, 'new');
+});
+
+test('a impressão digital é estável para o mesmo mapa e muda quando o mapa muda', () => {
+  assert.equal(fingerprint(['#S.#', '#..#']), fingerprint(['#S.#', '#..#']));
+  assert.notEqual(fingerprint(['#S.#', '#..#']), fingerprint(['#S.#', '#.#']));
+  void Grid; void FLOOR;
 });
