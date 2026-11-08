@@ -53,7 +53,9 @@ src/
   player.js         modelo e movimento do Bit
   battle.js         batalha por turnos
   repair.js         minijogo de reparo de trilha
-  ui.js             HUD, diálogos com digitação, menus
+  ui.js             HUD, diálogos com escolhas, menus, loja e bancada
+  audio.js          som e trilha procedurais (Web Audio)
+  settings.js       ajustes: som, vibração, tamanho do texto, alto contraste
   input.js          teclado, mouse e toque
   textures.js       arte procedural (pisos, ícones, retratos de inimigos)
   loot.js           saques de baús e textos de requisitos
