@@ -183,3 +183,27 @@ M8 Qualidade (robô de partidas aleatórias para achar travamentos, balanceament
 
 Critério de aceitação do projeto: uma partida completa (das oito camadas ao anel) é possível sem travar, com
 salvamento e carregamento no meio; todas as regras têm teste; os textos e a arte são originais.
+
+## 14. Estado atual (implementado)
+
+- **Mapas:** 31 por 21 células, com labirinto em árvore e atalhos. Cada camada tem sala do chefe, porta, chave,
+  técnicos, baús, materiais, falhas e zonas quentes e frias. O gerador garante que cada bloqueio é obrigatório.
+- **Visão:** de cima, com câmera que segue Bit suavemente. Painel lateral (retrato, vida, energia, calor, nível, XP,
+  ciclos, estados e minimapa), faixa inferior (registro, inventário com ícones e atalhos) e topo (camada e missão).
+- **Calor:** +1 a cada 4 passos em terreno comum; trilha quente +3; zona fria −6. Esperar (Z) resfria −2 em terreno
+  comum e −8 na zona fria, e devolve vida (+2). Calor 85 ou mais causa 1 de dano por passo; 100 causa 3.
+- **Falhas:** reaparecem a cada 120 passos, longe de Bit, até um limite de falhas vivas por camada (4 na primeira,
+  5 na segunda e assim por diante).
+- **Combate:** falhas comuns dão o dobro do XP do conteúdo. O escalonamento de vida e ataque por camada é de 0,2 por
+  camada. O primeiro chefe tem vida 36, ataque 4 e defesa 1.
+- **Personagem:** cada nível dá 5 de vida, 1 de energia e um ponto de habilidade; ataque sobe nos níveis pares e
+  defesa nos múltiplos de três.
+
+### Medição do robô (tools/robo-jogador.mjs)
+
+- Com o equilíbrio atual, a semente 1 vence o primeiro chefe e chega à quinta camada num orçamento de centenas de
+  milhares de tiques. Não há partida completa verificada.
+- O equilíbrio das camadas seguintes ainda precisa de ajuste: o chefe da quinta camada é muito forte para o
+  personagem no nível máximo com o equipamento que o robô obtém.
+- Ajustes que pioraram o robô (e foram revertidos): mais vida e ataque por nível junto com escalonamento mais suave.
+  Próximo passo sugerido: medir cada chefe com o robô e ajustar por camada, sem mexer no crescimento geral.
