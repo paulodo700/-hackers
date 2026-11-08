@@ -75,6 +75,16 @@ function reach(g, from, blockedChars) {
   return seen;
 }
 
+// Verdadeiro se fechar a célula (tratando as outras como abertas) corta o caminho até a saída.
+function isBridge(g, cell, start, exit) {
+  const [c, r] = cell;
+  const saved = g[r][c];
+  g[r][c] = WALL;
+  const reachable = reach(g, start, new Set()).has(key(...exit));
+  g[r][c] = saved;
+  return !reachable;
+}
+
 function pathBetween(g, from, to) {
   const prev = new Map([[key(...from), null]]);
   const q = [from];
@@ -110,26 +120,35 @@ function buildOnce(spec, seed) {
   const start = START, exit = EXIT;
   const path = pathBetween(g, start, exit);
   if (!path) return null;
-  // Bloqueios sobre o caminho principal (não nas pontas).
-  const blockerCells = path.slice(3, path.length - 3);
+  // Cada bloqueio vai numa ponte: se a célula for fechada, a saída fica inalcançável.
+  // Assim a ferramenta é obrigatória, mesmo quando o labirinto tem atalhos em outros pontos.
+  const blockerCells = path.slice(3, path.length - 3).filter(([c, r]) => g[r][c] === FLOOR || g[r][c] === TRACE);
   for (const ch of spec.blockers ?? []) {
-    const cell = pickCell(rnd, blockerCells.filter(([c, r]) => g[r][c] !== 'x' && g[r][c] !== 'g' && g[r][c] !== 'o'));
+    const bridges = blockerCells.filter(([c, r]) => (g[r][c] === FLOOR || g[r][c] === TRACE) && isBridge(g, [c, r], start, exit));
+    const cell = pickCell(rnd, bridges);
     if (!cell) return null;
     g[cell[1]][cell[0]] = ch;
   }
   g[start[1]][start[0]] = spec.first ? SPAWN : UP;
   g[exit[1]][exit[0]] = spec.goal ? GOAL : DOWN;
 
-  // Técnico: bloqueia, então não pode cortar o caminho nem o alcance dos materiais.
+  // Técnico: bloqueia, então não pode cortar o caminho até a saída (com as ferramentas já usadas).
   if (spec.npc) {
     const candidates = floorsAt(g).filter(([c, r]) => g[r][c] === FLOOR || g[r][c] === TRACE);
-    const cell = pickCell(rnd, candidates);
-    if (!cell) return null;
-    g[cell[1]][cell[0]] = NPC;
+    let placed = false;
+    for (let t = 0; t < 40 && !placed; t++) {
+      const cell = pickCell(rnd, candidates);
+      if (!cell) break;
+      g[cell[1]][cell[0]] = NPC;
+      if (reach(g, start, new Set(['N'])).has(key(...exit))) placed = true;
+      else g[cell[1]][cell[0]] = FLOOR;
+    }
+    if (!placed) return null;
   }
-  const closed = new Set(['x', 'g', 'o', 'N']);
-  const open = reach(g, start, closed);
-  if (!open.has(key(...exit))) return null;
+  // Sem ferramentas, a saída tem de ficar fora de alcance; com elas, tem de estar alcançável.
+  if ((spec.blockers ?? []).length && reach(g, start, new Set(['N', 'x', 'g', 'o'])).has(key(...exit))) return null;
+  if (!reach(g, start, new Set(['N'])).has(key(...exit))) return null;
+  const open = reach(g, start, new Set(['N', 'x', 'g', 'o'])); // o que se alcança sem ferramenta
 
   const free = floorsAt(g).filter(([c, r]) => open.has(key(c, r)) && g[r][c] !== UP && g[r][c] !== DOWN && g[r][c] !== SPAWN && g[r][c] !== GOAL && g[r][c] !== NPC);
   const used = new Set();
