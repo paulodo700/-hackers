@@ -8,6 +8,7 @@ import { ITEMS, RARITY, QUESTS, QUEST_ORDER, CODEX, SKILL_TREE, SKILLS, RECIPES,
 import { drawItemIcon } from './textures.js';
 import { settings, saveSettings, applySettings, TEXT_SIZES, announce } from './settings.js';
 import { DIFFICULTY, DIFFICULTY_ORDER } from './combat.js';
+import { ZONES } from './data/zones.js';
 import { setSoundEnabled, setVolume, sfx } from './audio.js';
 import { focusFirst } from './nav.js';
 import { isVisited } from './state.js';
@@ -245,6 +246,7 @@ function renderMenu() {
   if (menuTab === 'quests') renderQuests(body);
   if (menuTab === 'codex') renderCodex(body);
   if (menuTab === 'config') renderConfig(body);
+  if (menuTab === 'travel') renderTravel(body);
 }
 
 function row(label, value) {
@@ -406,6 +408,40 @@ function renderCodex(body) {
     p.className = 'codex-entry';
     p.textContent = `Glitch: ${txt}`;
     body.appendChild(p);
+  }
+}
+
+// Viagem rápida: volta a qualquer zona já visitada, no ponto de nascimento dela
+function renderTravel(body) {
+  const here = state.zone;
+  const p = document.createElement('p');
+  p.className = 'hint';
+  p.style.textAlign = 'left';
+  p.textContent = 'Escolha uma zona que você já visitou. Você chega no ponto de nascimento dela.';
+  body.appendChild(p);
+  const list = Object.keys(ZONES).filter((id) => state.codex.zones[id]);
+  if (!list.length) {
+    const none = document.createElement('p');
+    none.className = 'hint';
+    none.textContent = 'Nenhuma zona visitada ainda.';
+    body.appendChild(none);
+    return;
+  }
+  for (const id of list) {
+    const r = document.createElement('div');
+    r.className = 'item-row';
+    const info = document.createElement('div');
+    info.className = 'grow';
+    info.innerHTML = '<div></div><div class="desc"></div>';
+    info.firstChild.textContent = ZONES[id].name + (id === here ? ' (aqui)' : '');
+    info.lastChild.textContent = 'Visitada';
+    r.appendChild(info);
+    const b = document.createElement('button');
+    b.textContent = id === here ? 'Aqui' : 'Ir';
+    b.disabled = id === here;
+    b.addEventListener('click', () => menuActions.travel && menuActions.travel(id));
+    r.appendChild(b);
+    body.appendChild(r);
   }
 }
 

@@ -39,7 +39,7 @@ export const ZONES = {
   regs: {
     id: 'regs', name: 'Planície de Registradores', music: 'wind', decor: 'pins', encounter: 0.06,
     theme: { ground: '#1a2a12', trace: '#b6ff6a', fog: '#0d1a09', sky: '#122410', accent: '#d9ff9f' },
-    enemies: ['pulga', 'ruido'],
+    enemies: ['pulga', 'ruido', 'larva'],
     gen: { seed: 202, cols: 52, rows: 34, extras: { c: 5, k: 5, f: 3, x: 4 } },
     map: null,
     markers: {
@@ -107,6 +107,7 @@ export const ZONES = {
     gen: { seed: 505, cols: 52, rows: 34, extras: { c: 4, l: 4, f: 3, x: 4 } },
     map: null,
     markers: {
+      'n': { type: 'npc', id: 'lumen' },
       'c': { type: 'pickup', item: 'cristal_silicio' },
       'l': { type: 'pickup', item: 'liga_ferrugem' },
       'f': { type: 'pickup', item: 'fio_cobre' },
@@ -126,10 +127,11 @@ export const ZONES = {
   bus: {
     id: 'bus', name: 'Barramento Principal', music: 'boss', decor: 'lanes', encounter: 0.05,
     theme: { ground: '#241a12', trace: '#ffd166', fog: '#120c08', sky: '#1d140c', accent: '#ffe39a' },
-    enemies: ['bloco', 'ruido'],
+    enemies: ['bloco', 'ruido', 'sentinela'],
     gen: { seed: 606, cols: 52, rows: 34, extras: { g: 4, p: 4, q: 3, x: 4 } },
     map: null,
     markers: {
+      'z': { type: 'npc', id: 'varredor' },
       'g': { type: 'pickup', item: 'kit_solda' },
       'p': { type: 'pickup', item: 'pasta_termica' },
       'q': { type: 'pickup', item: 'capsula_energia' },

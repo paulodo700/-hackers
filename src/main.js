@@ -21,6 +21,7 @@ import { startBattle, closeBattleScreen, isBattleOpen } from './battle.js';
 import { startRepair, isRepairOpen, bindRepairUI, repairDebug, REPAIR_TUTORIAL } from './repair.js';
 import { initNav, focusFirst } from './nav.js';
 import { moodForLine, moodForVitals } from './expression.js';
+import { burst, updateFx } from './fx.js';
 import { lootFor, requirementText } from './loot.js';
 import { settings, loadSettings, applySettings, saveSettings, vibrate } from './settings.js';
 import { unlockAudio, sfx, setMusicZone, setSoundEnabled, setVolume, outputPeak, MAX_OUT } from './audio.js';
@@ -85,6 +86,7 @@ let prompt = null;
 let bgYaw = 0;
 let talkingEntity = null; // NPC que está falando agora (anima o rosto)
 let minimapTick = 0;
+let battleSpot = null; // posição do glitch que iniciou a batalha (para as faíscas da vitória)
 // Sinalizadores de depuração usados pelos testes (desligam encontros aleatórios)
 const debugFlags = { noEncounters: false };
 
@@ -315,6 +317,7 @@ function collectNearbyPickups() {
     if (Math.hypot(e.obj.position.x - player.x, e.obj.position.z - player.z) > 0.9) continue;
     setFlag(`picked_${e.id}`);
     addItem(e.item, e.n);
+    burst(scene, e.obj.position, ITEMS[e.item].color, { count: 20, size: 0.12 });
     removeEntity(e, scene);
     sfx('ui');
     UI.toast(`+1 ${ITEMS[e.item].name}`, 1600);
@@ -329,6 +332,11 @@ function beginBattle(enemyId, entity) {
     closeBattleScreen();
     setMusicZone(zone.id);
     if (result === 'win') {
+      // Faíscas no lugar do inimigo derrotado (maiores para chefes)
+      const spot = entity && entity.obj ? entity.obj.position : battleSpot;
+      const isBoss = !!(entity && entity.type === 'boss');
+      if (spot) burst(scene, spot, ENEMIES[enemyId].color, { count: isBoss ? 70 : 28, size: isBoss ? 0.24 : 0.16 });
+      battleSpot = null;
       if (entity && entity.type === 'boss') { removeEntity(entity, scene); setFlag(`boss_${enemyId}`); }
       player.play('victory');
       if (enemyId === 'vigia') {
@@ -373,11 +381,20 @@ function tryPortal(p, prev) {
   UI.fadeTo(() => loadZone(p.to, zone.id)).then(() => { transitioning = false; });
 }
 
+// Viagem rápida pelo menu: só para zonas já visitadas
+function fastTravel(zoneId) {
+  if (!running || transitioning || !state.codex.zones[zoneId]) return;
+  UI.closeMenu();
+  transitioning = true;
+  sfx('portal');
+  UI.fadeTo(() => loadZone(zoneId, null, null, false)).then(() => { transitioning = false; });
+}
+
 // ---------- Menus ----------
 function openMainMenu() {
   if (!running || UI.isDialogOpen() || isBattleOpen() || isRepairOpen() || UI.isShopOpen()) return;
   sfx('ui');
-  UI.openMenu('status', { refresh: () => { UI.updateHud(); UI.updateQuestBox(); } });
+  UI.openMenu('status', { refresh: () => { UI.updateHud(); UI.updateQuestBox(); }, travel: fastTravel });
 }
 
 function busy() {
@@ -592,6 +609,7 @@ function frame(now) {
       scene.remove(rm.obj);
       battlePending = true;
       player.play('attack');
+      battleSpot = { x: rm.x, y: 0, z: rm.z };
       setTimeout(() => { battlePending = false; beginBattle(rm.enemy, null); }, 380);
     }
   } else {
@@ -628,6 +646,7 @@ function frame(now) {
   zone.update(now);
   animateEntities(entities, now);
 
+  updateFx(dt);
   autosaveTimer += dt;
   if (autosaveTimer > 20) { autosaveTimer = 0; autosave(); }
   UI.updateHud();

@@ -122,6 +122,15 @@ Testes: um teste unitário confirma que todo objeto e portal é alcançável a p
 
 **Custo de desempenho.** Os mapas maiores aumentam o tempo de cada teste de ponta a ponta em cerca de 1,5 a 2 vezes, porque o renderizador por software precisa desenhar mais geometria. O FPS medido em 360 px é o registro do teste de FPS.
 
+## Rodada 6: mobs, NPCs, viagem rápida e efeitos
+
+- **Novos mobs:** Larva de Firmware (Planície de Registradores) e Sentinela Cinza (Barramento Principal). Cada um tem arte procedural própria e entrada no códex.
+- **Novos NPCs:** Lúmen, guia da Cidade dos Bancos de Memória, que ensina a viagem rápida e dá uma cápsula de energia na primeira conversa. Técnico Varredor, no Barramento, que alerta sobre as sentinelas e dá duas pastas térmicas. Cada um tem uma primeira fala que entrega a recompensa e uma fala posterior, sem recompensa repetida.
+- **Viagem rápida:** nova aba "Viagem" no menu. Mostra as zonas já visitadas e leva a qualquer uma delas, no ponto de nascimento. Não funciona durante batalhas nem diálogos.
+- **Efeitos de partículas:** faíscas ao vencer um glitch (maiores ao derrotar um chefe) e ao coletar um item no chão, na cor do inimigo ou do item.
+
+**Ainda não feito neste ciclo:** efeitos de estado em batalha, sistema de reputação com as NPCs e novas zonas. Esses são os próximos itens.
+
 ## Balanceamento
 
 Os números vêm do simulador `tests/sim/sim.mjs`, que roda batalhas sem navegador com sementes fixas. O jogador simulado ataca sempre, usa poção abaixo de 35% de vida e usa o equipamento típico de cada faixa de nível. Não usa habilidades.

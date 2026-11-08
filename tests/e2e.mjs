@@ -837,6 +837,39 @@ export default [
     },
   },
   {
+    name: 'viagem rápida: o menu leva a qualquer zona já visitada',
+    async run({ page, base }) {
+      await newGame(page, base, 1);
+      await page.evaluate(() => { window.__anelZero.state.codex.zones.regs = true; });
+      await page.keyboard.press('KeyM');
+      await page.waitForTimeout(200);
+      await page.click('.tab[data-tab="travel"]');
+      await page.waitForTimeout(150);
+      await page.locator('#menu-body .item-row', { hasText: 'Planície' }).locator('button').click();
+      await page.waitForFunction(() => window.__anelZero.zone && window.__anelZero.zone.id === 'regs', null, { timeout: 8000 });
+      const z = await state(page, () => window.__anelZero.zone.id);
+      if (z !== 'regs') throw new Error('viagem não levou à Planície: ' + z);
+    },
+  },
+  {
+    name: 'NPC Lúmen: fala ensina a viagem e entrega uma cápsula, uma vez só',
+    async run({ page, base }) {
+      await newGame(page, base, 1);
+      await page.evaluate(() => { window.__anelZero.loadZone('memory', null, null, true); });
+      await teleportNear(page, 'npc', 'lumen');
+      const before = await state(page, () => window.__anelZero.state.inv.capsula_energia || 0);
+      await page.keyboard.press('KeyE');
+      await skipDialog(page);
+      const after = await state(page, () => window.__anelZero.state.inv.capsula_energia || 0);
+      if (after !== before + 1) throw new Error(`cápsula: ${before} -> ${after}`);
+      await teleportNear(page, 'npc', 'lumen');
+      await page.keyboard.press('KeyE');
+      await skipDialog(page);
+      const again = await state(page, () => window.__anelZero.state.inv.capsula_energia || 0);
+      if (again !== after) throw new Error('Lúmen entregou a cápsula de novo');
+    },
+  },
+  {
     name: 'FPS medido em 360 px (informativo, com renderização por software)',
     async run({ browser, base, report }) {
       const ctx = await browser.newContext({ viewport: { width: 360, height: 740 }, isMobile: true, hasTouch: true });

@@ -246,6 +246,20 @@ export function drawEnemyArt(canvas, glyph, color, t = 0) {
       g.closePath(); g.fill(); g.stroke();
       eye(-22, -30, 9); eye(22, -30, 9);
       break;
+    case 'larva': // corpo ondulado com segmentos luminosos
+      for (let i = 0; i < 6; i++) {
+        g.beginPath(); g.ellipse(-60 + i * 22, 10 * Math.sin(i * 0.9), 16, 22 - i * 1.5, 0, 0, Math.PI * 2); g.fill(); g.stroke();
+      }
+      eye(-64, -6, 7); eye(-50, -10, 7);
+      break;
+    case 'sentinela': // torre cinza com visor e patas
+      g.beginPath(); g.roundRect(-40, -70, 80, 110, 12); g.fill(); g.stroke();
+      g.beginPath(); g.moveTo(-40, 40); g.lineTo(-70, 80); g.moveTo(40, 40); g.lineTo(70, 80); g.stroke();
+      g.fillStyle = color + 'ff';
+      g.fillRect(-26, -40, 52, 14);
+      g.fillStyle = color + '44';
+      eye(-12, -33, 5); eye(12, -33, 5);
+      break;
     case 'vigia': // anel com olho central
       g.beginPath(); g.arc(0, 0, 80, 0, Math.PI * 2); g.fill(); g.stroke();
       g.beginPath(); g.arc(0, 0, 58, 0, Math.PI * 2); g.stroke();

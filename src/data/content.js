@@ -118,6 +118,18 @@ export const ENEMIES = {
     drops: [{ item: 'liga_ferrugem', chance: 0.3 }, { item: 'capacitor', chance: 0.3 }],
     lore: 'Uma lembrança apagada que ainda anda pela cidade dos bancos, procurando o próprio índice.',
   },
+  larva: {
+    name: 'Larva de Firmware', hp: 34, atk: 8, def: 3, spd: 6, xp: 18, gold: 6,
+    color: '#9dff7a', glyph: 'larva', scale: 0.9,
+    drops: [{ item: 'fio_cobre', chance: 0.4 }, { item: 'capacitor', chance: 0.2 }],
+    lore: 'Uma linha de código que se enrolou sobre si mesma. Rasteja pelos registradores deixando um brilho verde.',
+  },
+  sentinela: {
+    name: 'Sentinela Cinza', hp: 70, atk: 11, def: 8, spd: 4, xp: 40, gold: 14,
+    color: '#b0bec5', glyph: 'sentinela', scale: 1.1,
+    drops: [{ item: 'escudo_dissipador', chance: 0.2 }, { item: 'cristal_silicio', chance: 0.35 }],
+    lore: 'Vigia de barramento que ainda obedece a uma ordem antiga: impedir que qualquer coisa atravesse.',
+  },
   sobrecarga: {
     name: 'Sobrecarga', hp: 150, atk: 14, def: 4, spd: 8, xp: 90, gold: 40,
     color: '#ff7a3d', glyph: 'sobrecarga', scale: 1.3, boss: true,
@@ -539,6 +551,42 @@ export const NPCS = {
     ],
   },
 
+  // Lúmen: guia da Cidade dos Bancos. Ensina a viagem rápida e dá uma cápsula.
+  lumen: {
+    name: 'Lúmen', color: '#fff3c4',
+    scenes: [
+      {
+        when: { flag: 'talked_lumen' },
+        lines: [{ s: 'Lúmen', t: 'Você já sabe onde ficam as salas. Use o menu, aba Viagem, para voltar a qualquer zona que já visitou.' }],
+      },
+      {
+        lines: [
+          { s: 'Lúmen', t: 'Ah, um bit de manutenção! Os bancos de memória são grandes demais para andar a pé toda vez.' },
+          { s: 'Lúmen', t: 'Pode levar esta cápsula. E quando já tiver visitado uma zona, a aba Viagem te leva direto para ela.' },
+        ],
+        actions: [{ set: 'talked_lumen' }, { give: ['capsula_energia', 1] }],
+      },
+    ],
+  },
+
+  // Técnico Varredor: conhece as sentinelas do barramento e faz uma troca de peças
+  varredor: {
+    name: 'Técnico Varredor', color: '#ffd27a',
+    scenes: [
+      {
+        when: { flag: 'talked_varredor' },
+        lines: [{ s: 'Técnico Varredor', t: 'As sentinelas recuam se você ficar parado entre duas delas. Use isso, bit.' }],
+      },
+      {
+        lines: [
+          { s: 'Técnico Varredor', t: 'Cuidado com as Sentinelas Cinzas. Elas patrulham em linha reta e não gostam de surpresas.' },
+          { s: 'Técnico Varredor', t: 'Leve duas pastas térmicas. Vai precisar delas antes do Titã.' },
+        ],
+        actions: [{ set: 'talked_varredor' }, { give: ['pasta_termica', 2] }],
+      },
+    ],
+  },
+
   // Não tem diálogo: a interação abre a loja (compra, venda e bancada de criação).
   lojista: {
     name: 'Caixa de Peças', color: '#ffe39a', shop: true,
@@ -591,6 +639,8 @@ export const CODEX = {
     ferrugem_titan: 'Oxidação que cresceu até tomar forma. Um dia foi um guardião de barramento.',
     verme: 'Verme de dados que segue as trilhas de cache. Deixa rastros de cobre por onde passa.',
     espectro: 'Lembrança apagada que ainda anda pela cidade dos bancos. Procura o índice que perdeu.',
+    larva: 'Larva de código que se enrola nos registradores. Deixa um rastro verde e brilhante.',
+    sentinela: 'Vigia de barramento que ainda cumpre uma ordem antiga. Patrulha em linha reta.',
     vigia: 'Guardião do processador. Protegeu Bit do colapso apagando sua memória.',
   },
 };
