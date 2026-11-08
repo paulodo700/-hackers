@@ -15,6 +15,7 @@ export const settings = {
   volMusic: 1,    // volume da trilha (0 a 1)
   volSfx: 1,      // volume dos efeitos (0 a 1)
   captions: true, // legendas visuais para sons importantes
+  repairHard: false, // última escolha de dificuldade do reparo
 };
 
 export function loadSettings() {

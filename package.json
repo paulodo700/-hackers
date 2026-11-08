@@ -7,6 +7,14 @@
     "test": "node tests/run.mjs",
     "test:unit": "node tests/run.mjs unit",
     "test:e2e": "node tests/run.mjs e2e",
-    "sim": "node tests/sim/sim.mjs"
+    "sim": "node tests/sim/sim.mjs",
+    "install:browser": "npx playwright install chromium"
+  },
+  "type": "module",
+  "devDependencies": {
+    "playwright": "1.63.0"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }

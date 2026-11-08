@@ -72,7 +72,16 @@ docs/
 
 ## Testes
 
-Não há build. Os testes rodam em Node e usam o Chromium headless já instalado no ambiente (Playwright):
+Não há build. Os testes rodam em Node e usam o Playwright 1.63.0 (declarado em `devDependencies`) com o Chromium headless.
+
+Em outra máquina:
+
+```bash
+npm install                 # instala o Playwright na versão declarada
+npm run install:browser     # baixa o Chromium usado pelos testes
+```
+
+No ambiente de desenvolvimento deste projeto, o Chromium já estava instalado e o Playwright era resolvido globalmente; nesse caso o `npm install` não é necessário.
 
 ```bash
 npm test                      # tudo: unitários, simulador e ponta a ponta

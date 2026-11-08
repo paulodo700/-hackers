@@ -346,7 +346,7 @@ export function animateEntities(entities, t) {
     if (e.type === 'npc') {
       e.obj.userData.ring.rotation.z = t * 0.002;
       e.obj.userData.head.position.y = 1.8 + Math.sin(t * 0.002 + e.c) * 0.03;
-      e.obj.userData.face.update(t, { talk: !!e.talk, mood: 'neutral' });
+      e.obj.userData.face.update(t, { talk: !!e.talk, mood: e.talkMood || 'neutral' });
     }
     if (e.type === 'bench') e.obj.userData.lamp.material.emissiveIntensity = 1.6 + Math.sin(t * 0.005) * 0.6;
     if (e.type === 'repair') {

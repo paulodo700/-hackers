@@ -174,7 +174,7 @@ export function buildZone(def, scene) {
 
   // Paredes (chips) — um InstancedMesh só
   if (walls.length) {
-    const topTex = chipTopTexture(theme, hashStr(def.id) + 1);
+    const topTex = chipTopTexture(theme, hashStr(def.id) + 1, 256, FLOOR_STYLE_BY_DECOR[def.decor] || 'grid');
     const mat = new THREE.MeshStandardMaterial({
       color: 0x6f8799, map: topTex, roughness: 0.5, metalness: 0.45,
       emissive: new THREE.Color(theme.accent).multiplyScalar(0.12),

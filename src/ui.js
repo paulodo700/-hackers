@@ -168,6 +168,11 @@ export function chooseByIndex(n) {
   return true;
 }
 
+// Fala atual (para escolher a expressão do rosto)
+export function currentLine() {
+  return dlg ? dlg.lines[dlg.i] : null;
+}
+
 export function advanceDialog() {
   if (!dlg) return;
   if (!dlg.full) {

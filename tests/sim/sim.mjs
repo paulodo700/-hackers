@@ -20,6 +20,8 @@ const LOADOUT = [
   { minLevel: 3, weapon: 'lamina_solda', armor: 'escudo_dissipador' },
   { minLevel: 5, weapon: 'pinca_ressonante', armor: 'escudo_dissipador' },
   { minLevel: 7, weapon: 'lamina_fusivel', armor: 'escudo_reforcado' },
+  // Preparação depois do Titã da Ferrugem (drop garantido da Lâmina da Ferrugem)
+  { minLevel: 9, weapon: 'lamina_ferrugem', armor: 'escudo_reforcado' },
 ];
 function loadoutFor(level) {
   let l = LOADOUT[0];
@@ -94,7 +96,7 @@ export function fullReport() {
 
 // Verificação das metas de balanceamento (docs/GDD.md, seção Balanceamento).
 // Glitches: pulga no nível 1 vence 90%+; cada glitch vence 60%+ no nível recomendado.
-// Chefes: no nível recomendado vencem 60%+; um nível abaixo (sem preparação) 25% ou menos. A meta de 10% não é alcançável com a curva linear de progressão (ver GDD).
+// Chefes: no nível recomendado vencem 60%+; um nível abaixo (sem preparação) 10% ou menos. O equipamento do nível 9 (Lâmina da Ferrugem e Escudo Reforçado) representa a preparação obtida depois do Titã.
 // Retorna lista de falhas (vazia = tudo atendido).
 export function checkTargets(report = fullReport()) {
   const fails = [];
@@ -106,7 +108,7 @@ export function checkTargets(report = fullReport()) {
   for (const id of ['sobrecarga', 'ferrugem_titan', 'vigia']) {
     const rec = RECOMMENDED[id];
     if (report[id][rec].rate < 0.6) fails.push(`${id} nível ${rec}: ${(report[id][rec].rate * 100).toFixed(0)}% (meta 60%+)`);
-    if (report[id][rec - 1].rate > 0.25) fails.push(`${id} nível ${rec - 1}: ${(report[id][rec - 1].rate * 100).toFixed(0)}% (meta 25% ou menos sem preparação)`);
+    if (report[id][rec - 1].rate > 0.1) fails.push(`${id} nível ${rec - 1}: ${(report[id][rec - 1].rate * 100).toFixed(0)}% (meta 10% ou menos sem preparação)`);
   }
   return fails;
 }

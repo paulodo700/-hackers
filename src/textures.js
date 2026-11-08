@@ -65,13 +65,15 @@ export function circuitFloorTexture(theme, seed = 7, size = 512, style = 'grid')
 }
 
 // Textura de topo de chip (bloco de parede) com ranhuras e LEDs.
-export function chipTopTexture(theme, seed = 3, size = 256) {
+export function chipTopTexture(theme, seed = 3, size = 256, style = null) {
   const c = document.createElement('canvas');
   c.width = c.height = size;
   const g = c.getContext('2d');
   const r = rng(seed);
   g.fillStyle = '#34465a';
   g.fillRect(0, 0, size, size);
+  // Desenho próprio da zona sobre o chip (mesmo padrão do piso, mais discreto)
+  if (style) drawFloorStyle(g, style, theme, size, r0(seed));
   g.strokeStyle = 'rgba(255,255,255,0.12)';
   g.lineWidth = 2;
   g.strokeRect(10, 10, size - 20, size - 20);
@@ -324,4 +326,10 @@ export function labelSprite(text, color = '#ffffff') {
   const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
   sp.scale.set(2.6, 0.5, 1);
   return sp;
+}
+
+// Gerador rápido por semente (para o desenho das paredes)
+function r0(seed) {
+  let s = seed >>> 0 || 1;
+  return () => { s ^= s << 13; s >>>= 0; s ^= s >>> 17; s ^= s << 5; s >>>= 0; return s / 4294967296; };
 }

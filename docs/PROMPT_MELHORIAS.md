@@ -1,38 +1,39 @@
-# Prompt para a próxima rodada de melhorias — Anel Zero (rodada 4)
+# Prompt para a próxima rodada de melhorias — Anel Zero (rodada 5)
 
-Copie o bloco abaixo para a próxima sessão. A rodada 3 foi concluída (testes em `tests/`, 45 de 45 passando). Este prompt parte das lacunas registradas em `docs/GDD.md`, seção "Lacunas conhecidas".
+Copie o bloco abaixo para a próxima sessão. A rodada 4 foi concluída (54 testes no total; 32 de ponta a ponta). Este prompt parte das lacunas registradas em `docs/GDD.md`, seção "Lacunas conhecidas".
 
 ---
 
 Você é o desenvolvedor principal de **Anel Zero — Dentro do Processador**, um RPG 3D original em Three.js, sem build, para PC e celular.
 
-Leia antes de mudar qualquer coisa: `README.md`, `docs/GDD.md` (inclusive "Balanceamento" e "Lacunas conhecidas") e `src/data/content.js`. Rode `npm test` antes de começar, para conhecer o estado de partida.
+Leia antes de mudar qualquer coisa: `README.md`, `docs/GDD.md` (inclusive "Balanceamento" e "Lacunas conhecidas") e `src/data/content.js`. Rode `npm test` antes de começar e registre a contagem de partida.
 
-**Objetivo desta rodada:** fechar as lacunas de cobertura e de balanceamento, e validar o que hoje só foi testado por código.
+**Objetivo desta rodada:** levar o jogo de "verificado por máquina" para "validado com pessoas", e fechar as lacunas de dificuldade e de conteúdo.
 
 Prioridades, em ordem:
 
-1. **Cobrir os caminhos que faltam na suíte.** Adicionar testes ponta a ponta para: derrota em batalha (volta ao ponto seguro, perde 10% dos créditos), fuga em batalha, venda na loja, troca de dificuldade no reparo com o cronômetro ativo, e o reparo com fusível queimado (o segmento não pode mais ser girado). Cada teste deve falhar se houver erro ou aviso de console.
-2. **Curva de progressão não linear para os chefes.** A meta de 10% no nível anterior ao recomendado não foi atingida com a curva atual (ver GDD, "Balanceamento"). Experimentar uma curva em que o ganho por nível diminui depois do nível 6, ou pontos de habilidade que valem mais, e reportar a tabela antes e depois. Não aceitar uma solução que só enfraqueça o chefe sem registrar o efeito nos níveis anteriores.
-3. **Validar o áudio com medição, não só com execução.** Usar `AnalyserNode` num teste headless para confirmar que a trilha de cada zona e os efeitos produzem energia audível, que o limitador mantém o pico abaixo do teto, e que volume zero silencia a trilha. Se o timbre continuar sem escuta real, dizer isso no relatório.
-4. **Texturas de parede por zona.** Hoje só o piso tem padrão próprio. Dar a cada zona um desenho de parede coerente com o piso (por exemplo, pinos para a planície, tubos para o pipeline) e um teste que confirme que o desenho muda entre zonas.
-5. **Rostos com mais expressão.** Acrescentar pelo menos duas expressões de conversa (surpresa e dúvida) escolhidas pelo texto da fala, sem arquivos externos. Manter o desenho em canvas e o custo de CPU baixo.
-6. **Dificuldade e acessibilidade de teclado no reparo.** Permitir escolher a dificuldade antes de começar, e garantir que o cronômetro possa ser pausado com a tecla P, para quem usa teclado ou leitor de tela.
-7. **Ambiente reproduzível.** Declarar a dependência de Playwright no `package.json` com a versão exata do ambiente, e documentar como instalar o Chromium em outra máquina, sem alterar o comportamento dos testes.
+1. **Playtest com pessoas.** Criar um roteiro de playtest (`docs/PLAYTEST.md`) com tarefas (encontrar o reparo da Cache, vencer a Sobrecarga, entrar no Núcleo) e um formulário de observação. Registrar pelo menos cinco sessões reais antes de mudar números. Se não houver pessoas disponíveis, dizer isso explicitamente e não alterar o balanceamento com base em suposições.
+2. **Dificuldade das batalhas.** Hoje a dificuldade só existe no reparo. Adicionar uma escolha de dificuldade para batalhas (fácil, normal, difícil) que altere o dano do inimigo e a taxa de drops, com testes no simulador para cada modo. Os modos não podem mudar a fase 2 dos chefes nem as metas do modo normal.
+3. **Habilidades no simulador.** O simulador ainda não usa habilidades (Rajada, Reparo Rápido, Curto-Circuito). Incluí-las no jogador simulado e registrar o efeito na tabela do GDD.
+4. **Expressões do rosto.** Acrescentar uma expressão de cansaço (quando o HP está abaixo de 30%) no visor do Bit, com teste unitário da regra de escolha.
+5. **Conteúdo de zona.** Cada zona tem um inimigo e uma missão extra. Adicionar um segundo tipo de inimigo a cada zona que ainda tenha só um, e um teste que confira que todo inimigo aparece em pelo menos uma zona.
+6. **Som com timbre validado.** Depois do playtest, comparar a percepção do áudio com as medições do `AnalyserNode`. Ajustar apenas os volumes padrão, nunca a trilha, sem uma sessão que o justifique.
 
 **Regras do projeto**
 
 - Tudo original: nomes, arte, sons e textos. Nada de marcas, personagens ou assets de terceiros.
 - Sem build: ES modules puros; Three.js continua vendorizado em `vendor/three/`.
-- Salvamento: os três slots estão no formato 3. Se o formato mudar, adicionar migração a partir da versão 3, com teste unitário.
+- Salvamento: o formato atual é a versão 3. Se o formato mudar, adicionar migração a partir da versão 3, com teste unitário.
 - Console limpo: nenhum erro e nenhum aviso novo nos testes.
 - Nenhum teste deve depender de sorte: números aleatórios com semente fixa, e esperas por condição em vez de tempo fixo.
+- Balanceamento só muda com número registrado: rode o simulador antes e depois, e registre a tabela no GDD.
 - Nada declarado pronto sem ter sido rodado. Se algo não puder ser verificado no ambiente, dizer isso no relatório.
 - Não criar pull request sem pedido explícito.
 
 **Entregáveis**
 
 - Commits pequenos, com mensagens descritivas, no branch `claude/processor-rpg-game-yid5oh`.
-- `docs/GDD.md` atualizado: nova tabela de balanceamento, decisões tomadas e seção "Estado atual" revisada com o número exato de testes passando.
+- `docs/GDD.md` atualizado: tabela de balanceamento, decisões tomadas e seção "Estado atual" com o número exato de testes passando.
+- `docs/PLAYTEST.md` com o roteiro e os resultados das sessões (ou a declaração de que nenhuma sessão foi feita).
 - Uma lista honesta do que não foi verificado.
 - Ao final, um novo prompt igual a este, para a rodada seguinte.

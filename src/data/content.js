@@ -119,7 +119,7 @@ export const ENEMIES = {
     lore: 'Oxidação viva que cresce nos barramentos. Dizem que foi um guardião.',
   },
   vigia: {
-    name: 'Vigia — o Guardião Esquecido', hp: 300, atk: 16, def: 9, spd: 10, xp: 500, gold: 0,
+    name: 'Vigia — o Guardião Esquecido', hp: 300, atk: 17, def: 9, spd: 10, xp: 500, gold: 0,
     color: '#ff3ea5', glyph: 'vigia', scale: 2, boss: true,
     drops: [{ item: 'dissipador_omega', chance: 1 }],
     lore: 'O sistema de vigilância do processador. Ele apagou a memória de Bit para protegê-lo.',

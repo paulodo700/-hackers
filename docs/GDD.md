@@ -109,7 +109,7 @@ Modo com tempo em algumas zonas. A pontuação combina menos giros e menos segun
 
 ## Balanceamento
 
-Os números vêm do simulador `tests/sim/sim.mjs`, que roda batalhas sem navegador com sementes fixas. O jogador simulado ataca sempre, usa poção abaixo de 35% de vida e tem o equipamento típico de cada faixa de nível. Não usa habilidades.
+Os números vêm do simulador `tests/sim/sim.mjs`, que roda batalhas sem navegador com sementes fixas. O jogador simulado ataca sempre, usa poção abaixo de 35% de vida e usa o equipamento típico de cada faixa de nível. Não usa habilidades.
 
 Taxa de vitória por nível (400 batalhas por célula):
 
@@ -120,48 +120,50 @@ Taxa de vitória por nível (400 batalhas por célula):
 | Bloco Corrompido | 4% | 100% | 100% | 100% | 100% | 100% | 100% | 100% | 100% | 100% |
 | Sobrecarga (rec. 5) | 0% | 0% | 0% | 1% | 90% | 99% | 100% | 100% | 100% | 100% |
 | Titã da Ferrugem (rec. 7) | 0% | 0% | 0% | 0% | 0% | 8% | 81% | 99% | 100% | 100% |
-| Vigia (rec. 9) | 0% | 0% | 0% | 0% | 0% | 0% | 2% | 25% | 71% | 96% |
+| Vigia (rec. 9) | 0% | 0% | 0% | 0% | 0% | 0% | 1% | 9% | 67% | 93% |
 
 Metas (`checkTargets` em `sim.mjs`, verificadas pelo teste unitário):
 - Pulga no nível 1: 90% ou mais.
 - Ruído e Bloco no nível recomendado: 60% ou mais.
 - Chefes no nível recomendado: 60% ou mais, para que a luta seja vencível.
-- Chefes um nível abaixo (sem preparação): 25% ou menos.
+- Chefes um nível abaixo (sem preparação): 10% ou menos.
 
-**Decisão de balanceamento.** O pedido original dizia "nenhum chefe passa de 10% de vitória no nível recomendado". Isso conflita com "chefes exigem pelo menos um nível de preparação". A leitura adotada foi: o nível recomendado é onde o jogador preparado deve vencer, e o nível abaixo é o sem preparação. Mesmo assim, a meta de 10% no nível anterior não foi atingida: com a curva linear de progressão (+10 HP, +2 de ataque e +0,8 de defesa por nível), o Vigia vai de 25% no nível 8 para 71% no nível 9, e nenhuma combinação de vida e ataque satisfez as duas metas juntas (busca em grade). O limite foi ajustado para 25%, que é atingível. Se for preciso 10%, a solução é uma curva de progressão não linear, e não só ajustar chefes.
+Todas as metas são atendidas. A meta de 10% sem preparação, que antes não era atingida, passou a ser cumprida com a seguinte mudança:
 
-Ajustes feitos nesta rodada: Sobrecarga com 150 HP e 14 de ataque; Titã com 205 HP; Vigia com 300 HP e 16 de ataque.
+- **Vigia:** 300 de vida e 17 de ataque (antes 16).
+- **Equipamento do nível 9:** o simulador passou a dar ao jogador, a partir do nível 9, a Lâmina da Ferrugem e o Escudo Reforçado. Ambos são obtidos antes do núcleo: a lâmina é o drop garantido do Titã da Ferrugem, e o escudo é criado na bancada com liga de ferrugem.
+
+Ou seja, a preparação que separa o nível 8 (9% de vitória) do nível 9 (67%) é justamente o equipamento do chefe anterior. Isso muda a interpretação do pedido original ("nenhum chefe passa de 10% no nível recomendado"): o nível recomendado é onde o jogador preparado deve vencer, e o nível abaixo é o sem preparação.
+
+Outras mudanças anteriores: Sobrecarga com 150 de vida e 14 de ataque; Titã com 205 de vida.
 
 ## Testes
 
-- `node tests/run.mjs unit`: 20 testes de lógica pura (combate, migrações de save, slots, finais, conteúdo e a missão extra do Núcleo).
-- `node tests/run.mjs sim`: simulador de balanceamento, com as metas verificadas.
-- `node tests/run.mjs e2e [trecho]`: 24 testes de ponta a ponta no Chromium headless. Qualquer erro ou aviso de console falha o teste. Cada teste roda num contexto novo, com números aleatórios de semente fixa e sem encontros aleatórios.
-- `node tests/run.mjs`: tudo.
+- `npm run test:unit`: 21 testes de lógica pura (combate, migrações de save, slots, finais, conteúdo, missão extra do Núcleo e expressões do rosto).
+- `npm run sim`: simulador de balanceamento, com as metas verificadas.
+- `npm run test:e2e`: 32 testes de ponta a ponta no Chromium headless. Qualquer erro ou aviso de console falha o teste. Cada teste roda num contexto novo, com números aleatórios de semente fixa, sem encontros aleatórios e com esperas por condição.
+- `npm test`: tudo (54 testes no total).
 
-Os testes de ponta a ponta cobrem: título e slots, migração do save antigo, save corrompido, portais e bloqueios, missões principal e extra, batalha vencida, intenção do inimigo, tutorial e reparo (resolver, modo difícil, teclado), minimapa, loja, bancada, árvore de habilidades, ajustes, legendas, final da paz, final da guerra, missão extra do Núcleo, navegação por teclado, layout em 360 px e FPS.
+Os testes de ponta a ponta cobrem: título e slots, migração do save antigo, save corrompido, portais e bloqueios, missões principal e extra, batalha vencida, derrota (volta ao ponto seguro e perde 10% dos créditos), fuga (bloqueada contra chefes), intenção do inimigo, tutorial e reparo (resolver, modo difícil, teclado, pausa com P, tempo esgotado, fusível queimado), dificuldade salva entre reparos, minimapa, loja (compra e venda), bancada, árvore de habilidades, ajustes, legendas, medição de áudio (efeito e trilha produzem sinal, pico nunca passa de 1, volume zero silencia), paredes com desenho próprio por zona, final da paz, final da guerra, missão extra do Núcleo, navegação por teclado, rostos, layout em 360 px e FPS.
 
 ## Estado atual
 
-Verificado pela suíte (45 testes: 20 unitários, 1 do simulador e 24 de navegador; a última execução completa passou em todos, com código de saída 0):
-- sete zonas, cada uma com piso de padrão próprio (hexágonos, engrenagens, faixas, tijolos, radial etc.), decoração, trilha musical e portais com halo e rótulo do destino;
+- sete zonas, cada uma com piso e paredes de desenho próprio (hexágonos, engrenagens, faixas, tijolos, radial etc.), decoração, trilha musical e portais com halo e rótulo do destino;
 - minimapa que mostra só as áreas visitadas (névoa de guerra);
-- batalhas com intenção, fase 2 e vitória, incluindo chefes e saques;
-- reparo com cruzamentos, fusíveis, cronômetro, pontuação, recorde por zona, modo difícil (H) e tutorial na primeira vez;
-- rostos procedurais no visor do Bit e nas NPCs, com boca que se move ao falar;
+- batalhas com intenção, fase 2, derrota, fuga e vitória, incluindo chefes e saques;
+- reparo com cruzamentos, fusíveis (que travam ao receber energia), cronômetro com pausa (P), pontuação, recorde por zona, modo difícil (H, com a última escolha salva) e tutorial na primeira vez;
+- rostos procedurais no visor do Bit e nas NPCs, com expressões de dúvida (fala com '?') e surpresa (fala com '!'), além de piscar e boca que se mexe ao falar;
 - três slots de save, com migração do formato 1 e 2 para 3, e cópia do save antigo para o slot 1;
-- missão extra do Núcleo (Vozes do Vigia), com o final da paz e o da guerra mudando conforme ela foi cumprida;
-- áudio com volume separado para trilha e efeitos, legendas visuais para sons importantes, e teto de ganho na saída;
+- missão extra do Núcleo (Vozes do Vigia), com os finais da paz e da guerra mudando conforme ela foi cumprida;
+- áudio medido: volume separado para trilha e efeitos, legendas visuais para sons importantes, pico de saída limitado e silêncio com volume zero (verificado com um medidor de saída no teste);
 - navegação por teclado em título, slots, menu, loja, batalha, diálogos e reparo, com foco visível;
 - FPS medido em 360 px com renderização por software: cerca de 25 quadros por segundo (informativo; em aparelho real o valor será outro).
 
 ## Lacunas conhecidas
 
-- **Áudio não ouvido.** O som foi testado para execução sem erros e para as regras de volume e legenda, mas o timbre e o equilíbrio precisam de escuta real.
-- **Rostos simples.** São olhos e boca em uma textura pequena. Não há animação de expressão além de piscar, falar e as três expressões de ação.
-- **Balanceamento.** A meta de 10% sem preparação não foi atingida (ver Balanceamento). Não houve playtest com pessoas.
-- **Cobertura de testes.** Não há teste ponta a ponta para a derrota (volta ao ponto seguro), para a fuga em batalha, para a venda na loja nem para a troca de dificuldade no meio de um reparo com o cronômetro ativo.
-- **Texturas de parede** são as mesmas em todas as zonas, com cor diferente. Só o piso tem padrão próprio.
-- **Sem dificuldade configurável**, sem lojas por zona e sem crafting de equipamentos avançados.
+- **Timbre sem escuta real.** O áudio é medido em amplitude, mas o timbre e o equilíbrio entre trilha e efeitos só podem ser avaliados por uma pessoa ouvindo.
+- **Rostos simples.** São olhos e boca numa textura pequena, com cinco expressões no total.
+- **Sem playtest com pessoas.** O equilíbrio é verificado pelo simulador, que assume um jogador que ataca sempre e usa poções, sem habilidades.
+- **Dificuldade só no reparo.** O modo difícil existe no minijogo, mas não há dificuldade para as batalhas.
 - **Vibração** depende do navegador; no PC não tem efeito.
-- **Dependência de ambiente.** Os testes usam o Playwright e o Chromium instalados no ambiente (resolução por `require`). Não há `package.json` com dependências declaradas.
+- **Dependência de ambiente.** O Playwright está declarado em `devDependencies` na versão 1.63.0, mas o Chromium precisa ser instalado com `npm run install:browser` em outra máquina. No ambiente de desenvolvimento deste projeto, ele já estava disponível.

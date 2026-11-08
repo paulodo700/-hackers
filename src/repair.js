@@ -5,6 +5,13 @@
 //   cruzamento: liga as 4 direções e não gira (encaixe fixo)
 //   fusível: gira, mas queima ao ser energizado e não pode mais ser girado
 import { recordRepairScore, repairBestOf as recordRepairScoreOf } from './state.js';
+import { settings, saveSettings } from './settings.js';
+
+// Tempo decorrido sem contar as pausas
+function elapsedSec() {
+  const now = cur.paused ? cur.pausedAt : performance.now();
+  return (now - cur.startedAt - cur.pausedTotal) / 1000;
+}
 import { sfx } from './audio.js';
 import { vibrate } from './settings.js';
 
@@ -145,7 +152,7 @@ function solved(p) {
 
 // Pontuação: menos giros e menos tempo rendem mais pontos
 function scoreNow() {
-  const elapsed = (performance.now() - cur.startedAt) / 1000;
+  const elapsed = elapsedSec();
   let s = Math.max(0, 1000 - cur.moves * 15 - Math.round(elapsed * 3));
   if (cur.timeLimit) s += Math.round(Math.max(0, cur.timeLimit - elapsed) * 5);
   return Math.round(s);
@@ -225,7 +232,7 @@ function draw() {
 function tick() {
   if (!cur) return;
   if (cur.timeLimit) {
-    const left = Math.max(0, cur.timeLimit - (performance.now() - cur.startedAt) / 1000);
+    const left = Math.max(0, cur.timeLimit - elapsedSec());
     el('rp-timer').textContent = `Tempo: ${Math.ceil(left)}s`;
     if (left <= 0 && !cur.done) {
       cur.done = true;
@@ -239,7 +246,7 @@ function tick() {
 }
 
 function onClick(ev) {
-  if (!cur || cur.done) return;
+  if (!cur || cur.done || cur.paused) return;
   const canvas = el('rp-canvas');
   const rect = canvas.getBoundingClientRect();
   const x = (ev.clientX - rect.left) / rect.width * canvas.width;
@@ -317,7 +324,8 @@ function buildFor(hard) {
 export function startRepair({ size = 4, title = 'Reparo de Trilha', zoneId = 'geral', timeLimit = 0, fuses = 1, hard = false, onDone } = {}) {
   cur = {
     base: { size, fuses, zoneId },
-    hard: !!hard,
+    hard: hard || !!settings.repairHard, // a última escolha de dificuldade vale para o próximo reparo
+    paused: false, pausedAt: 0, pausedTotal: 0,
     onDone, timeLimit, moves: 0, done: false,
     startedAt: performance.now(), feedback: '',
     cursor: { x: 0, y: 0 }, keyboard: false,
@@ -339,6 +347,8 @@ export function startRepair({ size = 4, title = 'Reparo de Trilha', zoneId = 'ge
 export function toggleHard() {
   if (!cur || cur.done) return;
   cur.hard = !cur.hard;
+  settings.repairHard = cur.hard;
+  saveSettings();
   cur.puzzle = buildFor(cur.hard);
   cur.moves = 0;
   cur.startedAt = performance.now();
@@ -353,7 +363,7 @@ export function toggleHard() {
 function onKey(ev) {
   if (!cur) return;
   const n = cur.puzzle.n;
-  const handled = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter', 'Space', 'KeyH', 'Escape'].includes(ev.code);
+  const handled = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter', 'Space', 'KeyH', 'KeyP', 'Escape'].includes(ev.code);
   if (!handled) return;
   // Com um botão focado (ex.: Modo difícil), Enter/Espaço pertencem ao botão
   if ((ev.code === 'Enter' || ev.code === 'Space') && document.activeElement && document.activeElement.tagName === 'BUTTON') return;
@@ -372,6 +382,7 @@ function onKey(ev) {
     onClick({ clientX: rect.left + (cur.cursor.x + 0.5) * cs, clientY: rect.top + (cur.cursor.y + 0.5) * cs });
   }
   if (ev.code === 'KeyH') toggleHard();
+  if (ev.code === 'KeyP') togglePause();
   if (ev.code === 'Escape') { cancelRepair(); return; }
   draw();
 }
@@ -394,4 +405,19 @@ export function bindRepairUI() {
   el('rp-cancel').addEventListener('click', () => cancelRepair());
   el('rp-hard').addEventListener('click', () => toggleHard());
   el('rp-canvas').tabIndex = 0;
+}
+
+// Pausa: congela o cronômetro e bloqueia os cliques (teclado: P)
+export function togglePause() {
+  if (!cur || cur.done || !cur.timeLimit) return;
+  if (cur.paused) {
+    cur.pausedTotal += performance.now() - cur.pausedAt;
+    cur.paused = false;
+    cur.feedback = 'Reparo retomado.';
+  } else {
+    cur.paused = true;
+    cur.pausedAt = performance.now();
+    cur.feedback = 'PAUSADO. Pressione P para continuar.';
+  }
+  draw();
 }

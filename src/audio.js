@@ -5,6 +5,7 @@ import { settings } from './settings.js';
 let ctx = null;
 let master = null;
 let limiter = null;
+let analyser = null;
 // Teto do ganho de saída (amplitude). Nada passa de 1.0 no destino.
 export const MAX_OUT = 0.8;
 let sfxBus = null;
@@ -43,6 +44,10 @@ function ensure() {
     limiter.attack.value = 0.003;
     limiter.release.value = 0.2;
     limiter.connect(ctx.destination);
+    // Medidor de saída: permite medir o pico real (testes e depuração)
+    analyser = ctx.createAnalyser();
+    analyser.fftSize = 2048;
+    limiter.connect(analyser);
     master = ctx.createGain();
     master.gain.value = settings.sound ? MAX_OUT : 0;
     master.connect(limiter);
@@ -254,4 +259,14 @@ function stopMusicNodes() {
 
 export function setMusicZone(zoneId) {
   startMusic(zoneId);
+}
+
+// Pico de amplitude da saída nos últimos 2048 amostras (0 a 1)
+export function outputPeak() {
+  if (!analyser) return 0;
+  const buf = new Float32Array(analyser.fftSize);
+  analyser.getFloatTimeDomainData(buf);
+  let p = 0;
+  for (let i = 0; i < buf.length; i++) p = Math.max(p, Math.abs(buf[i]));
+  return p;
 }

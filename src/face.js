@@ -5,7 +5,7 @@ import * as THREE from 'three';
 const FRAME_EVERY = 3; // redesenha a cada 3 quadros para economizar CPU em celulares
 
 // Cria um rosto. color: cor dos olhos. Retorna { mesh, update(t, opts) }.
-// opts: { talk: boolean, mood: 'neutral' | 'happy' | 'hurt' }
+// opts: { talk: boolean, mood: 'neutral' | 'happy' | 'hurt' | 'surprised' | 'doubt' }
 export function createFace({ width = 0.3, height = 0.12, color = '#1fe6d0', transparent = false, bg = '#0a1116' } = {}) {
   const canvas = document.createElement('canvas');
   canvas.width = 128;
@@ -32,6 +32,17 @@ export function createFace({ width = 0.3, height = 0.12, color = '#1fe6d0', tran
     } else if (mood === 'happy') {
       g.beginPath(); g.arc(39, 36, 11, Math.PI * 1.1, Math.PI * 1.9); g.stroke();
       g.beginPath(); g.arc(89, 36, 11, Math.PI * 1.1, Math.PI * 1.9); g.stroke();
+    } else if (mood === 'surprised') {
+      g.lineWidth = 4;
+      g.beginPath(); g.arc(39, 36, 10, 0, Math.PI * 2); g.stroke();
+      g.beginPath(); g.arc(89, 36, 10, 0, Math.PI * 2); g.stroke();
+      g.fillRect(37, 34, 4, 4); g.fillRect(87, 34, 4, 4);
+      g.lineWidth = 6;
+    } else if (mood === 'doubt') {
+      // Olho esquerdo normal, direito mais alto com sobrancelha inclinada
+      g.beginPath(); g.roundRect(28, 24, 22, 26, 6); g.fill();
+      g.beginPath(); g.roundRect(78, 16, 22, 24, 6); g.fill();
+      g.beginPath(); g.moveTo(76, 12); g.lineTo(104, 20); g.stroke();
     } else if (mood === 'hurt') {
       g.beginPath(); g.moveTo(28, 22); g.lineTo(50, 34); g.lineTo(28, 42); g.stroke();
       g.beginPath(); g.moveTo(100, 22); g.lineTo(78, 34); g.lineTo(100, 42); g.stroke();
@@ -43,6 +54,10 @@ export function createFace({ width = 0.3, height = 0.12, color = '#1fe6d0', tran
     if (talk) {
       const open = 4 + Math.abs(Math.sin(t * 0.02)) * 10;
       g.beginPath(); g.ellipse(64, 54, 12, open, 0, 0, Math.PI * 2); g.fill();
+    } else if (mood === 'surprised') {
+      g.beginPath(); g.arc(64, 52, 6, 0, Math.PI * 2); g.stroke();
+    } else if (mood === 'doubt') {
+      g.beginPath(); g.moveTo(54, 52); g.lineTo(74, 48); g.stroke();
     } else if (mood === 'happy') {
       g.beginPath(); g.arc(64, 48, 12, 0.1 * Math.PI, 0.9 * Math.PI); g.stroke();
     } else if (mood === 'hurt') {

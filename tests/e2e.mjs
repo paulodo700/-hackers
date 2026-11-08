@@ -569,6 +569,216 @@ export default [
     },
   },
   {
+    name: 'derrota em batalha volta ao ponto seguro e perde 10% dos créditos',
+    async run({ page, base }) {
+      await newGame(page, base, 1);
+      await page.evaluate(() => {
+        const g = window.__anelZero;
+        g.state.gold = 100; g.state.hp = 1;
+        g.loadZone('alu', null, null, true);
+        g.beginBattle('bloco', null);
+      });
+      await page.waitForTimeout(200);
+      let label = null;
+      for (let i = 0; i < 60 && !label; i++) {
+        const exit = await page.$('#battle-cmds button.primary');
+        if (exit) { label = await exit.textContent(); break; }
+        const b = await page.$('#battle-cmds button:not([disabled])');
+        if (b) await b.click();
+        await page.waitForTimeout(550);
+      }
+      if (!label || !label.includes('Reiniciar')) throw new Error('batalha não terminou em derrota: ' + label);
+      await page.click('#battle-cmds button.primary');
+      await page.waitForTimeout(300);
+      const s = await state(page, () => {
+        const g = window.__anelZero;
+        const t = g.player.tile();
+        return { gold: g.state.gold, hp: g.state.hp, at: t, spawn: g.zone.spawn, open: !document.getElementById('battle').classList.contains('hidden') };
+      });
+      if (s.open) throw new Error('batalha continua aberta após a derrota');
+      if (s.gold !== 90) throw new Error(`créditos após derrota = ${s.gold} (esperado 90)`);
+      if (!(s.hp >= 1)) throw new Error('HP após derrota = ' + s.hp);
+      if (s.at.c !== s.spawn.c || s.at.r !== s.spawn.r) throw new Error('não voltou ao ponto seguro: ' + JSON.stringify(s));
+    },
+  },
+  {
+    name: 'fuga funciona em inimigos comuns e é bloqueada contra chefes',
+    async run({ page, base }) {
+      await newGame(page, base, 1);
+      await page.evaluate(() => window.__anelZero.beginBattle('sobrecarga', null));
+      await page.waitForTimeout(150);
+      const disabled = await page.evaluate(() => {
+        const b = [...document.querySelectorAll('#battle-cmds button')].find((x) => x.textContent === 'Fugir');
+        return b ? b.disabled : null;
+      });
+      if (disabled !== true) throw new Error('Fugir deveria estar desabilitado contra chefe');
+      await page.evaluate(() => window.__anelZero.beginBattle('pulga', null));
+      await page.waitForTimeout(150);
+      let closed = false;
+      for (let i = 0; i < 25 && !closed; i++) {
+        const flee = await page.$('#battle-cmds button:not([disabled])');
+        const btn = await page.evaluateHandle(() => [...document.querySelectorAll('#battle-cmds button')].find((x) => x.textContent === 'Fugir' && !x.disabled) || null);
+        const el = btn.asElement();
+        if (el) await el.click(); else if (flee) await flee.click();
+        await page.waitForTimeout(900);
+        closed = !(await visible(page, '#battle'));
+      }
+      if (!closed) throw new Error('não conseguiu fugir em 25 tentativas');
+    },
+  },
+  {
+    name: 'venda na loja: vende um material e recebe o valor de venda',
+    async run({ page, base }) {
+      await newGame(page, base, 1);
+      await page.evaluate(() => {
+        const g = window.__anelZero;
+        g.state.gold = 10; g.state.inv.fio_cobre = 3;
+        g.loadZone('cache', null, null, true);
+        const npc = g.entities.find((e) => e.id === 'lojista');
+        g.player.setTile(npc.c - 1, npc.r);
+      });
+      await page.keyboard.press('KeyE');
+      await page.waitForTimeout(200);
+      await page.click('.tab[data-shop="sell"]');
+      await page.locator('#shop-body .item-row', { hasText: 'Fio de Cobre' }).locator('button').click();
+      await page.waitForTimeout(150);
+      const s = await state(page, () => ({ gold: window.__anelZero.state.gold, fio: window.__anelZero.state.inv.fio_cobre }));
+      if (s.gold !== 14) throw new Error(`ouro após venda = ${s.gold} (esperado 14: 10 + 4)`);
+      if (s.fio !== 2) throw new Error('quantidade de fio não diminuiu: ' + s.fio);
+    },
+  },
+  {
+    name: 'reparo: fusível queimado não pode mais ser girado',
+    async run({ page, base }) {
+      await newGame(page, base, 1);
+      await page.evaluate(() => {
+        const g = window.__anelZero;
+        g.state.flags.tut_repair = true;
+        g.loadZone('alu', null, null, true);
+        g.interact(g.entities.find((e) => e.type === 'repair'));
+      });
+      await page.waitForTimeout(200);
+      const r = await page.evaluate(() => {
+        const cur = window.__anelZero.repairDebug();
+        for (let y = 0; y < cur.puzzle.n; y++) for (let x = 0; x < cur.puzzle.n; x++) {
+          const c = cur.puzzle.cells[y][x];
+          if (c.type === 'fusivel') { c.locked = true; return { x, y, n: cur.puzzle.n, rot: c.rot }; }
+        }
+        return null;
+      });
+      if (!r) throw new Error('nenhum fusível no tabuleiro da Forja');
+      const box = await page.locator('#rp-canvas').boundingBox();
+      const cs = box.width / r.n;
+      await page.mouse.click(box.x + (r.x + 0.5) * cs, box.y + (r.y + 0.5) * cs);
+      await page.waitForTimeout(150);
+      const rotNow = await page.evaluate((rr) => window.__anelZero.repairDebug().puzzle.cells[rr.y][rr.x].rot, r);
+      const info = await state(page, () => document.getElementById('rp-help').textContent);
+      if (!info.includes('queimado')) throw new Error('aviso de fusível queimado ausente: ' + info);
+      if (rotNow !== r.rot) throw new Error(`fusível queimado girou: ${r.rot} -> ${rotNow}`);
+    },
+  },
+  {
+    name: 'reparo: P pausa o cronômetro; H guarda a dificuldade para o próximo reparo',
+    async run({ page, base }) {
+      await newGame(page, base, 1);
+      await page.evaluate(() => {
+        const g = window.__anelZero;
+        g.state.flags.tut_repair = true;
+        g.loadZone('regs', null, null, true);
+        g.interact(g.entities.find((e) => e.type === 'repair'));
+      });
+      await page.waitForTimeout(200);
+      await page.keyboard.press('KeyP');
+      const t1 = await page.textContent('#rp-timer');
+      await page.waitForTimeout(1500);
+      const t2 = await page.textContent('#rp-timer');
+      const help = await page.textContent('#rp-help');
+      if (t1 !== t2) throw new Error(`cronômetro andou durante a pausa: ${t1} -> ${t2}`);
+      if (!help.includes('PAUSADO')) throw new Error('aviso de pausa ausente: ' + help);
+      await page.keyboard.press('KeyP');
+      await page.keyboard.press('KeyH');
+      const hard = await state(page, () => window.__anelZero.repairDebug().hard);
+      if (!hard) throw new Error('modo difícil não ligou');
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(150);
+      const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('anel-zero-settings-v1')).repairHard);
+      if (saved !== true) throw new Error('escolha de dificuldade não foi salva');
+      await page.evaluate(() => {
+        const g = window.__anelZero;
+        g.interact(g.entities.find((e) => e.type === 'repair'));
+      });
+      await page.waitForTimeout(150);
+      const next = await state(page, () => window.__anelZero.repairDebug().hard);
+      if (!next) throw new Error('o próximo reparo não usou a dificuldade escolhida');
+    },
+  },
+  {
+    name: 'reparo com tempo esgotado fecha e avisa',
+    async run({ page, base }) {
+      await newGame(page, base, 1);
+      await page.evaluate(() => {
+        const g = window.__anelZero;
+        g.state.flags.tut_repair = true;
+        g.loadZone('regs', null, null, true);
+        g.interact(g.entities.find((e) => e.type === 'repair'));
+      });
+      await page.waitForTimeout(150);
+      await page.evaluate(() => { const cur = window.__anelZero.repairDebug(); cur.startedAt -= 130000; });
+      await page.waitForTimeout(1200);
+      if (await visible(page, '#repair')) throw new Error('reparo não fechou com o tempo esgotado');
+      const toast = await page.textContent('#toast');
+      if (!toast.includes('Tempo esgotado')) throw new Error('aviso de tempo esgotado ausente: ' + toast);
+    },
+  },
+  {
+    name: 'áudio medido: efeitos e trilha produzem sinal, o pico nunca passa de 1 e volume zero silencia',
+    async run({ page, base }) {
+      await newGame(page, base, 1);
+      const sample = (ms) => page.evaluate((m) => new Promise((resolve) => {
+        let max = 0; const start = performance.now();
+        const tick = () => {
+          max = Math.max(max, window.__anelZero.audioPeak());
+          if (performance.now() - start < m) setTimeout(tick, 25); else resolve(max);
+        };
+        tick();
+      }), ms);
+      await page.evaluate(() => window.__anelZero.playSfx('win'));
+      const sfxPeak = await sample(700);
+      if (!(sfxPeak > 0.01)) throw new Error('efeito não produziu sinal: ' + sfxPeak);
+      await page.evaluate(() => window.__anelZero.playMusic('regs'));
+      const musicPeak = await sample(1400);
+      if (!(musicPeak > 0.002)) throw new Error('trilha não produziu sinal: ' + musicPeak);
+      if (musicPeak > 1 || sfxPeak > 1) throw new Error('pico acima de 1');
+      await page.evaluate(() => { window.__anelZero.setVolume('music', 0); window.__anelZero.setVolume('sfx', 0); });
+      await page.waitForTimeout(400);
+      const silent = await sample(700);
+      if (silent > 0.002) throw new Error('volume zero não silenciou: ' + silent);
+    },
+  },
+  {
+    name: 'paredes têm desenho próprio por zona',
+    async run({ page, base }) {
+      await newGame(page, base, 1);
+      const urls = await page.evaluate(() => {
+        const out = {};
+        for (const id of ['cache', 'regs', 'alu', 'pipeline']) {
+          window.__anelZero.loadZone(id, null, null, true);
+          let url = null;
+          window.__anelZero.zone.group.traverse((o) => {
+            if (!url && o.isInstancedMesh && o.geometry.parameters && o.geometry.parameters.height === 2.6 && o.material.map) {
+              url = o.material.map.image.toDataURL();
+            }
+          });
+          out[id] = url;
+        }
+        return out;
+      });
+      const values = Object.values(urls);
+      if (values.some((v) => !v)) throw new Error('parede sem textura');
+      if (new Set(values).size !== values.length) throw new Error('duas zonas têm a mesma parede');
+    },
+  },
+  {
     name: 'FPS medido em 360 px (informativo, com renderização por software)',
     async run({ browser, base, report }) {
       const ctx = await browser.newContext({ viewport: { width: 360, height: 740 }, isMobile: true, hasTouch: true });

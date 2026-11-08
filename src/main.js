@@ -20,9 +20,10 @@ import * as UI from './ui.js';
 import { startBattle, closeBattleScreen, isBattleOpen } from './battle.js';
 import { startRepair, isRepairOpen, bindRepairUI, repairDebug, REPAIR_TUTORIAL } from './repair.js';
 import { initNav, focusFirst } from './nav.js';
+import { moodForLine } from './expression.js';
 import { CHEST_LOOT, requirementText } from './loot.js';
 import { settings, loadSettings, applySettings, saveSettings, vibrate } from './settings.js';
-import { unlockAudio, sfx, setMusicZone, setSoundEnabled, MAX_OUT } from './audio.js';
+import { unlockAudio, sfx, setMusicZone, setSoundEnabled, setVolume, outputPeak, MAX_OUT } from './audio.js';
 
 const el = (id) => document.getElementById(id);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -587,7 +588,14 @@ function frame(now) {
   markVisited(zone.id, pt.c, pt.r);
   if (++minimapTick % 6 === 0) UI.drawMinimap(zone, pt);
   player.talking = UI.isDialogOpen();
-  for (const en of entities) en.talk = en === talkingEntity && UI.isDialogOpen();
+  // Expressão pelo texto da fala: Bit reage quando fala; a NPC reage quando é a vez dela
+  const line = UI.currentLine();
+  const mood = line ? moodForLine(line.t) : 'neutral';
+  player.talkMood = line && line.s === 'Bit' ? mood : null;
+  for (const en of entities) {
+    en.talk = en === talkingEntity && UI.isDialogOpen();
+    en.talkMood = en.talk && line && line.s !== 'Bit' ? mood : null;
+  }
 
   // Prompt de interação
   const near = running && !busy() ? nearestEntity() : null;
@@ -615,6 +623,10 @@ window.__anelZero = {
   get zone() { return zone; }, get player() { return player; }, get entities() { return entities; },
   get transitioning() { return transitioning; },
   flags: debugFlags,
+  audioPeak: () => outputPeak(),
+  setVolume: (kind, v) => setVolume(kind, v),
+  playSfx: (name) => sfx(name),
+  playMusic: (zoneId) => setMusicZone(zoneId),
   audio: () => ({ maxOut: MAX_OUT, music: settings.volMusic, sfx: settings.volSfx, captions: settings.captions }),
   zoneFloor: () => (zone ? zone.theme.trace : null),
 };

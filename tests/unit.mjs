@@ -178,6 +178,13 @@ t('missão extra do Núcleo só abre depois da missão principal', () => {
   assert.equal(state.sceneMatches({ quest: 'sq_nucleo', stage: 0, gate: { quest: 'q_nucleo', minStage: 1 } }), true);
 });
 
+t('expressão do rosto segue a pontuação da fala', async () => {
+  const { moodForLine } = await import('../src/expression.js');
+  assert.equal(moodForLine('Você voltou?'), 'doubt');
+  assert.equal(moodForLine('Ei!'), 'surprised');
+  assert.equal(moodForLine('Olá.'), 'neutral');
+});
+
 export async function runUnit() {
   let pass = 0;
   const failures = [];
