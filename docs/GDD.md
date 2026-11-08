@@ -448,3 +448,21 @@ As nove imagens de referência mostram um processador com cooler, tampa de calor
 | `tests/perf.mjs` | Chromium headless, 360×740, software; cena inteira / só o jogador | 32,1 FPS (52 chamadas, 10 560 triângulos) / 60,2 FPS |
 
 A cidade só existe na versão Python. O robô da web mede a cena inteira da zona de cache, não a cidade.
+
+## Rodada 18: ferramentas do personagem
+
+- **Três ferramentas para melhorar o processador**, fabricadas uma vez na bancada K com materiais do jogo:
+  - **Reparador de Cache** (2 liga de ferrugem + 1 fio de cobre): restaura o bloco de cache mais próximo do Bit (até 3 células), abrindo passagem na cidade e na camada de cache. O reparo fica gravado no save.
+  - **Reforço de Núcleo** (3 fio de cobre + 1 liga de ferrugem): +1 de ataque e +1 de defesa, uma vez.
+  - **Ajuste de Energia** (2 cristal de silício + 1 fio de cobre): +5 de energia máxima, uma vez, e recarrega a energia.
+- **Aba Ferramentas no menu**, depois de Viagem (as abas anteriores não mudaram de posição). Cada ferramenta tem ícone 3D próprio e mostra se já foi fabricada.
+- **Limites:** o reparo precisa de bloco de cache por perto (sem reparo à distância). Não há animação de uso.
+
+### Desempenho medido nesta rodada
+
+| Robô | Motor e condição | Resultado |
+|---|---|---|
+| `tools/bench_shadows.py` | Panda3D, Xvfb, CPU; sombra desligada / ligada | 6,91 / 13,36 ms por quadro (+6,45 ms, +93%) |
+| `tests/perf.mjs` | Chromium headless, 360×740, software; cena inteira / só o jogador | 30,6 FPS (52 chamadas, 10 560 triângulos) / 60,3 FPS |
+
+As ferramentas são uma aba de menu, então a exploração não muda. Os números variam dentro do ruído da máquina.

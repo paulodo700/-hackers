@@ -413,3 +413,48 @@ def prop_node(model, color_hex=None):
     m = SC.Mesh()
     PROP_BUILDERS[model](m, p)
     return m.node(f"prop-{model}")
+
+
+# ---- Ferramentas do personagem (modelos próprios) ----
+
+def _tool_reparo(m, p):
+    """Reparador de cache: chave de boca em L, com cabo e cabeça dentada."""
+    m.box(-0.07, -0.07, 0.0, 0.07, 0.07, 0.9, p["steel"])
+    m.box(-0.07, -0.07, 0.83, 0.42, 0.07, 1.0, p["steel"])
+    for k in range(3):
+        m.box(0.3 + k * 0.05, -0.09, 0.9, 0.34 + k * 0.05, 0.09, 1.04, p["base"])
+    m.cone(0, 0, -0.02, 0.1, 0.12, 0.12, p["dark"], sides=10)
+
+
+def _tool_reforco(m, p):
+    """Reforço de núcleo: placa em escudo, com rebites e um núcleo central luminoso."""
+    m.cone(0, 0, 0.0, 0.14, 0.42, 0.42, p["base"], sides=6)
+    m.cone(0, 0, 0.14, 0.18, 0.34, 0.34, p["dark"], sides=6)
+    m.sphere(0, 0, 0.2, 0.14, p["glow"], rings=3, sides=8)
+    for k in range(6):
+        a = k * math.pi / 3
+        m.sphere(math.cos(a) * 0.3, math.sin(a) * 0.3, 0.15, 0.04, p["steel"], rings=2, sides=5)
+
+
+def _tool_energia(m, p):
+    """Ajuste de energia: célula cilíndrica com terminal e anel de calibração."""
+    m.cone(0, 0, 0.0, 0.9, 0.2, 0.2, p["base"], sides=12)
+    m.cone(0, 0, 0.9, 1.0, 0.1, 0.1, p["steel"], sides=10)
+    m.cone(0, 0, 0.35, 0.5, 0.215, 0.215, p["glow"], sides=12)
+    m.sphere(0, 0, 1.02, 0.06, p["glow"], rings=2, sides=5)
+
+
+TOOL_BUILDERS = {"reparo_cache": _tool_reparo, "reforco_nucleo": _tool_reforco, "ajuste_energia": _tool_energia}
+
+
+def tool_node(tool_id, color_hex=None):
+    """Modelo 3D próprio da ferramenta (centrado na origem)."""
+    if tool_id not in TOOL_BUILDERS:
+        raise KeyError(tool_id)
+    color = color_hex or {"reparo_cache": "#7dfff0", "reforco_nucleo": "#ffd166",
+                          "ajuste_energia": "#b6ff6a"}[tool_id]
+    p = _palette(color)
+    p["steel"] = (0.7, 0.74, 0.78, 1.0)
+    m = SC.Mesh()
+    TOOL_BUILDERS[tool_id](m, p)
+    return m.node(f"tool-{tool_id}")

@@ -7,7 +7,7 @@ from . import content as C
 from . import world as W
 from .state import xp_for_level
 
-TABS = ["Status", "Inventário", "Habilidades", "Missões", "Viagem"]
+TABS = ["Status", "Inventário", "Habilidades", "Missões", "Viagem", "Ferramentas"]
 
 
 class Menu:
@@ -65,6 +65,18 @@ class Menu:
                 tag = {"none": "[ ]", "active": "[>]", "done": "[x]"}[status]
                 out.append({"label": f"{tag} {q['title']}", "detail": q.get("intro", ""), "id": qid})
             return out
+        if self.tab == 5:
+            from . import tools as TL
+            out = []
+            for tid in TL.TOOLS:
+                if TL.owned(self.state, tid):
+                    label = f"{TL.TOOLS[tid]['name']}  [fabricada]"
+                    detail = TL.TOOLS[tid]["desc"] + " Enter para usar."
+                else:
+                    label = TL.craft_label(tid)
+                    detail = TL.TOOLS[tid]["desc"] + " Fabrique na bancada K."
+                out.append({"label": label, "detail": detail, "id": tid})
+            return out
         # Viagem: zonas visitadas (a inicial sempre) e a zona atual fica marcada
         out = []
         for zid in C.ZONES:
@@ -107,6 +119,12 @@ class Menu:
             self.message = "Habilidade aprimorada." if ok else "Sem pontos ou já no máximo."
         elif self.tab == 4:
             self.message = f"VIAGEM:{row['id']}"
+        elif self.tab == 5:
+            from . import tools as TL
+            if TL.owned(self.state, row["id"]):
+                self.message = f"FERRAMENTA:{row['id']}"
+            else:
+                self.message = "Você ainda não fabricou esta ferramenta. Fabrique na bancada K."
         else:
             self.message = "Nada a fazer aqui."
         self._clamp_cursor()

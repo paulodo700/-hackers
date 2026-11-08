@@ -31,8 +31,15 @@ class Shop:
                 else:
                     out.append({"id": i, "label": f"{name} x{n}  (não vende)", "detail": ""})
             return out or [{"id": None, "label": "Nada para vender.", "detail": ""}]
-        return [{"id": r["id"], "label": self._recipe_label(r), "detail": C.ITEMS.get(r["id"], {}).get("desc", "")}
-                for r in C.RECIPES]
+        from . import tools as TL
+        out = [{"id": r["id"], "label": self._recipe_label(r), "detail": C.ITEMS.get(r["id"], {}).get("desc", "")}
+               for r in C.RECIPES]
+        for tid in TL.TOOLS:  # ferramentas do personagem (uma vez cada)
+            if not TL.owned(self.state, tid):
+                ok = "pronto" if TL.can_craft(self.state, tid) else "falta material"
+                out.append({"id": f"tool:{tid}", "label": f"{TL.craft_label(tid)}  [{ok}]",
+                            "detail": TL.TOOLS[tid]["desc"]})
+        return out
 
     def _recipe_label(self, r):
         need = ", ".join(f"{C.ITEMS.get(i, {}).get('name', i)} {n}" for i, n in r["need"].items())
@@ -64,6 +71,13 @@ class Shop:
         elif self.mode == "vender":
             price = self.state.sell(row["id"])
             self.message = f"Vendeu por {price} de ouro." if price else "Este item não pode ser vendido."
+        elif str(row["id"]).startswith("tool:"):
+            from . import tools as TL
+            tid = row["id"].split(":", 1)[1]
+            if TL.craft(self.state, tid):
+                self.message = f"Fabricou {TL.TOOLS[tid]['name']}."
+            else:
+                self.message = "Faltam materiais ou já fabricada."
         else:
             recipe = next((r for r in C.RECIPES if r["id"] == row["id"]), None)
             if recipe is None:

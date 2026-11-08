@@ -9,7 +9,7 @@ import pathlib
 from . import content as C
 from . import settings as T
 
-KINDS = ("item", "enemy", "skill", "talent")
+KINDS = ("item", "enemy", "skill", "talent", "tool")
 NEUTRAL_ZONE = "neutra"
 ICON_SIZE = 160
 ICON_VERSION = 2  # sobe quando os modelos mudam (invalida o cache antigo)
@@ -108,4 +108,6 @@ def all_icon_specs():
     out += [("enemy", e) for e in C.ENEMIES]
     out += [("skill", s["id"]) for s in C.SKILLS]
     out += [("talent", t["id"]) for t in C.SKILL_TREE]
+    from . import tools as _TL
+    out += [("tool", t) for t in _TL.TOOLS]
     return out

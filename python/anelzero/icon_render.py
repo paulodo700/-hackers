@@ -149,6 +149,9 @@ class IconRenderer:
             return _enemy_node(ident, zone_id)
         if kind == "talent":
             return _talent_node(ident)
+        if kind == "tool":
+            from . import models
+            return models.tool_node(ident)
         return _skill_node(ident)
 
     def ensure(self, kind, ident, zone_id=None):

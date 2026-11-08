@@ -375,9 +375,12 @@ class Game(ShowBase):
             self.menu.move(1)
         elif name == "enter":
             msg = self.menu.activate()
-            self.sound("coleta" if msg and not msg.startswith("VIAGEM") else "ui")
+            self.sound("coleta" if msg and not msg.startswith(("VIAGEM", "FERRAMENTA")) else "ui")
             if msg.startswith("VIAGEM:"):
                 self.fast_travel(msg.split(":", 1)[1])
+                return
+            if msg.startswith("FERRAMENTA:"):
+                self.use_tool(msg.split(":", 1)[1])
                 return
         elif name == "v":
             self.menu.sell()
@@ -711,7 +714,7 @@ class Game(ShowBase):
         tabs = " | ".join(("[" + t + "]") if i == self.menu.tab else t for i, t in enumerate(M.TABS))
         rows = self.menu.rows()
         cursor = self.menu.cursor[self.menu.tab]
-        kind = {1: "item", 2: "talent"}.get(self.menu.tab)
+        kind = {1: "item", 2: "talent", 5: "tool"}.get(self.menu.tab)
         icon_paths = [self.icon_for(kind, r["id"]) if kind else None for r in rows]
         # Cabeçalho e rodapé em texto; a lista com ícones fica ao lado
         self.menu_text.setText(tabs)
@@ -724,6 +727,17 @@ class Game(ShowBase):
         detail = sel["detail"] if sel else ""
         self.menu_detail.setText(detail)
         self.menu_detail.show()
+
+    def use_tool(self, tool_id):
+        """Usa uma ferramenta do personagem no mundo (reparo precisa da posição do Bit)."""
+        from . import tools as TL
+        msg, changed = TL.use(self.state, tool_id, self.zone, (self.px, self.py))
+        self.say(msg, 3.0)
+        if changed:
+            zid = self.zone.id
+            self.load_zone(zid, (self.px, self.py))
+            self.say(msg, 3.0)
+        self._refresh_menu()
 
     def fast_travel(self, zid):
         self.close_menu()
@@ -870,6 +884,8 @@ class Game(ShowBase):
         self.fight = rt.Fight(self.zone, self.state)
         self.roamer_nodes = {}
         self.particles = []
+        from . import tools as TL
+        TL.apply_repairs(self.zone, self.state)  # reparos de cache já feitos continuam abertos
         self._build_entities()
         self.last_cell = None
         W.reveal(self.zone, self.state, self.px, self.py, radius=4)
