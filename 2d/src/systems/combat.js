@@ -136,7 +136,7 @@ export function acaoJogador(game, tipo, arg) {
   if (tipo === 'atacar') {
     if (game.rng() < esquiva(spdFalha(game, b), st.spd)) {
       game.say('A falha esquivou!');
-      game.emit({ tipo: 'texto', texto: 'Esquiva', c: b.c, r: b.r, cor: '#9ad0ff' });
+      game.emit({ tipo: 'texto', texto: 'Esquiva', c: b.c, r: b.r, cor: '#9ad0ff', alvo: 'inimigo' });
       resultado.esquivou = true;
     } else {
       const critico = game.rng() < (st.crit + (temStatus(p.estados, 'foco') ? 20 : 0)) / 100;
@@ -278,7 +278,7 @@ function resolverAtaqueFalha(game, ataqueId) {
     if (ef.tipo === 'dano') {
       if (esquivou) {
         game.say('Você esquivou!');
-        game.emit({ tipo: 'texto', texto: 'Esquiva', c: p.c, r: p.r, cor: '#9ad0ff' });
+        game.emit({ tipo: 'texto', texto: 'Esquiva', c: p.c, r: p.r, cor: '#9ad0ff', alvo: 'jogador' });
         continue;
       }
       let dano = calcDano({ poder: atkFalha(game, b) * ef.fator * calor, defesa: st.def, elemento: ataque.elemento ?? b.elemento, alvoElemento: 'neutro', critico: game.rng() < 0.05, rng: game.rng });
@@ -357,7 +357,7 @@ export function vitoria(game) {
   registrarVitoria(game, foe.id);
   game.say(`${foe.nome} caiu! +${xp} XP, +${ciclos} ciclos.`);
   game.emit({ tipo: 'sfx', id: 'vitoria' });
-  game.emit({ tipo: 'texto', texto: `+${xp} XP`, c: b.c, r: b.r, cor: '#ffd166' });
+  game.emit({ tipo: 'texto', texto: `+${xp} XP`, c: b.c, r: b.r, cor: '#ffd166', alvo: 'inimigo' });
   game.removerEntidade?.(b.entId);
   ganharXp(game, xp);
   progresso(game, { tipo: 'derrotou', foe: foe.id });

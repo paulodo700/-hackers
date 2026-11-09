@@ -68,7 +68,8 @@ camada, com formato e versão. Se uma camada não bater com o mapa atual ou o da
 | `src/audio/` | Sons e trilhas sintetizados em código (sem arquivos de áudio). |
 | `src/commands.js`, `src/menus.js` | Comandos (teclado e toque) e telas com lista. |
 | `src/save.js`, `src/progress.js` | Salvamento por camada e progresso do chip. |
-| `src/render.js`, `src/main.js` | Desenho em canvas (câmera, painel, faixa, menus, combate) e ligação com o navegador. |
+| `src/render.js`, `src/render/` | Desenho em canvas no estilo ARPG sombrio: mundo com luz e sombra, orbes, barra de ações, arena, menus e mapa do chip. Em `src/render/`, tema, geometria, primitivas, luz, efeitos e a tradução pura de eventos (`eventos.js`). |
+| `src/main.js` | Ligação com o navegador: entradas, eventos do motor (som e efeitos), salvamento e quadro a quadro. |
 | `tools/robo-jogador.mjs` | Robô que joga pela mesma API, para checar travamentos e equilíbrio. |
 | `test/` | Testes com `node:test`, uma área por arquivo. |
 

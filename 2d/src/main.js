@@ -1,8 +1,9 @@
-// Ligação com o navegador: teclado, toque, eventos do motor (som, números, tremor), salvamento e desenho.
+// Ligação com o navegador: teclado, toque, eventos do motor (som e efeitos), salvamento e desenho.
 // Toda regra fica no núcleo (game.js, commands.js, systems/). Este arquivo só traduz entradas e saídas.
 import { Game } from './game.js';
 import { CATALOGO } from './catalog.js';
-import { draw, atualizarCamera } from './render.js';
+import { draw, atualizarCamera, atualizarVisual, reiniciarVisual, visual } from './render.js';
+import { traduzirEvento } from './render/eventos.js';
 import { comandoDaTecla, executarComando, botoesDeToque, COMANDOS_DE_MOVIMENTO } from './commands.js';
 import { browserStorage, createSaver, loadGame, clearSave } from './save.js';
 import { AudioEngine } from './audio/index.js';
@@ -16,8 +17,6 @@ const saver = createSaver(storage);
 const audio = new AudioEngine();
 let game = new Game({ seed, catalog: CATALOGO });
 let lastSave = { ok: true };
-let floats = [];
-let tremor = 0;
 let musicaAtual = null;
 let batalhaAntes = false;
 
@@ -38,30 +37,29 @@ function trilha(id) {
   audio.playMusic(id);
 }
 
-// Consome os eventos do motor: sons, números flutuantes, tremor e trilhas. Depois limpa a fila.
+// Consome os eventos do motor. Sons e trilhas vão para o áudio; o resto vira efeito visual (números, luz, tremor).
 function processarEventos() {
+  const contexto = { jogador: game.player, catalogo: game.catalog, emBatalha: !!game.battle };
   for (const ev of game.events) {
-    switch (ev.tipo) {
-      case 'sfx': audio.playSfx(ev.id); break;
-      case 'musica': trilha(ev.id); break;
-      case 'dano': floats.push({ texto: `-${ev.valor}`, c: ev.c, r: ev.r, idade: 0, cor: ev.alvo === 'jogador' ? '#ff8a8a' : '#ffd166' }); break;
-      case 'cura': floats.push({ texto: `+${ev.valor}`, c: game.player.c, r: game.player.r, idade: 0, cor: '#7dd3a0' }); break;
-      case 'texto': floats.push({ texto: ev.texto, c: ev.c, r: ev.r, idade: 0, cor: ev.cor }); break;
-      case 'tremor': tremor = Math.max(tremor, ev.forca); break;
-      default: break;
-    }
+    if (ev.tipo === 'sfx') audio.playSfx(ev.id);
+    else if (ev.tipo === 'musica') trilha(ev.id);
+    for (const fx of traduzirEvento(ev, contexto)) visual.efeitos.executar(fx);
   }
   game.events.length = 0;
-  // Trilha de batalha ao começar e voltar à trilha da camada ao terminar.
+  // Trilha de batalha ao começar; ao terminar, volta a trilha da camada e somem os efeitos da arena.
   const batalhaAgora = !!game.battle;
   if (batalhaAgora && !batalhaAntes) trilha(game.battle.boss ? 'chefe' : 'batalha');
-  if (!batalhaAgora && batalhaAntes) { const id = musicaAtual; musicaAtual = null; trilha(game.player.camada); void id; }
+  if (!batalhaAgora && batalhaAntes) {
+    musicaAtual = null;
+    trilha(game.player.camada);
+    visual.efeitos.removerTela();
+  }
   batalhaAntes = batalhaAgora;
 }
 
 function render() {
   window.__game = game;
-  draw(ctx, game, { saveStatus: statusSalvamento(), floats, tremor, t: performance.now() });
+  draw(ctx, game, { saveStatus: statusSalvamento(), t: performance.now() });
   renderToque();
 }
 
@@ -80,7 +78,7 @@ function novoJogo() {
   clearSave(storage);
   game = new Game({ seed, catalog: CATALOGO });
   saver.forget();
-  floats = [];
+  reiniciarVisual();
   musicaAtual = null;
   batalhaAntes = false;
   game.say('Novo jogo.');
@@ -157,16 +155,14 @@ window.addEventListener('keydown', (ev) => {
 window.addEventListener('pagehide', persist);
 document.addEventListener('visibilitychange', () => { if (document.hidden) persist(); });
 
-// Quadro a quadro: câmera, animações e números flutuantes. Desenha sempre (a visão de cima anima).
+// Quadro a quadro: câmera, tempo visual (luz, barras fantasma, efeitos) e desenho. Desenha sempre.
 let anterior = performance.now();
 function quadro(agora) {
   const dt = Math.min(64, agora - anterior);
   anterior = agora;
-  for (const f of floats) f.idade += dt / 16;
-  floats = floats.filter((f) => f.idade < 45);
-  if (tremor > 0) tremor = Math.max(0, tremor - dt * 0.03);
   atualizarCamera(game, dt);
-  draw(ctx, game, { saveStatus: statusSalvamento(), floats, tremor, t: agora });
+  atualizarVisual(game, dt);
+  draw(ctx, game, { saveStatus: statusSalvamento(), t: agora });
   requestAnimationFrame(quadro);
 }
 
