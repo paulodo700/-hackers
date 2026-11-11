@@ -42,6 +42,8 @@ const config = {
   dbPath,
   // Modo de teste: permite abrir dentro de uma pré-visualização e marcar a posição do motoqueiro no mapa.
   demo: !!process.env.DEMO_MODE,
+  // Pasta das cópias de segurança diárias (pode apontar para um pendrive ou pasta do Google Drive).
+  backupDir: process.env.BACKUP_DIR || path.join(path.dirname(dbPath), 'backups'),
   adminPhone: process.env.ADMIN_PHONE || '',
   adminPassword: process.env.ADMIN_PASSWORD || '',
   osrmUrl: process.env.OSRM_URL || 'https://router.project-osrm.org',

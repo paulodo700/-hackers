@@ -43,6 +43,9 @@ Abra `http://localhost:3000`. O primeiro acesso da central é o telefone e a sen
 
 **O passo a passo completo está em [`docs/COLOCAR-NO-AR.md`](docs/COLOCAR-NO-AR.md)** (hospedagem Railway, cerca de US$ 5 por mês).
 
+**Prefere rodar no seu próprio computador com Windows?** Veja [`docs/SERVIDOR-WINDOWS.md`](docs/SERVIDOR-WINDOWS.md):
+instalação com dois cliques, túnel gratuito com HTTPS e cópia de segurança diária automática.
+
 O que qualquer hospedagem precisa ter:
 
 - **HTTPS** (endereço com cadeado). Sem isso o celular **não libera o GPS**.
@@ -65,7 +68,7 @@ atendem bem; se o movimento crescer muito, troque por um serviço pago ou própr
 ## Testes
 
 ```bash
-npm test                 # 37 testes: preço, corrida, distribuição, login, API e tempo real
+npm test                 # 38 testes: preço, corrida, distribuição, login, API e tempo real
 node tests/e2e.cjs       # navegador de verdade com passageiro, motoqueiro e central (precisa do Playwright)
 ```
 
@@ -102,7 +105,7 @@ Copie um de cada vez em uma nova conversa. Estão na ordem em que eu recomendo f
 **Para colocar no ar**
 
 1. ~~Colocar na internet com HTTPS~~ — arquivos prontos; siga `docs/COLOCAR-NO-AR.md`.
-2. `Adicione backup automático diário do banco de dados e um botão na central para baixar o backup.`
+2. `Adicione na central um botão para baixar a cópia de segurança do banco de dados.` (a cópia diária automática já existe)
 3. `Adicione "esqueci minha senha": a central consegue gerar uma senha nova para um passageiro ou motoqueiro.`
 
 **Para o motoqueiro não perder corrida**

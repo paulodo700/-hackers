@@ -23,3 +23,8 @@
 - Publicação: arquivos prontos para a Railway (`Dockerfile`, `railway.json`, guia em `docs/COLOCAR-NO-AR.md`).
   O dono ainda precisa fazer os passos no site da Railway. A imagem Docker não pôde ser construída na nuvem
   (sem Docker ativo); se o primeiro deploy falhar, peça o log do build a ele.
+- O dono escolheu rodar em **computador próprio com Windows, em casa/escritório** (11/11/2026). Guia em
+  `docs/SERVIDOR-WINDOWS.md`; arquivos `.bat` em `windows/`. Os `.bat` **não foram testados em Windows**
+  (o ambiente na nuvem é Linux): se ele relatar erro, peça foto da janela. Link fixo com domínio na Cloudflare
+  ainda não foi feito.
+- Cópia de segurança diária automática já existe (`scripts/backup.js`, chamada por `server/index.js`).

@@ -3,3 +3,5 @@ data/
 .env
 .superpowers/
 *.log
+backups/
+windows/cloudflared.exe

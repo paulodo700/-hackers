@@ -43,8 +43,18 @@ if (require.main === module) {
   built.server.listen(config.port, () => {
     console.log(`Mototáxi rodando em http://localhost:${config.port}`);
     console.log(`Banco de dados em ${config.dbPath}`);
+    console.log(`Copias de seguranca em ${config.backupDir}`);
     if (config.demo) console.warn('AVISO: DEMO_MODE ligado. Não use assim com passageiros de verdade.');
   });
+
+  // Cópia de segurança automática: uma por dia, guardando as 30 mais recentes.
+  const { dailyBackup } = require('../scripts/backup');
+  const runBackup = () =>
+    dailyBackup(config.dbPath, config.backupDir)
+      .then((file) => file && console.log(`Copia de seguranca criada: ${file}`))
+      .catch((err) => console.error('Falha na copia de seguranca:', err.message));
+  setTimeout(runBackup, 60 * 1000).unref();
+  setInterval(runBackup, 60 * 60 * 1000).unref();
 
   // A hospedagem avisa antes de desligar ou atualizar: fecha tudo direito para não corromper o banco.
   let closing = false;
