@@ -29,6 +29,11 @@ function createApp(deps) {
   app.use('/api/geo', require('./routes/geo')(deps));
   app.use('/api', (req, res, next) => next(new AppError(404, 'Rota não encontrada')));
 
+  // Biblioteca do mapa servida pelo próprio servidor (sem depender de CDN).
+  app.use(
+    '/vendor/leaflet',
+    express.static(path.join(__dirname, '..', 'node_modules', 'leaflet', 'dist'), { maxAge: '7d' })
+  );
   app.use(
     express.static(path.join(__dirname, '..', 'public'), {
       setHeaders(res, file) {
