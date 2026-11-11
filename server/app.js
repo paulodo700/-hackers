@@ -26,6 +26,12 @@ function createApp(deps) {
   });
   app.use(express.json({ limit: '20kb' }));
 
+  // Usado pela hospedagem para saber se o servidor está de pé (e se o banco responde).
+  app.get('/api/health', (req, res) => {
+    db.prepare('SELECT 1').get();
+    res.json({ ok: true });
+  });
+
   app.get('/api/public/config', (req, res) => {
     const s = getSettings(db);
     res.json({ city_name: s.city_name, city_lat: s.city_lat, city_lng: s.city_lng, demo: config.demo });

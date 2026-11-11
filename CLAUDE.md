@@ -20,4 +20,6 @@
   marcar a posição tocando no mapa. Nunca ligar em produção.
 - O ambiente na nuvem bloqueia `router.project-osrm.org` e `nominatim.openstreetmap.org`: ali a busca de endereço
   volta vazia e a distância é estimada. Fora dali funcionam.
-- Ainda não está publicado na internet. O próximo passo recomendado é a publicação com HTTPS (o GPS do celular exige).
+- Publicação: arquivos prontos para a Railway (`Dockerfile`, `railway.json`, guia em `docs/COLOCAR-NO-AR.md`).
+  O dono ainda precisa fazer os passos no site da Railway. A imagem Docker não pôde ser construída na nuvem
+  (sem Docker ativo); se o primeiro deploy falhar, peça o log do build a ele.

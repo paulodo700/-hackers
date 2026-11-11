@@ -79,6 +79,7 @@ test('cadastro, login e permissões', async (t) => {
   assert.equal((await s.call('/api/rides/active', { token: s.admin.token })).status, 403);
   assert.equal((await s.call('/api/nao-existe')).status, 404);
 
+  assert.deepEqual((await s.call('/api/health')).body, { ok: true });
   const cfg = await s.call('/api/public/config');
   assert.equal(cfg.status, 200);
   assert.ok(cfg.body.city_name);

@@ -42,7 +42,21 @@ if (require.main === module) {
   built.dispatch.recover();
   built.server.listen(config.port, () => {
     console.log(`Mototáxi rodando em http://localhost:${config.port}`);
+    console.log(`Banco de dados em ${config.dbPath}`);
+    if (config.demo) console.warn('AVISO: DEMO_MODE ligado. Não use assim com passageiros de verdade.');
   });
+
+  // A hospedagem avisa antes de desligar ou atualizar: fecha tudo direito para não corromper o banco.
+  let closing = false;
+  for (const signal of ['SIGTERM', 'SIGINT']) {
+    process.on(signal, () => {
+      if (closing) return;
+      closing = true;
+      console.log('Desligando…');
+      setTimeout(() => process.exit(0), 5000).unref();
+      built.close().then(() => process.exit(0));
+    });
+  }
 }
 
 module.exports = { buildServer };

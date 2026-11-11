@@ -41,11 +41,13 @@ Abra `http://localhost:3000`. O primeiro acesso da central é o telefone e a sen
 
 ## Colocar na internet
 
-Para os motoqueiros e passageiros usarem de verdade, o sistema precisa estar em um servidor com:
+**O passo a passo completo está em [`docs/COLOCAR-NO-AR.md`](docs/COLOCAR-NO-AR.md)** (hospedagem Railway, cerca de US$ 5 por mês).
+
+O que qualquer hospedagem precisa ter:
 
 - **HTTPS** (endereço com cadeado). Sem isso o celular **não libera o GPS**.
-- **Node.js** rodando sem parar (`npm start`) e com suporte a WebSocket.
-- **Disco que não apaga**, porque o banco de dados é o arquivo `data/mototaxi.db`. Faça cópia dele com frequência.
+- **Node.js** rodando sem parar e com suporte a WebSocket. O `Dockerfile` do projeto já monta tudo.
+- **Disco que não apaga** montado em `/data`, porque o banco de dados é o arquivo `/data/mototaxi.db`.
 
 Variáveis de ambiente (as mesmas do `.env`):
 
@@ -99,7 +101,7 @@ Copie um de cada vez em uma nova conversa. Estão na ordem em que eu recomendo f
 
 **Para colocar no ar**
 
-1. `Me guie passo a passo para colocar o mototáxi na internet com HTTPS, usando a hospedagem mais barata que mantenha o banco de dados salvo. Prepare os arquivos de configuração necessários.`
+1. ~~Colocar na internet com HTTPS~~ — arquivos prontos; siga `docs/COLOCAR-NO-AR.md`.
 2. `Adicione backup automático diário do banco de dados e um botão na central para baixar o backup.`
 3. `Adicione "esqueci minha senha": a central consegue gerar uma senha nova para um passageiro ou motoqueiro.`
 
