@@ -84,6 +84,14 @@ module.exports = function authRoutes({ db }) {
     res.json({ token: auth.signToken({ ...row, password_hash }), user: publicUser(row) });
   });
 
+  // Corrigir o próprio nome.
+  router.put('/profile', auth.requireAuth(db), (req, res) => {
+    const name = String((req.body && req.body.name) || '').replace(/\s+/g, ' ').trim().slice(0, 60);
+    if (name.length < 2) throw new AppError(400, 'Informe seu nome');
+    db.prepare('UPDATE users SET name = ? WHERE id = ?').run(name, req.user.id);
+    res.json({ user: { ...req.user, name } });
+  });
+
   router.get('/me', auth.requireAuth(db), (req, res) => {
     const out = { user: req.user };
     if (req.user.role === 'driver') {

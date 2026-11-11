@@ -2,8 +2,9 @@
 import { createClient } from '/shared/api.js';
 import {
   h, mount, brl, km, toast, run, confirmBox, authScreen, registerSW, dateTime, STATUS_PT, PAYMENT_PT,
-  icone, botaoTema, carregarMarca, nomeDaMarca, esqueleto, contatoCentral,
+  icone, carregarMarca, nomeDaMarca, sloganDaMarca, esqueleto, contatoCentral, caixaPix,
 } from '/shared/ui.js';
+import { criarMenu, abrirPerfil, abrirAjuda } from '/shared/menu.js';
 import { criarMapa, criarCamada, criarRota, enquadrar, ondeEstou, campoEndereco, minutosAte } from '/shared/mapa.js';
 
 const client = createClient('passageiro');
@@ -22,6 +23,8 @@ const st = {
   pagamento: 'cash',
   obs: '',
   centro: null,
+  central: '',
+  cfg: {},
 };
 let form = null; // peças do formulário de pedido (não são recriadas enquanto a pessoa digita)
 let cotacaoSeq = 0;
@@ -46,7 +49,7 @@ function iniciar() {
       authScreen({
         client,
         title: nomeDaMarca(),
-        subtitle: 'Peça sua moto em poucos toques',
+        subtitle: sloganDaMarca(),
         onDone: iniciar,
       })
     );
@@ -59,32 +62,40 @@ async function montarEstrutura() {
   mapaEl = h('div', { class: 'mapa', 'aria-label': 'Mapa' });
   painel = h('section', { class: 'painel', 'aria-live': 'polite' });
   pagina = h('section', { class: 'pagina', hidden: true });
-  const btnHist = h('button', { class: 'btn', onclick: () => trocarAba(st.aba === 'pedir' ? 'historico' : 'pedir') });
-  mount(btnHist, icone('relogio'), 'Histórico');
+  const titulo = h('h1', {}, `Olá, ${client.user.name.split(' ')[0]}`);
+  const avisoEl = h('div', { class: 'aviso', role: 'status', hidden: true });
+  // Menu lateral: os itens seguem o que a central deixou ligado.
+  const menu = criarMenu({
+    client,
+    papel: 'passageiro',
+    aoSair: sair,
+    itens: () => [
+      { icone: 'local', rotulo: 'Pedir corrida', atual: st.aba === 'pedir', acao: () => trocarAba('pedir') },
+      st.cfg.p_history && { icone: 'relogio', rotulo: 'Histórico', atual: st.aba === 'historico', acao: () => trocarAba('historico') },
+      { icone: 'usuario', rotulo: 'Meu perfil', acao: () => abrirPerfil(client, () => (titulo.textContent = `Olá, ${client.user.name.split(' ')[0]}`)) },
+      st.cfg.p_support && st.central && { icone: 'ajuda', rotulo: 'Falar com a central', acao: () => abrirAjuda(st.central, 'Olá! Sou passageiro e preciso de ajuda.') },
+      st.cfg.p_terms && { icone: 'documento', rotulo: 'Termos e privacidade', href: '/termos.html' },
+    ],
+  });
   mount(
     root,
-    h(
-      'div',
-      { class: 'app' },
-      h(
-        'header',
-        { class: 'topo' },
-        h('h1', {}, `Olá, ${client.user.name.split(' ')[0]}`),
-        btnHist,
-        botaoTema(),
-        h('button', { class: 'btn so-icone', onclick: sair, 'aria-label': 'Sair', title: 'Sair' }, icone('sair'))
-      ),
-      mapaEl,
-      painel,
-      pagina
-    )
+    h('div', { class: 'app' }, h('header', { class: 'topo' }, menu.botao, titulo), avisoEl, mapaEl, painel, pagina),
+    menu.fundo,
+    menu.gaveta
   );
-  st.btnHist = btnHist;
 
   const cfg = (await configPronta) || { city_lat: -15.78, city_lng: -47.93 };
   if (!client.user) return;
   st.centro = { lat: cfg.city_lat, lng: cfg.city_lng };
   st.central = cfg.support_phone || '';
+  st.cfg = cfg;
+  if (cfg.notice_passenger) {
+    mount(avisoEl, icone('ajuda'), h('span', {}, cfg.notice_passenger));
+    avisoEl.hidden = false;
+  }
+  // Só as formas de pagamento que a central deixou ligadas.
+  if (cfg.pay_cash === 0) st.pagamento = 'pix';
+  if (cfg.pay_pix === 0) st.pagamento = 'cash';
   map = criarMapa(mapaEl, st.centro, 14);
   camada = criarCamada(map);
   rota = criarRota(map);
@@ -150,7 +161,6 @@ function trocarAba(aba) {
   mapaEl.hidden = hist;
   painel.hidden = hist;
   pagina.hidden = !hist;
-  mount(st.btnHist, icone(hist ? 'voltar' : 'relogio'), hist ? 'Voltar' : 'Histórico');
   if (hist) desenharHistorico();
   else {
     map.invalidateSize();
@@ -256,7 +266,9 @@ function montarFormulario() {
   mount(
     f.resumo,
     h('div', { class: 'preco' }, h('div', {}, h('b', {}, 'Valor da corrida'), h('br'), f.distancia), f.preco),
-    h('div', { class: 'escolha', role: 'radiogroup', 'aria-label': 'Forma de pagamento' }, pagamento('cash', 'Dinheiro'), pagamento('pix', 'Pix')),
+    st.cfg.pay_cash !== 0 && st.cfg.pay_pix !== 0
+      ? h('div', { class: 'escolha', role: 'radiogroup', 'aria-label': 'Forma de pagamento' }, pagamento('cash', 'Dinheiro'), pagamento('pix', 'Pix'))
+      : h('p', { class: 'muted' }, `Pagamento em ${PAYMENT_PT[st.pagamento].toLowerCase()}, direto ao motoqueiro.`),
     f.obs,
     f.pedir
   );
@@ -438,6 +450,7 @@ function telaConcluida(r) {
     'div',
     { class: 'pilha' },
     h('div', {}, h('h2', {}, 'Você chegou!'), h('p', { class: 'sub' }, `Pague ${brl(r.price)} em ${PAYMENT_PT[r.payment].toLowerCase()} ao motoqueiro.`)),
+    r.payment === 'pix' && caixaPix(st.cfg.pix_key),
     h('p', {}, `Como foi a corrida com ${r.driver ? r.driver.name : 'o motoqueiro'}?`),
     estrelas,
     enviar,
@@ -468,17 +481,18 @@ function telaEncerrada(r) {
 /* ---------- Histórico ---------- */
 
 async function desenharHistorico() {
-  mount(pagina, h('h2', {}, 'Minhas corridas'), esqueleto(3));
+  const cabeca = () => h('div', { class: 'cabeca-pagina' }, h('button', { class: 'btn small', onclick: () => trocarAba('pedir') }, icone('voltar'), 'Voltar'), h('h2', {}, 'Minhas corridas'));
+  mount(pagina, cabeca(), esqueleto(3));
   let rides = [];
   try {
     rides = (await client.api('/rides/history')).rides;
   } catch (err) {
-    return mount(pagina, h('h2', {}, 'Minhas corridas'), h('p', { class: 'vazio-lista' }, err.message));
+    return mount(pagina, cabeca(), h('p', { class: 'vazio-lista' }, err.message));
   }
   const tag = { completed: 'ok', cancelled: 'bad', no_drivers: 'warn' };
   mount(
     pagina,
-    h('h2', {}, 'Minhas corridas'),
+    cabeca(),
     rides.length
       ? h(
           'div',

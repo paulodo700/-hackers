@@ -30,3 +30,9 @@
   (o ambiente na nuvem é Linux): se ele relatar erro, peça foto da janela. Link fixo com domínio na Cloudflare
   ainda não foi feito.
 - Cópia de segurança diária automática já existe (`scripts/backup.js`, chamada por `server/index.js`).
+- Versão 2 (11/11/2026): modo escuro, ícones SVG (`public/shared/icones.js`, sem emojis), rota e tempo estimado,
+  menu lateral (`public/shared/menu.js`), aba **Personalizar** e aba **Passageiros** na central. Quase tudo que
+  aparece para passageiro/motoqueiro vem de `GET /api/public/config` (`publicSettings` em `server/db.js`); ao criar
+  um ajuste novo, inclua em `DEFAULTS`, `TEXTS`/`FLAGS` e `PUBLIC_KEYS`.
+- Os Termos (`public/termos.html`) são um modelo genérico; o dono foi avisado de que precisa de revisão profissional.
+- Ele quer o app "pronto para publicar e lucrar": priorize confiabilidade e clareza para usuário leigo.

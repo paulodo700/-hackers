@@ -97,6 +97,18 @@ try {
   await tap(central, 'Salvar configurações');
   await see(central, 'Configurações salvas');
   await shot(central, '03-central-configuracoes');
+
+  // Personalização: nome, frase, aviso e chave Pix definidos pela central.
+  await central.getByRole('button', { name: /Personalizar/ }).click();
+  await central.getByLabel('Nome do serviço').fill('Moto Já');
+  await central.getByLabel(/Frase de apresentação/).fill('A moto mais rápida da cidade');
+  await central.getByLabel(/Aviso para os passageiros/).fill('Atendemos das 6h às 23h');
+  await central.getByLabel(/Telefone\/WhatsApp da central/).fill('(11) 90000-0000');
+  await central.getByLabel(/Chave Pix/).fill('pix@motoja.com');
+  await central.getByRole('button', { name: 'Usar a cor #0a7cff' }).click();
+  await tap(central, 'Salvar personalização');
+  await see(central, 'Personalização salva');
+  await shot(central, '03b-central-personalizar');
   await central.getByRole('button', { name: /Motoqueiros/ }).click();
   await see(central, 'João da Moto');
   await tap(central, 'Aprovar');
@@ -111,12 +123,16 @@ try {
 
   // Passageiro se cadastra e pede.
   const pass = await open('passageiro', '/passageiro/', { ...phone, geolocation: { latitude: -10, longitude: -48 } });
+  await see(pass, 'A moto mais rápida da cidade'); // frase e nome definidos pela central
+  await see(pass, 'Moto Já');
   await tap(pass, 'Não tem conta? Criar agora');
+  await see(pass, 'Termos de uso e a Política de privacidade');
   await pass.getByLabel('Seu nome').fill('Maria Silva <img src=x>'); // nome com HTML: deve aparecer como texto
   await pass.getByLabel('Telefone com DDD').fill('11988887777');
   await pass.getByLabel('Crie uma senha').fill('123456');
   await tap(pass, 'Criar conta');
   await see(pass, 'Para onde vamos?');
+  await see(pass, 'Atendemos das 6h às 23h');
   await pass.waitForFunction(() => document.querySelector('.endereco input').value !== '');
   await clickMap(pass, 70, -60);
   await pass.getByRole('button', { name: /Pedir mototáxi · R\$/ }).waitFor({ timeout: 15000 });
@@ -159,9 +175,24 @@ try {
   await see(pass, 'Obrigado!');
   await tap(pass, 'Nova corrida');
   await see(pass, 'Para onde vamos?');
-  await tap(pass, 'Histórico');
+  // Menu lateral do passageiro.
+  await tap(pass, 'Abrir menu');
+  await pass.getByRole('button', { name: 'Meu perfil' }).waitFor();
+  await pass.getByRole('button', { name: 'Falar com a central' }).waitFor();
+  await pass.getByRole('link', { name: 'Termos e privacidade' }).waitFor();
+  await shot(pass, '13a-passageiro-menu');
+  await pass.getByRole('button', { name: 'Histórico' }).click();
   await see(pass, 'Concluída');
   await shot(pass, '13-passageiro-historico');
+  // Perfil: corrigir o nome.
+  await tap(pass, 'Abrir menu');
+  await pass.getByRole('button', { name: 'Meu perfil' }).click();
+  await pass.getByLabel('Seu nome').fill('Maria Souza');
+  await tap(pass, 'Salvar nome');
+  await see(pass, 'Nome atualizado');
+  await shot(pass, '13b-passageiro-perfil');
+  await tap(pass, 'Fechar');
+  await see(pass, 'Olá, Maria');
 
   // Central lança uma corrida para quem ligou.
   await central.getByRole('button', { name: /Nova corrida/ }).click();
@@ -183,7 +214,9 @@ try {
   await tap(moto, 'Finalizar corrida');
   await tap(moto, 'Finalizar');
   await tap(moto, 'Pronto');
-  await tap(moto, 'Ganhos');
+  await tap(moto, 'Abrir menu');
+  await shot(moto, '15a-motoqueiro-menu');
+  await moto.getByRole('button', { name: 'Ganhos' }).click();
   await moto.locator('.pagina').getByText('2 corridas').first().waitFor();
   await shot(moto, '15-motoqueiro-ganhos');
 
@@ -194,6 +227,13 @@ try {
   await central.getByRole('button', { name: /Corridas/ }).click();
   await see(central, 'Dona Ana');
   await shot(central, '17-central-corridas');
+  await central.getByRole('button', { name: /Passageiros/ }).click();
+  await see(central, 'Maria Souza');
+  await see(central, '1 passageiro cadastrado');
+  await shot(central, '18-central-passageiros');
+  await central.getByRole('button', { name: /Motoqueiros/ }).click();
+  await see(central, 'Faturou');
+  await shot(central, '19-central-motoqueiros');
 
   // Recarregar a página do motoqueiro mantém a sessão e o estado.
   await moto.reload();

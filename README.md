@@ -71,7 +71,7 @@ atendem bem; se o movimento crescer muito, troque por um serviço pago ou própr
 ## Testes
 
 ```bash
-npm test                 # 38 testes: preço, corrida, distribuição, login, API e tempo real
+npm test                 # 51 testes: preço, corrida, distribuição, login, segurança, API e tempo real
 node tests/e2e.cjs       # navegador de verdade com passageiro, motoqueiro e central (precisa do Playwright)
 ```
 
@@ -96,10 +96,25 @@ public/
 docs/superpowers/                    especificação e plano da versão 1
 ```
 
-## O que ainda não tem (versão 1)
+## O que a versão 2 trouxe
+
+- **Visual profissional:** modo escuro, ícones, rota desenhada no mapa, tempo estimado, animações e telas de carregamento.
+- **Menu lateral** no passageiro e no motoqueiro: perfil (trocar nome e senha), histórico/ganhos, falar com a central, termos.
+- **Personalizar (na central):** nome do serviço, cor, frase de apresentação, tema padrão, avisos no topo das telas,
+  telefone/WhatsApp da central, formas de pagamento aceitas, chave Pix e quais itens aparecem em cada menu.
+- **Passageiros (na central):** lista com busca, corridas, gasto e bloqueio.
+- **Motoqueiros (na central):** corridas, faturamento e nota média de cada um.
+- **Senhas:** cada pessoa troca a sua; a central redefine a de quem esqueceu. Trocar a senha derruba os logins antigos.
+- **Proteções:** limite de tentativas e de pedidos por endereço, preço confirmado igual ao estimado, contagem da oferta
+  correta mesmo com o relógio do celular errado, página de Termos e Privacidade.
+
+> **Sobre os Termos de uso (`/termos.html`):** o texto é um modelo genérico. Antes de operar comercialmente, peça a um
+> advogado ou contador para revisar, principalmente por causa da LGPD e das regras de mototáxi do seu município.
+
+## O que ainda não tem
 
 Pagamento dentro do app, aviso com o app fechado (push), publicação nas lojas, corrida agendada, entregas, cupons,
-chat, recuperação de senha e vários atendentes com permissões diferentes.
+chat e vários atendentes com permissões diferentes.
 
 ## Prompts para as próximas melhorias
 
@@ -109,7 +124,7 @@ Copie um de cada vez em uma nova conversa. Estão na ordem em que eu recomendo f
 
 1. ~~Colocar na internet com HTTPS~~ — arquivos prontos; siga `docs/COLOCAR-NO-AR.md`.
 2. `Adicione na central um botão para baixar a cópia de segurança do banco de dados.` (a cópia diária automática já existe)
-3. `Adicione "esqueci minha senha": a central consegue gerar uma senha nova para um passageiro ou motoqueiro.`
+3. ~~Adicione "esqueci minha senha": a central consegue gerar uma senha nova para um passageiro ou motoqueiro.~~ — feito.
 
 **Para o motoqueiro não perder corrida**
 
@@ -120,7 +135,7 @@ Copie um de cada vez em uma nova conversa. Estão na ordem em que eu recomendo f
 **Para o passageiro**
 
 7. `Adicione endereços favoritos (Casa, Trabalho) e os últimos destinos no app do passageiro.`
-8. `Mostre o tempo estimado de chegada do motoqueiro e desenhe a rota no mapa.`
+8. ~~Mostre o tempo estimado de chegada do motoqueiro e desenhe a rota no mapa.~~ — feito.
 9. `Adicione um botão de WhatsApp para o passageiro falar com o motoqueiro e com a central.`
 10. `Permita agendar corrida para um horário futuro.`
 
@@ -135,7 +150,7 @@ Copie um de cada vez em uma nova conversa. Estão na ordem em que eu recomendo f
 
 15. `Crie contas de atendente com permissão limitada (só lança e acompanha corridas, não vê relatórios nem configurações).`
 16. `Adicione exportação dos relatórios para Excel e PDF.`
-17. `Mostre a nota média de cada motoqueiro e a lista de avaliações ruins na central.`
+17. ~~Mostre a nota média de cada motoqueiro e a lista de avaliações ruins na central.~~ — feito.
 18. `Cadastre os bairros e pontos conhecidos da cidade (rodoviária, hospital, praça) para a busca de endereço ficar instantânea.`
 
 **Para crescer**

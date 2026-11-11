@@ -356,6 +356,60 @@ body, .painel, .card, .item, .indicador, .tabela-caixa { transition: background-
 .cores { display: flex; gap: 8px; flex-wrap: wrap; }
 .cores button { width: 34px; height: 34px; border-radius: 50%; border: 2px solid var(--linha); cursor: pointer; }
 
+/* Menu lateral (gaveta) */
+.gaveta-fundo { position: fixed; inset: 0; z-index: 2100; background: rgba(0, 0, 0, 0.5); opacity: 0; pointer-events: none; transition: opacity 0.22s ease; }
+.gaveta-fundo.aberta { opacity: 1; pointer-events: auto; }
+.gaveta {
+  position: fixed; top: 0; bottom: 0; left: 0; z-index: 2200; width: min(84vw, 320px);
+  background: var(--preto); color: #fff; display: flex; flex-direction: column;
+  transform: translateX(-102%); transition: transform 0.26s cubic-bezier(0.2, 0.8, 0.2, 1);
+  padding: calc(18px + env(safe-area-inset-top)) 12px calc(14px + env(safe-area-inset-bottom)); overflow-y: auto;
+}
+.gaveta.aberta { transform: none; box-shadow: 12px 0 40px rgba(0, 0, 0, 0.4); }
+.gaveta-topo { display: flex; align-items: center; gap: 12px; padding: 6px 8px 18px; border-bottom: 1px solid #2f2f2c; margin-bottom: 10px; }
+.gaveta-topo .avatar { width: 48px; height: 48px; border-radius: 50%; background: var(--marca); color: var(--sobre-marca); display: grid; place-items: center; flex: none; }
+.gaveta-topo strong { display: block; font-size: 1.05rem; }
+.gaveta-topo span { color: #b9b8b2; font-size: 0.9rem; }
+.gaveta-itens { display: flex; flex-direction: column; gap: 2px; flex: 1; }
+.gaveta-itens button, .gaveta-itens a {
+  display: flex; align-items: center; gap: 12px; width: 100%; min-height: 50px; padding: 0 12px;
+  border: 0; border-radius: 12px; background: none; color: #e4e3dd; font: inherit; font-weight: 600; text-align: left; text-decoration: none; cursor: pointer;
+}
+.gaveta-itens button:hover, .gaveta-itens a:hover { background: #262624; }
+.gaveta-itens [aria-current='page'] { background: var(--marca); color: var(--sobre-marca); }
+.gaveta-itens .ico { font-size: 1.1rem; }
+.gaveta-fim { margin-top: auto; padding-top: 10px; border-top: 1px solid #2f2f2c; display: grid; gap: 2px; }
+
+/* Janela */
+.dialog.largo { width: min(100%, 440px); max-height: 88dvh; overflow-y: auto; color: var(--tinta); }
+.dialog-topo { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
+.dialog-topo h2 { font-size: 1.25rem; }
+.dialog .btn.so-icone { width: 40px; padding: 0; }
+
+/* Aviso da central */
+.aviso { display: flex; gap: 10px; align-items: flex-start; padding: 10px 14px; background: var(--marca); color: var(--sobre-marca); font-weight: 600; font-size: 0.92rem; z-index: 1050; }
+.aviso .ico { margin-top: 1px; }
+
+/* Chave Pix */
+.pix { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 14px; border-radius: 14px; background: var(--fundo); }
+.pix b { display: block; font-size: 0.75rem; color: var(--cinza); text-transform: uppercase; letter-spacing: 0.04em; }
+.pix span { font-weight: 700; word-break: break-all; }
+
+/* Liga/desliga */
+.interruptor { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 12px 0; border-bottom: 1px solid var(--linha); cursor: pointer; }
+.interruptor:last-child { border-bottom: 0; }
+.interruptor small { display: block; color: var(--cinza); font-weight: 400; }
+.interruptor input { position: absolute; opacity: 0; width: 0; min-height: 0; }
+.interruptor i { flex: none; width: 48px; height: 28px; border-radius: 99px; background: var(--linha); position: relative; transition: background-color 0.18s ease; }
+.interruptor i::after { content: ''; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3); transition: transform 0.18s ease; }
+.interruptor input:checked + i { background: var(--verde); }
+.interruptor input:checked + i::after { transform: translateX(20px); }
+.interruptor input:focus-visible + i { outline: 3px solid var(--foco); outline-offset: 2px; }
+.personalizar { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; align-items: start; }
+.barra-salvar { position: sticky; bottom: 0; padding: 14px 0; background: linear-gradient(transparent, var(--fundo) 30%); margin-top: 8px; }
+.cabeca-pagina { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.cabeca-pagina h2 { margin: 0; }
+
 /* Termos e textos longos */
 .aceite { font-size: 0.82rem; color: var(--cinza); text-align: center; margin-top: 12px; }
 .aceite a, .texto a:not(.btn) { color: inherit; }

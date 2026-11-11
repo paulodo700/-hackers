@@ -10,7 +10,8 @@ CREATE TABLE IF NOT EXISTS users (
   name TEXT NOT NULL,
   phone TEXT NOT NULL UNIQUE,
   password_hash TEXT NOT NULL,
-  created_at TEXT NOT NULL
+  created_at TEXT NOT NULL,
+  blocked INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS drivers (
   user_id INTEGER PRIMARY KEY REFERENCES users(id),
@@ -82,7 +83,42 @@ const DEFAULTS = {
   brand_name: 'Mototáxi',
   brand_color: '#ffc107',
   support_phone: '',
+  // Personalização feita pela central
+  slogan: 'Peça sua moto em poucos toques',
+  notice_passenger: '',
+  notice_driver: '',
+  pix_key: '',
+  default_theme: 'auto',
+  pay_cash: 1,
+  pay_pix: 1,
+  // Itens do menu lateral de cada tela (1 = aparece)
+  p_history: 1,
+  p_support: 1,
+  p_terms: 1,
+  d_earnings: 1,
+  d_support: 1,
+  d_terms: 1,
 };
+
+// Chaves de liga/desliga.
+const FLAGS = ['pay_cash', 'pay_pix', 'p_history', 'p_support', 'p_terms', 'd_earnings', 'd_support', 'd_terms'];
+// Textos: tamanho máximo e se podem ficar vazios.
+const TEXTS = {
+  city_name: { max: 80 },
+  brand_name: { max: 30 },
+  brand_color: { max: 7 },
+  support_phone: { max: 30, optional: true },
+  slogan: { max: 60 },
+  notice_passenger: { max: 160, optional: true },
+  notice_driver: { max: 160, optional: true },
+  pix_key: { max: 80, optional: true },
+  default_theme: { max: 10 },
+};
+// O que as telas de passageiro e motoqueiro podem saber (preços e comissão ficam de fora).
+const PUBLIC_KEYS = [
+  'city_name', 'city_lat', 'city_lng', 'brand_name', 'brand_color', 'support_phone', 'slogan',
+  'notice_passenger', 'notice_driver', 'pix_key', 'default_theme', ...FLAGS,
+];
 
 // Limites aceitos em cada configuração numérica.
 const LIMITS = {
@@ -94,6 +130,7 @@ const LIMITS = {
   city_lat: [-90, 90],
   city_lng: [-180, 180],
   tz_offset_hours: [-12, 14],
+  ...Object.fromEntries(FLAGS.map((k) => [k, [0, 1]])),
 };
 
 function openDb(file) {
@@ -106,6 +143,8 @@ function openDb(file) {
   const rideCols = new Set(db.prepare('PRAGMA table_info(rides)').all().map((c) => c.name));
   if (!rideCols.has('duration_min')) db.exec('ALTER TABLE rides ADD COLUMN duration_min REAL');
   if (!rideCols.has('route')) db.exec('ALTER TABLE rides ADD COLUMN route TEXT');
+  const userCols = new Set(db.prepare('PRAGMA table_info(users)').all().map((c) => c.name));
+  if (!userCols.has('blocked')) db.exec('ALTER TABLE users ADD COLUMN blocked INTEGER NOT NULL DEFAULT 0');
   const insert = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');
   for (const [key, value] of Object.entries(DEFAULTS)) insert.run(key, String(value));
   return db;
@@ -124,7 +163,11 @@ function setSettings(db, patch) {
   const clean = {};
   for (const [key, raw] of Object.entries(patch || {})) {
     if (!(key in DEFAULTS)) continue;
-    if (typeof DEFAULTS[key] === 'number') {
+    if (FLAGS.includes(key)) {
+      if (raw === true || raw === 1 || raw === '1') clean[key] = 1;
+      else if (raw === false || raw === 0 || raw === '0') clean[key] = 0;
+      else throw new AppError(400, `Valor inválido para ${key}`);
+    } else if (typeof DEFAULTS[key] === 'number') {
       const n = typeof raw === 'string' ? Number(raw.replace(',', '.')) : raw;
       const [min, max] = LIMITS[key];
       if (typeof n !== 'number' || !Number.isFinite(n) || n < min || n > max) {
@@ -132,19 +175,27 @@ function setSettings(db, patch) {
       }
       clean[key] = n;
     } else {
-      const s = String(raw ?? '').trim().slice(0, key === 'brand_name' ? 30 : 80);
+      const rule = TEXTS[key];
+      const s = String(raw ?? '').replace(/\s+/g, ' ').trim().slice(0, rule.max);
+      if (!s && !rule.optional) throw new AppError(400, `Valor inválido para ${key}`);
       if (key === 'support_phone') {
         // Telefone/WhatsApp da central mostrado aos usuários. Vazio = não mostrar.
         const digits = s.replace(/\D/g, '').replace(/^55(?=\d{10,11}$)/, '');
         if (s && digits.length !== 10 && digits.length !== 11) throw new AppError(400, 'Telefone da central inválido (use DDD + número)');
         clean[key] = s ? digits : '';
-        continue;
+      } else if (key === 'brand_color') {
+        if (!/^#[0-9a-f]{6}$/i.test(s)) throw new AppError(400, 'Cor inválida');
+        clean[key] = s.toLowerCase();
+      } else if (key === 'default_theme') {
+        if (!['auto', 'claro', 'escuro'].includes(s)) throw new AppError(400, 'Tema inválido');
+        clean[key] = s;
+      } else {
+        clean[key] = s;
       }
-      if (!s) throw new AppError(400, `Valor inválido para ${key}`);
-      if (key === 'brand_color' && !/^#[0-9a-f]{6}$/i.test(s)) throw new AppError(400, 'Cor inválida');
-      clean[key] = key === 'brand_color' ? s.toLowerCase() : s;
     }
   }
+  const after = { ...getSettings(db), ...clean };
+  if (!after.pay_cash && !after.pay_pix) throw new AppError(400, 'Deixe pelo menos uma forma de pagamento ligada');
   const save = db.prepare(
     'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value'
   );
@@ -153,4 +204,9 @@ function setSettings(db, patch) {
   })();
 }
 
-module.exports = { openDb, getSettings, setSettings, DEFAULTS };
+function publicSettings(db) {
+  const all = getSettings(db);
+  return Object.fromEntries(PUBLIC_KEYS.map((k) => [k, all[k]]));
+}
+
+module.exports = { openDb, getSettings, setSettings, publicSettings, DEFAULTS, FLAGS };

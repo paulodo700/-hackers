@@ -216,8 +216,15 @@ export function aplicarMarca(cfg) {
   document.documentElement.style.setProperty('--marca', cor);
   document.documentElement.style.setProperty('--sobre-marca', sobre);
   const nome = (cfg && cfg.brand_name) || 'Mototáxi';
+  const slogan = (cfg && cfg.slogan) || 'Peça sua moto em poucos toques';
+  const tema = cfg && ['claro', 'escuro'].includes(cfg.default_theme) ? cfg.default_theme : 'auto';
   try {
-    localStorage.setItem('mototaxi:marca', JSON.stringify({ cor, sobre, nome }));
+    localStorage.setItem('mototaxi:marca', JSON.stringify({ cor, sobre, nome, slogan, tema }));
+    // Tema padrão escolhido pela central vale para quem ainda não escolheu o seu no aparelho.
+    if (!localStorage.getItem('mototaxi:tema')) {
+      if (tema === 'auto') document.documentElement.removeAttribute('data-tema');
+      else document.documentElement.setAttribute('data-tema', tema);
+    }
   } catch {
     /* segue sem guardar */
   }
@@ -230,6 +237,30 @@ export function nomeDaMarca() {
   } catch {
     return 'Mototáxi';
   }
+}
+
+export function sloganDaMarca() {
+  try {
+    return (JSON.parse(localStorage.getItem('mototaxi:marca') || 'null') || {}).slogan || 'Peça sua moto em poucos toques';
+  } catch {
+    return 'Peça sua moto em poucos toques';
+  }
+}
+
+// Copia um texto (ex.: chave Pix) e avisa.
+export async function copiar(texto) {
+  try {
+    await navigator.clipboard.writeText(texto);
+    toast('Copiado!', 'ok');
+  } catch {
+    toast(`Copie: ${texto}`);
+  }
+}
+
+// Caixa com a chave Pix e botão de copiar. Sem chave configurada, não mostra nada.
+export function caixaPix(chave) {
+  if (!chave) return null;
+  return h('div', { class: 'pix' }, h('div', {}, h('b', {}, 'Chave Pix'), h('span', {}, chave)), h('button', { class: 'btn small', type: 'button', onclick: () => copiar(chave) }, icone('copiar'), 'Copiar'));
 }
 
 export async function carregarMarca(client) {

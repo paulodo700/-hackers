@@ -42,6 +42,14 @@ module.exports = function rideRoutes({ db, rides, geo }) {
 
   router.post('/', orderLimit, async (req, res) => {
     const { origin, dest } = points(req.body);
+    if (db.prepare('SELECT blocked FROM users WHERE id = ?').get(req.user.id).blocked) {
+      throw new AppError(403, 'Sua conta está bloqueada. Fale com a central.');
+    }
+    const settings = getSettings(db);
+    const payment = req.body.payment;
+    if ((payment === 'cash' && !settings.pay_cash) || (payment === 'pix' && !settings.pay_pix)) {
+      throw new AppError(400, 'Esta forma de pagamento não está disponível');
+    }
     const route = completeRoute(await geo.routeDistanceKm(origin, dest), origin, dest);
     const ride = rides.createRide({
       passengerId: req.user.id,

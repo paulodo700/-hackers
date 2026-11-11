@@ -1,7 +1,7 @@
 const path = require('node:path');
 const express = require('express');
 const { AppError } = require('./errors');
-const { getSettings } = require('./db');
+const { getSettings, publicSettings } = require('./db');
 const config = require('./config');
 
 // Monta o servidor HTTP: API + as três telas (arquivos estáticos).
@@ -37,16 +37,7 @@ function createApp(deps) {
   });
 
   app.get('/api/public/config', (req, res) => {
-    const s = getSettings(db);
-    res.json({
-      city_name: s.city_name,
-      city_lat: s.city_lat,
-      city_lng: s.city_lng,
-      brand_name: s.brand_name,
-      brand_color: s.brand_color,
-      support_phone: s.support_phone,
-      demo: config.demo,
-    });
+    res.json({ ...publicSettings(db), demo: config.demo });
   });
   app.use('/api/auth', require('./routes/auth')(deps));
   app.use('/api/rides', require('./routes/rides')(deps));

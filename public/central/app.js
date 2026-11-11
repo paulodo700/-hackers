@@ -13,8 +13,10 @@ const ABAS = [
   ['vivo', 'aovivo', 'Ao vivo'],
   ['nova', 'mais', 'Nova corrida'],
   ['motoqueiros', 'moto', 'Motoqueiros'],
+  ['passageiros', 'pessoas', 'Passageiros'],
   ['corridas', 'lista', 'Corridas'],
   ['relatorios', 'grafico', 'Relatórios'],
+  ['personalizar', 'pincel', 'Personalizar'],
   ['config', 'ajustes', 'Configurações'],
 ];
 const TAG = { searching: 'warn', accepted: 'ok', arrived: 'ok', in_progress: 'ok', completed: 'ok', cancelled: 'bad', no_drivers: 'bad' };
@@ -412,6 +414,14 @@ function telaNova() {
 
 function telaMotoqueiros() {
   const caixa = h('div', { class: 'tabela-caixa' });
+  let numeros = new Map();
+  client
+    .api('/admin/drivers/stats')
+    .then(({ stats }) => {
+      numeros = new Map(stats.map((x) => [x.id, x]));
+      atualizar();
+    })
+    .catch(() => {});
   mount(conteudo, h('h2', {}, 'Motoqueiros'), h('p', { class: 'muted', style: 'margin:-8px 0 14px' }, 'Quem se cadastra pelo app do motoqueiro aparece aqui para aprovação.'), caixa);
 
   function atualizar() {
@@ -427,7 +437,7 @@ function telaMotoqueiros() {
       h(
         'table',
         {},
-        h('thead', {}, h('tr', {}, ['Nome', 'Telefone', 'Moto', 'Situação', 'Agora', ''].map((t) => h('th', {}, t)))),
+        h('thead', {}, h('tr', {}, ['Nome', 'Telefone', 'Moto', 'Corridas', 'Faturou', 'Nota', 'Situação', 'Agora', ''].map((t) => h('th', {}, t)))),
         h(
           'tbody',
           {},
@@ -438,6 +448,9 @@ function telaMotoqueiros() {
               h('td', {}, h('b', {}, d.name)),
               h('td', {}, h('a', { href: `tel:${d.phone}` }, phoneMask(d.phone))),
               h('td', {}, `${d.moto_model} · ${d.plate}`),
+              h('td', { class: 'n' }, (numeros.get(d.id) || {}).rides || 0),
+              h('td', { class: 'n' }, brl((numeros.get(d.id) || {}).revenue || 0)),
+              h('td', { class: 'n' }, (numeros.get(d.id) || {}).rating ? `★ ${String(numeros.get(d.id).rating).replace('.', ',')}` : '—'),
               h('td', {}, h('span', { class: `tag ${SITUACAO[d.status][1]}` }, SITUACAO[d.status][0])),
               h('td', {}, d.status !== 'approved' ? '—' : d.busy ? h('span', { class: 'tag warn' }, 'Em corrida') : d.online ? h('span', { class: 'tag ok' }, d.fresh ? 'Online' : 'Online, sem sinal') : h('span', { class: 'tag' }, 'Offline')),
               h(
@@ -586,18 +599,6 @@ function telaConfig() {
     return h('label', { class: 'field' }, h('span', {}, rotulo), campos[nome]);
   };
   campos.city_name = h('input', { maxlength: 80, required: true });
-  campos.brand_name = h('input', { maxlength: 30, required: true });
-  campos.support_phone = h('input', { type: 'tel', placeholder: '(00) 00000-0000' });
-  // A cor é mostrada na hora; só vale para todos depois de salvar.
-  const previa = () => aplicarMarca({ brand_name: campos.brand_name.value, brand_color: campos.brand_color.value });
-  campos.brand_color = h('input', { type: 'color', 'aria-label': 'Cor da marca', oninput: previa });
-  const paleta = h(
-    'div',
-    { class: 'cores' },
-    ['#ffc107', '#ff6b00', '#e53935', '#0a7cff', '#12a150', '#7b3ff2', '#151515'].map((c) =>
-      h('button', { type: 'button', style: `background:${c}`, 'aria-label': `Usar a cor ${c}`, onclick: () => ((campos.brand_color.value = c), previa()) })
-    )
-  );
   const posicao = h('p', { class: 'muted' });
   let centro = { ...st.centro };
   const salvar = h('button', { class: 'btn primary block', type: 'submit' }, 'Salvar configurações');
@@ -610,26 +611,16 @@ function telaConfig() {
       onsubmit: (e) => {
         e.preventDefault();
         run(salvar, async () => {
-          const body = {
-            city_name: campos.city_name.value, city_lat: centro.lat, city_lng: centro.lng,
-            brand_name: campos.brand_name.value, brand_color: campos.brand_color.value,
-            support_phone: campos.support_phone.value,
-          };
+          const body = { city_name: campos.city_name.value, city_lat: centro.lat, city_lng: centro.lng };
           for (const k of ['base_fare', 'per_km', 'min_fare', 'commission_percent', 'offer_timeout_s']) body[k] = Number(campos[k].value);
           const { settings } = await client.api('/admin/settings', { method: 'PUT', body });
           st.centro = { lat: settings.city_lat, lng: settings.city_lng };
           st.cidade = settings.city_name;
-          aplicarMarca(settings);
-          document.title = `${nomeDaMarca()} · Central`;
           toast('Configurações salvas.', 'ok');
         });
       },
     },
-    h('h3', { class: 'bloco-titulo', style: 'margin-top:0' }, 'Sua marca'),
-    h('label', { class: 'field' }, h('span', {}, 'Nome do serviço (aparece para passageiros e motoqueiros)'), campos.brand_name),
-    h('div', { class: 'field' }, h('span', {}, 'Cor da marca'), h('div', { class: 'cor' }, campos.brand_color, paleta)),
-    h('label', { class: 'field' }, h('span', {}, 'Telefone/WhatsApp da central (aparece para quem precisa de ajuda)'), campos.support_phone),
-    h('h3', { class: 'bloco-titulo' }, 'Preço da corrida'),
+    h('h3', { class: 'bloco-titulo', style: 'margin-top:0' }, 'Preço da corrida'),
     h('div', { class: 'duas' }, numero('base_fare', 'Taxa inicial (R$)'), numero('per_km', 'Valor por km (R$)')),
     h('div', { class: 'duas' }, numero('min_fare', 'Valor mínimo (R$)'), numero('commission_percent', 'Comissão da central (%)', '1')),
     exemplo,
@@ -677,13 +668,7 @@ function telaConfig() {
     }
   })();
 
-  // Saindo sem salvar, volta a cor que está valendo de verdade.
-  return {
-    sair: () => {
-      removerMapa(map);
-      carregarMarca(client);
-    },
-  };
+  return { sair: () => removerMapa(map) };
 }
 
 // Quem esqueceu a senha liga para a central, que cria uma nova pelo telefone cadastrado.
@@ -740,4 +725,174 @@ function cartaoMinhaSenha() {
   );
 }
 
-const TELAS = { vivo: telaVivo, nova: telaNova, motoqueiros: telaMotoqueiros, corridas: telaCorridas, relatorios: telaRelatorios, config: telaConfig };
+/* ---------- Passageiros ---------- */
+
+function telaPassageiros() {
+  const busca = h('input', { type: 'search', placeholder: 'Buscar por nome ou telefone', 'aria-label': 'Buscar passageiro' });
+  const total = h('p', { class: 'muted', style: 'margin:-8px 0 14px' });
+  const caixa = h('div', { class: 'tabela-caixa' });
+  let timer;
+  busca.addEventListener('input', () => {
+    clearTimeout(timer);
+    timer = setTimeout(carregar, 350);
+  });
+  mount(conteudo, h('h2', {}, 'Passageiros'), total, h('div', { class: 'filtros' }, h('label', { class: 'field', style: 'flex:1;max-width:360px' }, busca)), caixa);
+  mount(caixa, esqueleto(3));
+
+  async function carregar() {
+    let dados;
+    try {
+      dados = await client.api(`/admin/passengers?${new URLSearchParams({ q: busca.value.trim() })}`);
+    } catch (err) {
+      return mount(caixa, h('p', { class: 'vazio-lista' }, err.message));
+    }
+    total.textContent = `${dados.total} passageiro${dados.total === 1 ? '' : 's'} cadastrado${dados.total === 1 ? '' : 's'}.`;
+    if (!dados.passengers.length) return mount(caixa, h('p', { class: 'vazio-lista' }, busca.value ? 'Ninguém encontrado.' : 'Nenhum passageiro cadastrado ainda.'));
+    mount(
+      caixa,
+      h(
+        'table',
+        {},
+        h('thead', {}, h('tr', {}, ['Nome', 'Telefone', 'Desde'].map((t) => h('th', {}, t)), h('th', { class: 'n' }, 'Corridas'), h('th', { class: 'n' }, 'Canceladas'), h('th', { class: 'n' }, 'Gastou'), h('th', {}, 'Última corrida'), h('th', {}, 'Situação'), h('th', {}, ''))),
+        h(
+          'tbody',
+          {},
+          dados.passengers.map((p) => {
+            const botao = h(
+              'button',
+              {
+                class: `btn small ${p.blocked ? 'go' : ''}`,
+                onclick: async () => {
+                  if (!p.blocked && !(await confirmBox(`Bloquear ${p.name}? Essa pessoa não conseguirá mais pedir corridas.`, 'Bloquear'))) return;
+                  await run(botao, () => client.api(`/admin/passengers/${p.id}/block`, { body: { blocked: !p.blocked } }));
+                  carregar();
+                },
+              },
+              p.blocked ? 'Desbloquear' : 'Bloquear'
+            );
+            return h(
+              'tr',
+              {},
+              h('td', {}, h('b', {}, p.name)),
+              h('td', {}, h('a', { href: `tel:${p.phone}` }, phoneMask(p.phone))),
+              h('td', {}, dateTime(p.created_at).slice(0, 5)),
+              h('td', { class: 'n' }, p.rides),
+              h('td', { class: 'n' }, p.cancelled),
+              h('td', { class: 'n' }, brl(p.spent)),
+              h('td', {}, p.last_ride ? dateTime(p.last_ride) : '—'),
+              h('td', {}, p.blocked ? h('span', { class: 'tag bad' }, 'Bloqueado') : h('span', { class: 'tag ok' }, 'Ativo')),
+              h('td', {}, botao)
+            );
+          })
+        )
+      )
+    );
+  }
+  carregar();
+  return {};
+}
+
+/* ---------- Personalizar ---------- */
+
+function telaPersonalizar() {
+  const c = {};
+  const texto = (nome, rotulo, attrs = {}) => {
+    c[nome] = h('input', { maxlength: 160, ...attrs });
+    return h('label', { class: 'field' }, h('span', {}, rotulo), c[nome]);
+  };
+  const liga = (nome, rotulo, detalhe) => {
+    c[nome] = h('input', { type: 'checkbox' });
+    return h('label', { class: 'interruptor' }, h('span', {}, rotulo, detalhe && h('small', {}, detalhe)), c[nome], h('i'));
+  };
+  // A cor é mostrada na hora; só vale para todos depois de salvar.
+  const previa = () => aplicarMarca({ brand_name: c.brand_name.value, brand_color: c.brand_color.value, slogan: c.slogan.value, default_theme: c.default_theme.value });
+  c.brand_color = h('input', { type: 'color', 'aria-label': 'Cor da marca', oninput: previa });
+  const paleta = h(
+    'div',
+    { class: 'cores' },
+    ['#ffc107', '#ff6b00', '#e53935', '#0a7cff', '#12a150', '#7b3ff2', '#151515'].map((cor) =>
+      h('button', { type: 'button', style: `background:${cor}`, 'aria-label': `Usar a cor ${cor}`, onclick: () => ((c.brand_color.value = cor), previa()) })
+    )
+  );
+  c.default_theme = h('select', {}, h('option', { value: 'auto' }, 'Automático (segue o celular)'), h('option', { value: 'claro' }, 'Claro'), h('option', { value: 'escuro' }, 'Escuro'));
+  const salvar = h('button', { class: 'btn primary big block', type: 'submit' }, 'Salvar personalização');
+  const cartao = (titulo, ...filhos) => h('section', { class: 'card' }, h('h3', { class: 'bloco-titulo', style: 'margin-top:0' }, titulo), filhos);
+  const FLAGS = ['pay_cash', 'pay_pix', 'p_history', 'p_support', 'p_terms', 'd_earnings', 'd_support', 'd_terms'];
+  const TEXTOS = ['brand_name', 'brand_color', 'slogan', 'default_theme', 'support_phone', 'notice_passenger', 'notice_driver', 'pix_key'];
+
+  const form = h(
+    'form',
+    {
+      onsubmit: (e) => {
+        e.preventDefault();
+        run(salvar, async () => {
+          const body = {};
+          for (const k of TEXTOS) body[k] = c[k].value;
+          for (const k of FLAGS) body[k] = c[k].checked;
+          const { settings } = await client.api('/admin/settings', { method: 'PUT', body });
+          aplicarMarca(settings);
+          document.title = `${nomeDaMarca()} · Central`;
+          toast('Personalização salva. Passageiros e motoqueiros veem ao abrir o app de novo.', 'ok');
+        });
+      },
+    },
+    h(
+      'div',
+      { class: 'personalizar' },
+      cartao(
+        'Sua marca',
+        texto('brand_name', 'Nome do serviço', { maxlength: 30, required: true }),
+        texto('slogan', 'Frase de apresentação (tela de entrada do passageiro)', { maxlength: 60, required: true }),
+        h('div', { class: 'field' }, h('span', {}, 'Cor da marca'), h('div', { class: 'cor' }, c.brand_color, paleta)),
+        h('label', { class: 'field' }, h('span', {}, 'Tema padrão do aplicativo'), c.default_theme)
+      ),
+      cartao(
+        'Avisos e contato',
+        texto('notice_passenger', 'Aviso para os passageiros (faixa no topo; vazio = sem aviso)', { placeholder: 'Ex.: Atendemos das 6h às 23h' }),
+        texto('notice_driver', 'Aviso para os motoqueiros (vazio = sem aviso)', { placeholder: 'Ex.: Acerto da comissão toda segunda' }),
+        texto('support_phone', 'Telefone/WhatsApp da central', { type: 'tel', maxlength: 30, placeholder: '(00) 00000-0000' })
+      ),
+      cartao(
+        'Pagamento',
+        liga('pay_cash', 'Aceitar dinheiro'),
+        liga('pay_pix', 'Aceitar Pix'),
+        h('div', { style: 'margin-top:14px' }, texto('pix_key', 'Chave Pix (mostrada ao fim da corrida paga em Pix)', { maxlength: 80, placeholder: 'Telefone, e-mail, CPF/CNPJ ou chave aleatória' }))
+      ),
+      cartao(
+        'Menu do passageiro',
+        liga('p_history', 'Histórico', 'Lista das corridas que a pessoa já fez'),
+        liga('p_support', 'Falar com a central', 'Aparece se o telefone da central estiver preenchido'),
+        liga('p_terms', 'Termos e privacidade')
+      ),
+      cartao(
+        'Menu do motoqueiro',
+        liga('d_earnings', 'Ganhos', 'Total do dia, da semana e últimas corridas'),
+        liga('d_support', 'Falar com a central', 'Aparece se o telefone da central estiver preenchido'),
+        liga('d_terms', 'Termos e privacidade')
+      )
+    ),
+    h('div', { class: 'barra-salvar' }, salvar)
+  );
+  const carregando = esqueleto(2);
+  mount(conteudo, h('h2', {}, 'Personalizar'), h('p', { class: 'muted', style: 'margin:-8px 0 16px' }, 'Deixe o aplicativo com a cara do seu serviço. "Pedir corrida", "Início", "Meu perfil" e "Sair" ficam sempre no menu.'), carregando);
+
+  (async () => {
+    try {
+      const { settings } = await client.api('/admin/settings');
+      for (const k of TEXTOS) c[k].value = settings[k];
+      for (const k of FLAGS) c[k].checked = !!settings[k];
+      if (carregando.isConnected) carregando.replaceWith(form);
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  })();
+
+  // Saindo sem salvar, volta o que está valendo de verdade.
+  return { sair: () => carregarMarca(client) };
+}
+
+
+const TELAS = {
+  vivo: telaVivo, nova: telaNova, motoqueiros: telaMotoqueiros, passageiros: telaPassageiros, corridas: telaCorridas,
+  relatorios: telaRelatorios, personalizar: telaPersonalizar, config: telaConfig,
+};

@@ -93,6 +93,7 @@ export function createClient(app) {
     connect,
     // Depois de trocar a senha o servidor devolve um login novo; o antigo deixa de valer.
     adopt: (data) => save(data),
+    rename: (name) => session && save({ ...session, user: { ...session.user, name } }),
     get user() {
       return session ? session.user : null;
     },

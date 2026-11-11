@@ -2,14 +2,15 @@
 import { createClient } from '/shared/api.js';
 import {
   h, mount, brl, km, toast, run, confirmBox, authScreen, registerSW, dateTime, phoneMask, PAYMENT_PT, beep, unlockSound,
-  icone, botaoTema, carregarMarca, nomeDaMarca, esqueleto, contatoCentral,
+  icone, carregarMarca, nomeDaMarca, esqueleto, contatoCentral, caixaPix,
 } from '/shared/ui.js';
+import { criarMenu, abrirPerfil, abrirAjuda } from '/shared/menu.js';
 import { criarMapa, criarCamada, criarRota, enquadrar, distanciaKm, minutosAte } from '/shared/mapa.js';
 
 const client = createClient('motoqueiro');
 const root = document.getElementById('root');
 
-let map, camada, rota, painel, pagina, mapaEl, btnAba;
+let map, camada, rota, painel, pagina, mapaEl;
 let tempoEl = null; // texto do tempo estimado na corrida
 let desenhado = null; // resumo do que está na tela, para não redesenhar (e reanimar) sem mudança
 const st = {
@@ -21,6 +22,8 @@ const st = {
   pos: null, // última posição do GPS
   gpsErro: false,
   final: null, // corrida recém-finalizada (mostra quanto receber)
+  central: '',
+  cfg: {},
 };
 let watchId = null;
 let ultimoEnvio = 0;
@@ -69,19 +72,34 @@ async function montarEstrutura() {
   mapaEl = h('div', { class: 'mapa', 'aria-label': 'Mapa' });
   painel = h('section', { class: 'painel', 'aria-live': 'polite' });
   pagina = h('section', { class: 'pagina', hidden: true });
-  btnAba = h('button', { class: 'btn', onclick: () => trocarAba(st.aba === 'inicio' ? 'ganhos' : 'inicio') });
-  mount(btnAba, icone('carteira'), 'Ganhos');
   desenhado = null;
+  const titulo = h('h1', {}, client.user.name);
+  const avisoEl = h('div', { class: 'aviso', role: 'status', hidden: true });
+  const menu = criarMenu({
+    client,
+    papel: 'motoqueiro',
+    aoSair: sair,
+    itens: () => [
+      { icone: 'moto', rotulo: 'Início', atual: st.aba === 'inicio', acao: () => trocarAba('inicio') },
+      st.cfg.d_earnings && { icone: 'carteira', rotulo: 'Ganhos', atual: st.aba === 'ganhos', acao: () => trocarAba('ganhos') },
+      { icone: 'usuario', rotulo: 'Meu perfil', acao: () => abrirPerfil(client, () => (titulo.textContent = client.user.name)) },
+      st.cfg.d_support && st.central && { icone: 'ajuda', rotulo: 'Falar com a central', acao: () => abrirAjuda(st.central, 'Olá! Sou motoqueiro e preciso de ajuda.') },
+      st.cfg.d_terms && { icone: 'documento', rotulo: 'Termos e privacidade', href: '/termos.html' },
+    ],
+  });
   mount(
     root,
     h(
       'div',
       { class: 'app' },
-      h('header', { class: 'topo' }, h('h1', {}, client.user.name), btnAba, botaoTema(), h('button', { class: 'btn so-icone', onclick: sair, 'aria-label': 'Sair', title: 'Sair' }, icone('sair'))),
+      h('header', { class: 'topo' }, menu.botao, titulo),
+      avisoEl,
       mapaEl,
       painel,
       pagina
-    )
+    ),
+    menu.fundo,
+    menu.gaveta
   );
 
   const cfg = (await configPronta) || { city_lat: -15.78, city_lng: -47.93 };
@@ -92,6 +110,11 @@ async function montarEstrutura() {
   // Modo de teste (servidor com DEMO_MODE): sem GPS, um toque no mapa define a posição do motoqueiro.
   st.demo = !!cfg.demo;
   st.central = cfg.support_phone || '';
+  st.cfg = cfg;
+  if (cfg.notice_driver) {
+    mount(avisoEl, icone('ajuda'), h('span', {}, cfg.notice_driver));
+    avisoEl.hidden = false;
+  }
   if (st.demo) {
     map.on('click', (e) => {
       if (!st.gpsErro && st.pos && !st.posManual) return;
@@ -194,7 +217,6 @@ function trocarAba(aba) {
   mapaEl.hidden = ganhos;
   painel.hidden = ganhos;
   pagina.hidden = !ganhos;
-  mount(btnAba, icone(ganhos ? 'voltar' : 'carteira'), ganhos ? 'Voltar' : 'Ganhos');
   desenhado = null;
   if (ganhos) desenharGanhos();
   else {
@@ -499,23 +521,25 @@ function telaFinal(r) {
     { class: 'pilha' },
     h('h2', {}, 'Corrida finalizada'),
     h('div', { class: 'preco' }, h('div', {}, h('b', {}, 'Receba do passageiro'), h('br'), h('span', { class: 'muted' }, PAYMENT_PT[r.payment])), h('strong', {}, brl(r.price))),
+    r.payment === 'pix' && caixaPix(st.cfg.pix_key),
     h('button', { class: 'btn primary big block', onclick: () => ((st.final = null), desenhar(), carregarResumo()) }, icone('certo'), 'Pronto')
   );
 }
 
 async function desenharGanhos() {
-  mount(pagina, h('h2', {}, 'Meus ganhos'), esqueleto(3));
+  const cabeca = () => h('div', { class: 'cabeca-pagina' }, h('button', { class: 'btn small', onclick: () => trocarAba('inicio') }, icone('voltar'), 'Voltar'), h('h2', {}, 'Meus ganhos'));
+  mount(pagina, cabeca(), esqueleto(3));
   let s, rides;
   try {
     [s, { rides }] = await Promise.all([client.api('/driver/summary'), client.api('/driver/history')]);
   } catch (err) {
-    return mount(pagina, h('h2', {}, 'Meus ganhos'), h('p', { class: 'vazio-lista' }, err.message));
+    return mount(pagina, cabeca(), h('p', { class: 'vazio-lista' }, err.message));
   }
   const bloco = (titulo, v) =>
     h('div', {}, h('b', {}, titulo), h('strong', {}, brl(v.total)), h('br'), h('small', {}, `${v.rides} corrida${v.rides === 1 ? '' : 's'} · comissão ${brl(v.commission)}`));
   mount(
     pagina,
-    h('h2', {}, 'Meus ganhos'),
+    cabeca(),
     h('div', { class: 'ganhos' }, bloco('Hoje', s.today), bloco('7 dias', s.week)),
     h('p', { class: 'muted', style: 'margin:10px 0 18px' }, `Comissão da central: ${s.commission_percent}% do valor das corridas.`),
     h('h2', {}, 'Últimas corridas'),

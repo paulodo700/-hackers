@@ -37,6 +37,44 @@ module.exports = function adminRoutes({ db, rides, dispatch, drivers, geo }) {
 
   router.get('/drivers', (req, res) => res.json({ drivers: drivers.list() }));
 
+  // Números de cada motoqueiro: corridas concluídas, faturamento e nota média.
+  router.get('/drivers/stats', (req, res) => {
+    const rows = db
+      .prepare(
+        `SELECT driver_id AS id, COUNT(*) AS rides, COALESCE(SUM(price), 0) AS revenue,
+                AVG(rating) AS rating, COUNT(rating) AS ratings, MAX(completed_at) AS last_ride
+           FROM rides WHERE status = 'completed' AND driver_id IS NOT NULL GROUP BY driver_id`
+      )
+      .all();
+    res.json({ stats: rows.map((r) => ({ ...r, rating: r.rating === null ? null : Math.round(r.rating * 10) / 10 })) });
+  });
+
+  router.get('/passengers', (req, res) => {
+    const q = String(req.query.q || '').trim().slice(0, 40);
+    const like = `%${q.replace(/[%_]/g, '')}%`;
+    const rows = db
+      .prepare(
+        `SELECT u.id, u.name, u.phone, u.created_at, u.blocked,
+                (SELECT COUNT(*) FROM rides r WHERE r.passenger_id = u.id AND r.status = 'completed') AS rides,
+                (SELECT COUNT(*) FROM rides r WHERE r.passenger_id = u.id AND r.status = 'cancelled') AS cancelled,
+                (SELECT COALESCE(SUM(price), 0) FROM rides r WHERE r.passenger_id = u.id AND r.status = 'completed') AS spent,
+                (SELECT MAX(created_at) FROM rides r WHERE r.passenger_id = u.id) AS last_ride
+           FROM users u
+          WHERE u.role = 'passenger' AND (u.name LIKE ? OR u.phone LIKE ?)
+          ORDER BY u.id DESC LIMIT 300`
+      )
+      .all(like, like);
+    const total = db.prepare("SELECT COUNT(*) AS n FROM users WHERE role = 'passenger'").get().n;
+    res.json({ total, passengers: rows.map((r) => ({ ...r, blocked: !!r.blocked })) });
+  });
+
+  router.post('/passengers/:id/block', (req, res) => {
+    const blocked = req.body && req.body.blocked ? 1 : 0;
+    const info = db.prepare("UPDATE users SET blocked = ? WHERE id = ? AND role = 'passenger'").run(blocked, Number(req.params.id));
+    if (info.changes !== 1) throw new AppError(404, 'Passageiro não encontrado');
+    res.json({ ok: true, blocked: !!blocked });
+  });
+
   router.post('/drivers/:id/status', (req, res) => {
     res.json({ driver: drivers.setStatus(req.params.id, req.body && req.body.status) });
   });

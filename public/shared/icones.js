@@ -21,6 +21,13 @@ const P = {
   carteira: '<path d="M3 7a2 2 0 0 1 2-2h13v4"/><path d="M3 7v10a2 2 0 0 0 2 2h15V9H5a2 2 0 0 1-2-2z"/><path d="M16 14h.01"/>',
   certo: '<path d="m5 12 5 5 9-10"/>',
   voltar: '<path d="M15 5l-7 7 7 7"/>',
+  menu: '<path d="M4 6h16M4 12h16M4 18h16"/>',
+  fechar: '<path d="M6 6l12 12M18 6 6 18"/>',
+  documento: '<path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5M10 13h6M10 17h6"/>',
+  ajuda: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.4-1 .9-1 1.7M12 17h.01"/>',
+  pincel: '<path d="M4 20c2.5 0 4-1.5 4-4l9-9a2.1 2.1 0 0 1 3 3l-9 9c-2.5 0-4 1.5-7 1z"/><path d="M14.5 6.5l3 3"/>',
+  pessoas: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><circle cx="17.5" cy="9" r="2.5"/><path d="M17 14.5a5 5 0 0 1 4.5 5"/>',
+  copiar: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/>',
 };
 
 export function svgIcone(nome) {

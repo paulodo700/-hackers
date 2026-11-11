@@ -156,3 +156,91 @@ test('erro em uma oferta que expira não derruba o servidor', () => {
   assert.doesNotThrow(() => ctx.scheduled.at(-1).fn());
   console.error = original;
 });
+
+test('personalização: ajustes públicos, liga/desliga e validações', async (t) => {
+  const s = await startServer();
+  t.after(() => s.close());
+  const put = (body) => s.call('/api/admin/settings', { token: s.admin.token, method: 'PUT', body });
+  const pub = async () => (await s.call('/api/public/config')).body;
+
+  const first = await pub();
+  assert.equal(first.slogan, 'Peça sua moto em poucos toques');
+  assert.equal(first.pay_cash, 1);
+  assert.equal(first.p_history, 1);
+  assert.equal(first.default_theme, 'auto');
+  assert.equal(first.base_fare, undefined); // preços e comissão não vão para as telas públicas
+  assert.equal(first.commission_percent, undefined);
+
+  await put({ slogan: 'A moto mais rápida da cidade', notice_passenger: '  Promoção:   hoje sem taxa!  ', pix_key: 'pix@moto.com', p_history: false, d_terms: 0, default_theme: 'escuro' });
+  const now = await pub();
+  assert.equal(now.slogan, 'A moto mais rápida da cidade');
+  assert.equal(now.notice_passenger, 'Promoção: hoje sem taxa!');
+  assert.equal(now.pix_key, 'pix@moto.com');
+  assert.equal(now.p_history, 0);
+  assert.equal(now.d_terms, 0);
+  assert.equal(now.default_theme, 'escuro');
+
+  assert.equal((await put({ notice_passenger: '' })).status, 200); // aviso pode ser apagado
+  assert.equal((await put({ slogan: '' })).status, 400);
+  assert.equal((await put({ default_theme: 'rosa' })).status, 400);
+  assert.equal((await put({ p_history: 'talvez' })).status, 400);
+  assert.equal((await put({ pay_cash: false, pay_pix: false })).status, 400);
+  assert.equal((await pub()).pay_cash, 1); // nada foi gravado no pedido recusado
+
+  // Forma de pagamento desligada não é aceita no pedido.
+  await put({ pay_pix: false });
+  const p = await s.register('passenger', 'Maria', '11988887777');
+  const O = { lat: -10, lng: -48 };
+  const D = { lat: -10.02, lng: -48.02 };
+  assert.equal((await s.call('/api/rides', { token: p.token, body: { origin: O, dest: D, payment: 'pix' } })).status, 400);
+  assert.equal((await s.call('/api/rides', { token: p.token, body: { origin: O, dest: D, payment: 'cash' } })).status, 201);
+});
+
+test('perfil: a pessoa corrige o próprio nome', async (t) => {
+  const s = await startServer();
+  t.after(() => s.close());
+  const p = await s.register('passenger', 'Mria', '11988887777');
+  assert.equal((await s.call('/api/auth/profile', { token: p.token, method: 'PUT', body: { name: 'M' } })).status, 400);
+  assert.equal((await s.call('/api/auth/profile', { method: 'PUT', body: { name: 'Maria' } })).status, 401);
+  const ok = await s.call('/api/auth/profile', { token: p.token, method: 'PUT', body: { name: '  Maria   Silva ' } });
+  assert.equal(ok.body.user.name, 'Maria Silva');
+  assert.equal((await s.call('/api/auth/me', { token: p.token })).body.user.name, 'Maria Silva');
+});
+
+test('central: lista passageiros, bloqueia e vê os números dos motoqueiros', async (t) => {
+  const s = await startServer();
+  t.after(() => s.close());
+  const adm = s.admin.token;
+  const O = { lat: -10, lng: -48 };
+  const D = { lat: -10.02, lng: -48.02 };
+  const maria = await s.register('passenger', 'Maria', '11988887777');
+  await s.register('passenger', 'José', '11977776666');
+  const d = await s.approvedDriver('João', '11955554444');
+
+  const ride = (await s.call('/api/rides', { token: maria.token, body: { origin: O, dest: D, payment: 'cash' } })).body.ride;
+  const offer = (await s.call('/api/driver/state', { token: d.token })).body.offer;
+  await s.call(`/api/driver/offers/${offer.offerId}/accept`, { token: d.token, body: {} });
+  for (const a of ['arrive', 'start', 'complete']) await s.call(`/api/driver/rides/${ride.id}/${a}`, { token: d.token, body: {} });
+  await s.call(`/api/rides/${ride.id}/rate`, { token: maria.token, body: { rating: 4 } });
+
+  const list = await s.call('/api/admin/passengers', { token: adm });
+  assert.equal(list.body.total, 2);
+  const m = list.body.passengers.find((x) => x.name === 'Maria');
+  assert.deepEqual({ rides: m.rides, spent: m.spent, blocked: m.blocked, phone: m.phone }, { rides: 1, spent: 7, blocked: false, phone: '11988887777' });
+  assert.equal(m.password_hash, undefined);
+  assert.equal((await s.call('/api/admin/passengers?q=jos', { token: adm })).body.passengers.length, 1);
+  assert.equal((await s.call('/api/admin/passengers?q=%25', { token: adm })).body.passengers.length, 2); // curinga é ignorado
+  assert.equal((await s.call('/api/admin/passengers', { token: maria.token })).status, 403);
+
+  const stats = (await s.call('/api/admin/drivers/stats', { token: adm })).body.stats;
+  assert.deepEqual({ rides: stats[0].rides, revenue: stats[0].revenue, rating: stats[0].rating, ratings: stats[0].ratings }, { rides: 1, revenue: 7, rating: 4, ratings: 1 });
+
+  // Bloqueado não pede corrida; desbloqueado volta a pedir. Motoqueiro não é "passageiro".
+  assert.equal((await s.call(`/api/admin/passengers/${d.user.id}/block`, { token: adm, body: { blocked: true } })).status, 404);
+  await s.call(`/api/admin/passengers/${maria.user.id}/block`, { token: adm, body: { blocked: true } });
+  const denied = await s.call('/api/rides', { token: maria.token, body: { origin: O, dest: D, payment: 'cash' } });
+  assert.equal(denied.status, 403);
+  assert.match(denied.body.error, /bloqueada/);
+  await s.call(`/api/admin/passengers/${maria.user.id}/block`, { token: adm, body: { blocked: false } });
+  assert.equal((await s.call('/api/rides', { token: maria.token, body: { origin: O, dest: D, payment: 'cash' } })).status, 201);
+});
