@@ -36,7 +36,14 @@ function createApp(deps) {
 
   app.get('/api/public/config', (req, res) => {
     const s = getSettings(db);
-    res.json({ city_name: s.city_name, city_lat: s.city_lat, city_lng: s.city_lng, demo: config.demo });
+    res.json({
+      city_name: s.city_name,
+      city_lat: s.city_lat,
+      city_lng: s.city_lng,
+      brand_name: s.brand_name,
+      brand_color: s.brand_color,
+      demo: config.demo,
+    });
   });
   app.use('/api/auth', require('./routes/auth')(deps));
   app.use('/api/rides', require('./routes/rides')(deps));

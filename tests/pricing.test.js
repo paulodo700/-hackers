@@ -46,3 +46,26 @@ test('configurações: padrões, gravação e validação', () => {
   assert.throws(() => setSettings(db, { commission_percent: 150 }));
   assert.equal(getSettings(db).per_km, 3.5);
 });
+
+test('banco antigo ganha as colunas novas sem perder dados', () => {
+  const fs = require('node:fs');
+  const os = require('node:os');
+  const path = require('node:path');
+  const Database = require('better-sqlite3');
+  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'mototaxi-mig-')), 'velho.db');
+  const first = openDb(file);
+  first.exec('ALTER TABLE rides DROP COLUMN duration_min; ALTER TABLE rides DROP COLUMN route;');
+  first.prepare(
+    `INSERT INTO rides (passenger_name, origin_lat, origin_lng, dest_lat, dest_lng, distance_km, price, payment, status, source, created_at)
+     VALUES ('Antiga', 0, 0, 0, 0, 1, 6, 'cash', 'completed', 'app', 'ontem')`
+  ).run();
+  first.close();
+
+  const db = openDb(file);
+  const cols = db.prepare('PRAGMA table_info(rides)').all().map((c) => c.name);
+  assert.ok(cols.includes('duration_min') && cols.includes('route'));
+  const row = db.prepare('SELECT passenger_name, route FROM rides').get();
+  assert.deepEqual(row, { passenger_name: 'Antiga', route: null });
+  openDb(file).close(); // abrir de novo não quebra
+  db.close();
+});

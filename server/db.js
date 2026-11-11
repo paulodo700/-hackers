@@ -79,6 +79,8 @@ const DEFAULTS = {
   city_lat: -15.7801,
   city_lng: -47.9292,
   tz_offset_hours: -3,
+  brand_name: 'Mototáxi',
+  brand_color: '#ffc107',
 };
 
 // Limites aceitos em cada configuração numérica.
@@ -99,6 +101,10 @@ function openDb(file) {
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
   db.exec(SCHEMA);
+  // Bancos criados em versões anteriores ganham as colunas novas sem perder nada.
+  const rideCols = new Set(db.prepare('PRAGMA table_info(rides)').all().map((c) => c.name));
+  if (!rideCols.has('duration_min')) db.exec('ALTER TABLE rides ADD COLUMN duration_min REAL');
+  if (!rideCols.has('route')) db.exec('ALTER TABLE rides ADD COLUMN route TEXT');
   const insert = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');
   for (const [key, value] of Object.entries(DEFAULTS)) insert.run(key, String(value));
   return db;
@@ -125,9 +131,10 @@ function setSettings(db, patch) {
       }
       clean[key] = n;
     } else {
-      const s = String(raw ?? '').trim().slice(0, 80);
+      const s = String(raw ?? '').trim().slice(0, key === 'brand_name' ? 30 : 80);
       if (!s) throw new AppError(400, `Valor inválido para ${key}`);
-      clean[key] = s;
+      if (key === 'brand_color' && !/^#[0-9a-f]{6}$/i.test(s)) throw new AppError(400, 'Cor inválida');
+      clean[key] = key === 'brand_color' ? s.toLowerCase() : s;
     }
   }
   const save = db.prepare(

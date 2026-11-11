@@ -22,14 +22,31 @@ test('validCoord', () => {
 });
 
 test('rota usa OSRM quando responde', async () => {
-  const r = await geo.routeDistanceKm(sp, rio, okJson({ routes: [{ distance: 2500 }] }));
-  assert.deepEqual(r, { km: 2.5, source: 'osrm' });
+  const body = { routes: [{ distance: 2500, duration: 400, geometry: { coordinates: [[-46.6333, -23.5505], [-46.5, -23.4], [-43.1729, -22.9068]] } }] };
+  const r = await geo.routeDistanceKm(sp, rio, okJson(body));
+  assert.deepEqual(r, { km: 2.5, source: 'osrm', min: 7, points: [[-23.5505, -46.6333], [-23.4, -46.5], [-22.9068, -43.1729]] });
+
+  // Resposta sem tempo nem desenho: completa com estimativa em linha reta.
+  const bare = await geo.routeDistanceKm(sp, rio, okJson({ routes: [{ distance: 5000 }] }));
+  assert.equal(bare.min, 12); // 5 km a 25 km/h
+  assert.deepEqual(bare.points, [[sp.lat, sp.lng], [rio.lat, rio.lng]]);
+
+  // Rota muito detalhada é reduzida, mantendo as pontas.
+  const many = Array.from({ length: 1000 }, (_, i) => [-46 + i / 1e4, -23 + i / 1e4]);
+  const big = await geo.routeDistanceKm(sp, rio, okJson({ routes: [{ distance: 9000, duration: 900, geometry: { coordinates: many } }] }));
+  assert.equal(big.points.length, 160);
+  assert.deepEqual(big.points[0], [-23, -46]);
+  assert.deepEqual(big.points.at(-1), [-22.9001, -45.9001]);
 });
 
 test('rota cai para estimativa quando o serviço falha', async () => {
   const expected = Math.round(geo.haversineKm(sp, rio) * 1.3 * 100) / 100;
   const rejects = async () => { throw new Error('fora do ar'); };
-  assert.deepEqual(await geo.routeDistanceKm(sp, rio, rejects), { km: expected, source: 'estimate' });
+  const est = await geo.routeDistanceKm(sp, rio, rejects);
+  assert.equal(est.km, expected);
+  assert.equal(est.source, 'estimate');
+  assert.equal(est.points.length, 2);
+  assert.ok(est.min > 0);
   const http500 = async () => ({ ok: false, json: async () => ({}) });
   assert.equal((await geo.routeDistanceKm(sp, rio, http500)).source, 'estimate');
   assert.equal((await geo.routeDistanceKm(sp, rio, okJson({ routes: [] }))).source, 'estimate');

@@ -3,7 +3,7 @@ const { AppError } = require('../errors');
 const { getSettings } = require('../db');
 const { requireAuth } = require('../auth');
 const { calcPrice } = require('../pricing');
-const { validCoord } = require('../geo');
+const { validCoord, completeRoute } = require('../geo');
 
 // Rotas do passageiro.
 module.exports = function rideRoutes({ db, rides, geo }) {
@@ -27,13 +27,19 @@ module.exports = function rideRoutes({ db, rides, geo }) {
 
   router.post('/estimate', async (req, res) => {
     const { origin, dest } = points(req.body);
-    const route = await geo.routeDistanceKm(origin, dest);
-    res.json({ distance_km: route.km, source: route.source, price: calcPrice(route.km, getSettings(db)) });
+    const route = completeRoute(await geo.routeDistanceKm(origin, dest), origin, dest);
+    res.json({
+      distance_km: route.km,
+      source: route.source,
+      price: calcPrice(route.km, getSettings(db)),
+      duration_min: route.min,
+      route: route.points,
+    });
   });
 
   router.post('/', async (req, res) => {
     const { origin, dest } = points(req.body);
-    const route = await geo.routeDistanceKm(origin, dest);
+    const route = completeRoute(await geo.routeDistanceKm(origin, dest), origin, dest);
     const ride = rides.createRide({
       passengerId: req.user.id,
       passengerName: req.user.name,
@@ -41,6 +47,8 @@ module.exports = function rideRoutes({ db, rides, geo }) {
       origin,
       dest,
       distanceKm: route.km,
+      durationMin: route.min,
+      route: route.points,
       payment: req.body.payment,
       notes: req.body.notes,
       source: 'app',

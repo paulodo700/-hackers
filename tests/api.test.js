@@ -124,7 +124,7 @@ test('corrida completa pelo app do passageiro', async (t) => {
   const d = pending;
 
   const est = await s.call('/api/rides/estimate', { token: p.token, body: { origin: O, dest: D } });
-  assert.deepEqual(est.body, { distance_km: 2, source: 'osrm', price: 7 });
+  assert.deepEqual(est.body, { distance_km: 2, source: 'osrm', price: 7, duration_min: 5, route: [[O.lat, O.lng], [D.lat, D.lng]] });
   assert.equal((await s.call('/api/rides/estimate', { token: p.token, body: { origin: O } })).status, 400);
 
   // O passageiro não escolhe o preço: o servidor calcula.
@@ -135,6 +135,8 @@ test('corrida completa pelo app do passageiro', async (t) => {
   assert.equal(created.status, 201);
   const rideId = created.body.ride.id;
   assert.equal(created.body.ride.price, 7);
+  assert.equal(created.body.ride.duration_min, 5);
+  assert.equal(created.body.ride.route.length, 2);
   assert.equal(created.body.ride.status, 'searching');
   assert.equal((await s.call('/api/rides', { token: p.token, body: { origin: O, dest: D, payment: 'pix' } })).status, 409);
 
@@ -164,7 +166,9 @@ test('corrida completa pelo app do passageiro', async (t) => {
   assert.equal(done.body.last.status, 'completed');
 
   assert.equal((await s.call(`/api/rides/${rideId}/rate`, { token: p.token, body: { rating: 5 } })).body.ride.rating, 5);
-  assert.equal((await s.call('/api/rides/history', { token: p.token })).body.rides[0].id, rideId);
+  const hist = await s.call('/api/rides/history', { token: p.token });
+  assert.equal(hist.body.rides[0].id, rideId);
+  assert.equal(hist.body.rides[0].route, null); // listas não carregam o desenho da rota
   assert.equal((await s.call('/api/driver/history', { token: d.token })).body.rides[0].id, rideId);
   const sum = await s.call('/api/driver/summary', { token: d.token });
   assert.deepEqual(sum.body.today, { rides: 1, total: 7, commission: 0.7 });
@@ -238,6 +242,17 @@ test('central: lançar corrida, escolher motoqueiro, relatório e configuraçõe
   const est = await s.call('/api/admin/rides/estimate', { token: adm, body: { origin: O, dest: D } });
   assert.equal(est.body.price, 9);
   assert.equal((await s.call('/api/public/config')).body.city_name, 'Vila Bela');
+
+  // Marca: nome e cor configuráveis, com validação.
+  const brand0 = (await s.call('/api/public/config')).body;
+  assert.equal(brand0.brand_name, 'Mototáxi');
+  assert.equal(brand0.brand_color, '#ffc107');
+  assert.equal((await s.call('/api/admin/settings', { token: adm, method: 'PUT', body: { brand_color: 'vermelho' } })).status, 400);
+  assert.equal((await s.call('/api/admin/settings', { token: adm, method: 'PUT', body: { brand_color: '#12AB9Z' } })).status, 400);
+  await s.call('/api/admin/settings', { token: adm, method: 'PUT', body: { brand_name: 'Moto Já', brand_color: '#0A7CFF' } });
+  const brand1 = (await s.call('/api/public/config')).body;
+  assert.equal(brand1.brand_name, 'Moto Já');
+  assert.equal(brand1.brand_color, '#0a7cff');
 
   // Bloquear tira de online.
   const blk = await s.call(`/api/admin/drivers/${far.user.id}/status`, { token: adm, body: { status: 'blocked' } });

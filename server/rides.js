@@ -17,8 +17,16 @@ function createRideService({ db, bus }) {
        FROM users u JOIN drivers d ON d.user_id = u.id WHERE u.id = ?`
   );
 
-  function toRide(row) {
+  function toRide(row, withRoute = true) {
     if (!row) return null;
+    let route = null;
+    if (withRoute && row.route) {
+      try {
+        route = JSON.parse(row.route);
+      } catch {
+        route = null;
+      }
+    }
     return {
       id: row.id,
       status: row.status,
@@ -31,6 +39,8 @@ function createRideService({ db, bus }) {
       origin: { text: row.origin_text, lat: row.origin_lat, lng: row.origin_lng },
       dest: { text: row.dest_text, lat: row.dest_lat, lng: row.dest_lng },
       distance_km: row.distance_km,
+      duration_min: row.duration_min,
+      route,
       price: row.price,
       payment: row.payment,
       notes: row.notes,
@@ -90,6 +100,13 @@ function createRideService({ db, bus }) {
     if (!Number.isFinite(km) || km < 0) throw new AppError(400, 'Distância inválida');
     if (km > MAX_KM) throw new AppError(400, 'Destino fora da área de atendimento');
     const price = calcPrice(km, getSettings(db));
+    const minutes = Number.isFinite(input.durationMin) && input.durationMin > 0 ? Math.round(input.durationMin) : null;
+    const routeOk =
+      Array.isArray(input.route) &&
+      input.route.length >= 2 &&
+      input.route.length <= 400 &&
+      input.route.every((p) => Array.isArray(p) && validCoord({ lat: p[0], lng: p[1] }));
+    const routeJson = routeOk ? JSON.stringify(input.route.map((p) => [p[0], p[1]])) : null;
 
     if (input.passengerId && activeRideFor({ id: input.passengerId, role: 'passenger' })) {
       throw new AppError(409, 'Você já tem uma corrida em andamento');
@@ -98,8 +115,9 @@ function createRideService({ db, bus }) {
     const info = db
       .prepare(
         `INSERT INTO rides (passenger_id, passenger_name, passenger_phone, origin_text, origin_lat, origin_lng,
-           dest_text, dest_lat, dest_lng, distance_km, price, payment, status, source, notes, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'searching', ?, ?, ?)`
+           dest_text, dest_lat, dest_lng, distance_km, price, payment, status, source, notes, created_at,
+           duration_min, route)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'searching', ?, ?, ?, ?, ?)`
       )
       .run(
         input.passengerId || null,
@@ -116,7 +134,9 @@ function createRideService({ db, bus }) {
         input.payment,
         input.source,
         text(input.notes, 200),
-        now()
+        now(),
+        minutes,
+        routeJson
       );
     const id = Number(info.lastInsertRowid);
     publish(id);
@@ -239,7 +259,8 @@ function createRideService({ db, bus }) {
     if (to) (where.push('created_at < ?'), args.push(to));
     const sql = `SELECT * FROM rides ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY id DESC LIMIT ?`;
     const max = Math.min(Math.max(Number(limit) || 50, 1), 500);
-    return db.prepare(sql).all(...args, max).map(toRide);
+    // Listas não levam o desenho da rota (fica pesado); só a corrida aberta leva.
+    return db.prepare(sql).all(...args, max).map((row) => toRide(row, false));
   }
 
   return { createRide, getRide, activeRideFor, assignDriver, act, markNoDrivers, retry, rate, list };

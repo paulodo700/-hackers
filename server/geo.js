@@ -57,15 +57,50 @@ async function fetchJson(url, fetchImpl, timeoutMs) {
   }
 }
 
-// Distância pela rua (OSRM). Se o serviço falhar ou demorar, estima por linha reta × 1,3.
+const round5 = (n) => Math.round(n * 1e5) / 1e5;
+const MAX_POINTS = 160;
+const MOTO_KMH = 25; // velocidade média usada quando não há rota calculada
+
+// Reduz o desenho da rota a um número razoável de pontos (sempre mantém o primeiro e o último).
+function thin(points) {
+  if (points.length <= MAX_POINTS) return points;
+  const step = (points.length - 1) / (MAX_POINTS - 1);
+  const out = [];
+  for (let i = 0; i < MAX_POINTS; i++) out.push(points[Math.round(i * step)]);
+  return out;
+}
+
+// Completa uma rota com tempo e desenho quando eles não vieram (estimativa em linha reta).
+function completeRoute(route, a, b) {
+  const km = route.km;
+  const min = Number.isFinite(route.min) ? route.min : Math.max(1, Math.round((km / MOTO_KMH) * 60));
+  const points =
+    Array.isArray(route.points) && route.points.length >= 2
+      ? route.points
+      : [[round5(a.lat), round5(a.lng)], [round5(b.lat), round5(b.lng)]];
+  return { km, source: route.source, min, points };
+}
+
+// Rota pela rua (OSRM): distância, tempo e desenho. Se o serviço falhar ou demorar,
+// estima por linha reta × 1,3.
 async function routeDistanceKm(a, b, fetchImpl = fetch, timeoutMs = 4000) {
-  const url = `${config.osrmUrl}/route/v1/driving/${a.lng},${a.lat};${b.lng},${b.lat}?overview=false`;
+  const url = `${config.osrmUrl}/route/v1/driving/${a.lng},${a.lat};${b.lng},${b.lat}?overview=full&geometries=geojson`;
   const data = await fetchJson(url, fetchImpl, timeoutMs);
-  const meters = data && data.routes && data.routes[0] && data.routes[0].distance;
+  const best = data && data.routes && data.routes[0];
+  const meters = best && best.distance;
   if (typeof meters === 'number' && Number.isFinite(meters) && meters >= 0) {
-    return { km: round2(meters / 1000), source: 'osrm' };
+    const route = { km: round2(meters / 1000), source: 'osrm' };
+    if (Number.isFinite(best.duration)) route.min = Math.max(1, Math.round(best.duration / 60));
+    const coords = best.geometry && best.geometry.coordinates;
+    if (Array.isArray(coords)) {
+      const points = coords
+        .filter((c) => Array.isArray(c) && Number.isFinite(c[0]) && Number.isFinite(c[1]))
+        .map(([lng, lat]) => [round5(lat), round5(lng)]);
+      if (points.length >= 2) route.points = thin(points);
+    }
+    return completeRoute(route, a, b);
   }
-  return { km: round2(haversineKm(a, b) * 1.3), source: 'estimate' };
+  return completeRoute({ km: round2(haversineKm(a, b) * 1.3), source: 'estimate' }, a, b);
 }
 
 // Monta um rótulo curto: "Rua X, 123 - Bairro".
@@ -113,4 +148,4 @@ async function reverseAddress(lat, lng, fetchImpl = fetch, timeoutMs = 5000) {
   return shortLabel(data) || null;
 }
 
-module.exports = { validCoord, haversineKm, routeDistanceKm, searchAddress, reverseAddress };
+module.exports = { validCoord, haversineKm, routeDistanceKm, completeRoute, searchAddress, reverseAddress };

@@ -2,7 +2,7 @@ const express = require('express');
 const { AppError } = require('../errors');
 const { getSettings, setSettings } = require('../db');
 const { requireAuth, normalizePhone } = require('../auth');
-const { validCoord } = require('../geo');
+const { validCoord, completeRoute } = require('../geo');
 const { calcPrice } = require('../pricing');
 const { ACTIVE } = require('../rides');
 const { localDay, dayRange, isDay, shiftDay } = require('../time');
@@ -44,8 +44,14 @@ module.exports = function adminRoutes({ db, rides, dispatch, drivers, geo }) {
   router.post('/rides/estimate', async (req, res) => {
     const { origin, dest } = req.body || {};
     if (!validCoord(origin) || !validCoord(dest)) throw new AppError(400, 'Informe partida e destino no mapa');
-    const route = await geo.routeDistanceKm(origin, dest);
-    res.json({ distance_km: route.km, source: route.source, price: calcPrice(route.km, getSettings(db)) });
+    const route = completeRoute(await geo.routeDistanceKm(origin, dest), origin, dest);
+    res.json({
+      distance_km: route.km,
+      source: route.source,
+      price: calcPrice(route.km, getSettings(db)),
+      duration_min: route.min,
+      route: route.points,
+    });
   });
 
   router.post('/rides', async (req, res) => {
@@ -60,13 +66,15 @@ module.exports = function adminRoutes({ db, rides, dispatch, drivers, geo }) {
     }
     const driverId = body.driver_id ? Number(body.driver_id) : null;
     if (driverId) dispatch.checkAssignable(driverId);
-    const route = await geo.routeDistanceKm(body.origin, body.dest);
+    const route = completeRoute(await geo.routeDistanceKm(body.origin, body.dest), body.origin, body.dest);
     const ride = rides.createRide({
       passengerName: body.passenger_name,
       passengerPhone: phone,
       origin: body.origin,
       dest: body.dest,
       distanceKm: route.km,
+      durationMin: route.min,
+      route: route.points,
       payment: body.payment || 'cash',
       notes: body.notes,
       source: 'central',
