@@ -2,6 +2,7 @@ const path = require('node:path');
 const express = require('express');
 const { AppError } = require('./errors');
 const { getSettings } = require('./db');
+const config = require('./config');
 
 // Monta o servidor HTTP: API + as três telas (arquivos estáticos).
 function createApp(deps) {
@@ -13,13 +14,13 @@ function createApp(deps) {
   app.use((req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Referrer-Policy', 'same-origin');
-    res.setHeader('X-Frame-Options', 'DENY');
+    if (!config.demo) res.setHeader('X-Frame-Options', 'DENY');
     // Só roda código vindo do próprio servidor: barra scripts injetados.
     res.setHeader(
       'Content-Security-Policy',
       "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; " +
         "img-src 'self' data: https://*.tile.openstreetmap.org; connect-src 'self' ws: wss:; " +
-        "frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+        `${config.demo ? '' : "frame-ancestors 'none'; "}base-uri 'self'; form-action 'self'`
     );
     next();
   });
@@ -27,7 +28,7 @@ function createApp(deps) {
 
   app.get('/api/public/config', (req, res) => {
     const s = getSettings(db);
-    res.json({ city_name: s.city_name, city_lat: s.city_lat, city_lng: s.city_lng });
+    res.json({ city_name: s.city_name, city_lat: s.city_lat, city_lng: s.city_lng, demo: config.demo });
   });
   app.use('/api/auth', require('./routes/auth')(deps));
   app.use('/api/rides', require('./routes/rides')(deps));

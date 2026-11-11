@@ -40,6 +40,8 @@ const config = {
   port: Number(process.env.PORT) || 3000,
   jwtSecret: loadJwtSecret(),
   dbPath,
+  // Modo de teste: permite abrir dentro de uma pré-visualização e marcar a posição do motoqueiro no mapa.
+  demo: !!process.env.DEMO_MODE,
   adminPhone: process.env.ADMIN_PHONE || '',
   adminPassword: process.env.ADMIN_PASSWORD || '',
   osrmUrl: process.env.OSRM_URL || 'https://router.project-osrm.org',

@@ -78,6 +78,19 @@ async function montarEstrutura() {
   }
   map = criarMapa(mapaEl, { lat: cfg.city_lat, lng: cfg.city_lng }, 14);
   camada = criarCamada(map);
+  // Modo de teste (servidor com DEMO_MODE): sem GPS, um toque no mapa define a posição do motoqueiro.
+  st.demo = !!cfg.demo;
+  if (st.demo) {
+    map.on('click', (e) => {
+      if (!st.gpsErro && st.pos && !st.posManual) return;
+      st.posManual = true;
+      st.gpsErro = false;
+      st.pos = { lat: e.latlng.lat, lng: e.latlng.lng };
+      camada.set('eu', st.ride ? 'moto' : 'eu', st.pos);
+      enviarPosicao(true);
+      desenhar();
+    });
+  }
 
   const socket = client.connect({
     onReconnect: () => {
@@ -197,6 +210,7 @@ function iniciarGps() {
       enviarPosicao(false);
     },
     () => {
+      if (st.posManual) return;
       st.gpsErro = true;
       desenhar();
     },
@@ -371,7 +385,7 @@ function telaInicio(d) {
       h('span', { class: `bolinha ${d.online ? 'on' : ''}` }),
       h('div', {}, h('h2', {}, d.online ? 'Você está online' : 'Você está offline'), h('p', { class: 'sub' }, d.online ? 'Aguardando corridas. Deixe esta tela aberta.' : 'Fique online para receber corridas.'))
     ),
-    st.gpsErro && h('p', { class: 'tag bad' }, 'GPS desligado ou sem permissão. Ative a localização.'),
+    st.gpsErro && h('p', { class: 'tag bad' }, st.demo ? 'Sem GPS aqui. Modo de teste: toque no mapa para marcar onde você está.' : 'GPS desligado ou sem permissão. Ative a localização.'),
     s &&
       h(
         'div',
