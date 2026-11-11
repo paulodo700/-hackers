@@ -1,4 +1,7 @@
 // Peças de interface usadas pelas três telas.
+import { icone } from '/shared/icones.js';
+
+export { icone };
 
 // Cria um elemento. Texto sempre entra como texto (nunca como HTML), o que evita injeção.
 export function h(tag, props = {}, ...children) {
@@ -172,7 +175,7 @@ export function authScreen({ client, title, subtitle, allowRegister = true, extr
     );
     mount(
       root,
-      h('div', { class: 'brand' }, h('img', { src: '/icon.svg', alt: '', width: 64, height: 64 }), h('h1', {}, title), h('p', {}, subtitle)),
+      h('div', { class: 'brand' }, h('div', { class: 'logo' }, icone('moto')), h('h1', {}, title), h('p', {}, subtitle)),
       form,
       allowRegister &&
         h(
@@ -190,3 +193,85 @@ export function authScreen({ client, title, subtitle, allowRegister = true, extr
 export function registerSW() {
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
 }
+
+/* ---------- Marca e tema ---------- */
+
+// Escolhe texto preto ou branco conforme a cor de fundo, para sempre dar leitura.
+export function corSobre(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  const canal = (v) => {
+    const c = v / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  };
+  const lum = 0.2126 * canal((n >> 16) & 255) + 0.7152 * canal((n >> 8) & 255) + 0.0722 * canal(n & 255);
+  return lum > 0.4 ? '#151515' : '#ffffff';
+}
+
+// Aplica nome e cor da marca vindos do servidor e guarda para a próxima abertura.
+export function aplicarMarca(cfg) {
+  const cor = cfg && /^#[0-9a-f]{6}$/i.test(cfg.brand_color || '') ? cfg.brand_color : '#ffc107';
+  const sobre = corSobre(cor);
+  document.documentElement.style.setProperty('--marca', cor);
+  document.documentElement.style.setProperty('--sobre-marca', sobre);
+  const nome = (cfg && cfg.brand_name) || 'Mototáxi';
+  try {
+    localStorage.setItem('mototaxi:marca', JSON.stringify({ cor, sobre, nome }));
+  } catch {
+    /* segue sem guardar */
+  }
+  return nome;
+}
+
+export function nomeDaMarca() {
+  try {
+    return (JSON.parse(localStorage.getItem('mototaxi:marca') || 'null') || {}).nome || 'Mototáxi';
+  } catch {
+    return 'Mototáxi';
+  }
+}
+
+export async function carregarMarca(client) {
+  try {
+    const cfg = await client.api('/public/config');
+    aplicarMarca(cfg);
+    return cfg;
+  } catch {
+    return null;
+  }
+}
+
+const temaEscuro = () => {
+  const t = document.documentElement.getAttribute('data-tema');
+  return t ? t === 'escuro' : window.matchMedia('(prefers-color-scheme: dark)').matches;
+};
+
+// Botão que alterna entre claro e escuro. `comTexto` mostra o nome ao lado (menu da central).
+export function botaoTema({ comTexto = false, classe = 'btn so-icone' } = {}) {
+  const botao = h('button', { class: classe, type: 'button' });
+  const pintar = () => {
+    const escuro = temaEscuro();
+    const rotulo = escuro ? 'Modo claro' : 'Modo escuro';
+    botao.setAttribute('aria-label', rotulo);
+    botao.title = rotulo;
+    mount(botao, icone(escuro ? 'sol' : 'lua'), comTexto && rotulo);
+  };
+  botao.addEventListener('click', () => {
+    const novo = temaEscuro() ? 'claro' : 'escuro';
+    document.documentElement.setAttribute('data-tema', novo);
+    try {
+      localStorage.setItem('mototaxi:tema', novo);
+    } catch {
+      /* segue sem guardar */
+    }
+    pintar();
+  });
+  pintar();
+  return botao;
+}
+
+// Blocos de "carregando" no formato de uma lista.
+export function esqueleto(n = 3) {
+  return h('div', { class: 'esqueleto', 'aria-label': 'Carregando', role: 'status' }, Array.from({ length: n }, () => h('div')));
+}
+
+export const minutos = (n) => (n ? `${n} min` : '');

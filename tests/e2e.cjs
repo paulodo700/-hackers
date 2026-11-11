@@ -36,7 +36,13 @@ const errors = [];
 let failed = false;
 
 async function open(name, url, options) {
-  const ctx = await browser.newContext({ locale: 'pt-BR', ...options });
+  // Sem animações (capturas nítidas) e, com E2E_ESCURO=1, no tema escuro.
+  const ctx = await browser.newContext({
+    locale: 'pt-BR',
+    reducedMotion: 'reduce',
+    colorScheme: process.env.E2E_ESCURO ? 'dark' : 'light',
+    ...options,
+  });
   const page = await ctx.newPage();
   page.on('pageerror', (e) => errors.push(`${name}: ${e.message}`));
   page.on('console', (m) => {
@@ -86,7 +92,7 @@ try {
   await central.getByRole('button', { name: /Configurações/ }).click();
   await see(central, 'Preço da corrida');
   await central.getByLabel('Nome da cidade').fill('Vila Bela');
-  await tap(central, '📍 Usar minha localização');
+  await tap(central, 'Usar minha localização');
   await see(central, 'Centro marcado: -10.00000');
   await tap(central, 'Salvar configurações');
   await see(central, 'Configurações salvas');

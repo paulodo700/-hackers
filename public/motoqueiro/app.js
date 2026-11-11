@@ -2,13 +2,16 @@
 import { createClient } from '/shared/api.js';
 import {
   h, mount, brl, km, toast, run, confirmBox, authScreen, registerSW, dateTime, phoneMask, PAYMENT_PT, beep, unlockSound,
+  icone, botaoTema, carregarMarca, nomeDaMarca, esqueleto,
 } from '/shared/ui.js';
-import { criarMapa, criarCamada, enquadrar, distanciaKm } from '/shared/mapa.js';
+import { criarMapa, criarCamada, criarRota, enquadrar, distanciaKm, minutosAte } from '/shared/mapa.js';
 
 const client = createClient('motoqueiro');
 const root = document.getElementById('root');
 
-let map, camada, painel, pagina, mapaEl, btnAba;
+let map, camada, rota, painel, pagina, mapaEl, btnAba;
+let tempoEl = null; // texto do tempo estimado na corrida
+let desenhado = null; // resumo do que está na tela, para não redesenhar (e reanimar) sem mudança
 const st = {
   aba: 'inicio',
   driver: null,
@@ -29,6 +32,15 @@ let wakeLock = null;
 registerSW();
 client.onLogout = iniciar;
 document.addEventListener('pointerdown', unlockSound, { once: true });
+document.title = `${nomeDaMarca()} · Motoqueiro`;
+// Nome e cor da marca vêm do servidor; se mudaram, a tela de entrada é redesenhada.
+const nomeAntes = nomeDaMarca();
+const configPronta = carregarMarca(client).then((cfg) => {
+  document.title = `${nomeDaMarca()} · Motoqueiro`;
+  // Só redesenha a entrada se o nome mudou (para não apagar o que a pessoa já digitou).
+  if (!client.user && nomeDaMarca() !== nomeAntes) iniciar();
+  return cfg;
+});
 iniciar();
 
 function iniciar() {
@@ -40,7 +52,7 @@ function iniciar() {
       authScreen({
         client,
         title: 'Motoqueiro',
-        subtitle: 'Receba corridas da sua cidade',
+        subtitle: `Receba corridas do ${nomeDaMarca()}`,
         extraFields: [
           { name: 'moto_model', label: 'Modelo da moto', attrs: { placeholder: 'Ex.: CG 160', maxlength: 40 } },
           { name: 'plate', label: 'Placa', attrs: { placeholder: 'ABC1D23', maxlength: 10, autocapitalize: 'characters' } },
@@ -57,27 +69,26 @@ async function montarEstrutura() {
   mapaEl = h('div', { class: 'mapa', 'aria-label': 'Mapa' });
   painel = h('section', { class: 'painel', 'aria-live': 'polite' });
   pagina = h('section', { class: 'pagina', hidden: true });
-  btnAba = h('button', { class: 'btn', onclick: () => trocarAba(st.aba === 'inicio' ? 'ganhos' : 'inicio') }, 'Ganhos');
+  btnAba = h('button', { class: 'btn', onclick: () => trocarAba(st.aba === 'inicio' ? 'ganhos' : 'inicio') });
+  mount(btnAba, icone('carteira'), 'Ganhos');
+  desenhado = null;
   mount(
     root,
     h(
       'div',
       { class: 'app' },
-      h('header', { class: 'topo' }, h('h1', {}, client.user.name), btnAba, h('button', { class: 'btn', onclick: sair }, 'Sair')),
+      h('header', { class: 'topo' }, h('h1', {}, client.user.name), btnAba, botaoTema(), h('button', { class: 'btn so-icone', onclick: sair, 'aria-label': 'Sair', title: 'Sair' }, icone('sair'))),
       mapaEl,
       painel,
       pagina
     )
   );
 
-  let cfg = { city_lat: -15.78, city_lng: -47.93 };
-  try {
-    cfg = await client.api('/public/config');
-  } catch {
-    /* segue com o padrão */
-  }
+  const cfg = (await configPronta) || { city_lat: -15.78, city_lng: -47.93 };
+  if (!client.user) return;
   map = criarMapa(mapaEl, { lat: cfg.city_lat, lng: cfg.city_lng }, 14);
   camada = criarCamada(map);
+  rota = criarRota(map);
   // Modo de teste (servidor com DEMO_MODE): sem GPS, um toque no mapa define a posição do motoqueiro.
   st.demo = !!cfg.demo;
   if (st.demo) {
@@ -182,7 +193,8 @@ function trocarAba(aba) {
   mapaEl.hidden = ganhos;
   painel.hidden = ganhos;
   pagina.hidden = !ganhos;
-  btnAba.textContent = ganhos ? 'Voltar' : 'Ganhos';
+  mount(btnAba, icone(ganhos ? 'voltar' : 'carteira'), ganhos ? 'Voltar' : 'Ganhos');
+  desenhado = null;
   if (ganhos) desenharGanhos();
   else {
     map.invalidateSize();
@@ -207,6 +219,7 @@ function iniciarGps() {
         if (!st.ride) map.setView([st.pos.lat, st.pos.lng], 16);
         desenhar();
       }
+      atualizarTempo();
       enviarPosicao(false);
     },
     () => {
@@ -268,7 +281,7 @@ function abrirOferta() {
       { class: 'conteudo' },
       h('h2', {}, 'Nova corrida'),
       h('div', { class: 'valor' }, brl(r.price)),
-      h('p', { class: 'detalhes' }, `${PAYMENT_PT[r.payment]} · corrida de ${km(r.distance_km)}${ateLa !== null ? ` · ${km(ateLa)} até o passageiro` : ''}`),
+      h('p', { class: 'detalhes' }, `${PAYMENT_PT[r.payment]} · corrida de ${km(r.distance_km)}${r.duration_min ? ` (${r.duration_min} min)` : ''}${ateLa !== null ? ` · ${km(ateLa)} até o passageiro` : ''}`),
       h(
         'div',
         { class: 'trajeto' },
@@ -331,9 +344,17 @@ async function responder(botao, resposta) {
 function desenhar() {
   if (!painel || st.aba !== 'inicio') return;
   const d = st.driver;
-  if (!d) return mount(painel, h('p', { class: 'muted' }, 'Carregando…'));
+  if (!d) return mount(painel, esqueleto(2));
 
   const r = st.ride;
+  // Só redesenha quando algo que aparece na tela mudou (o estado é conferido a cada 15 s).
+  const resumo = JSON.stringify([
+    d.status, d.online, st.gpsErro, !!st.pos, r && [r.id, r.status], st.final && st.final.id,
+    st.resumo && [st.resumo.today.total, st.resumo.today.rides, st.resumo.week.total],
+  ]);
+  if (resumo === desenhado) return;
+  desenhado = resumo;
+  rota.set(r ? r.route : null);
   if (r) {
     camada.set('origem', 'origem', r.origin, 'Passageiro');
     camada.set('destino', 'destino', r.dest, 'Destino');
@@ -344,7 +365,8 @@ function desenhar() {
       st.quadro = quadro;
       enquadrar(map, r.status === 'in_progress' ? [st.pos, r.dest] : [st.pos, r.origin]);
     }
-    return mount(painel, telaCorrida(r));
+    mount(painel, telaCorrida(r));
+    return atualizarTempo();
   }
   st.quadro = null;
   camada.remove('origem');
@@ -352,13 +374,13 @@ function desenhar() {
   if (st.pos) camada.set('eu', 'eu', st.pos);
 
   if (st.final) return mount(painel, telaFinal(st.final));
-  if (d.status === 'pending') return mount(painel, telaEspera('⏳', 'Cadastro em análise', 'A central precisa aprovar seu cadastro. Assim que aprovar, esta tela libera sozinha.'));
-  if (d.status === 'blocked') return mount(painel, telaEspera('🚫', 'Cadastro bloqueado', 'Fale com a central para saber o motivo.'));
+  if (d.status === 'pending') return mount(painel, telaEspera('relogio', 'Cadastro em análise', 'A central precisa aprovar seu cadastro. Assim que aprovar, esta tela libera sozinha.'));
+  if (d.status === 'blocked') return mount(painel, telaEspera('bloqueio', 'Cadastro bloqueado', 'Fale com a central para saber o motivo.'));
   mount(painel, telaInicio(d));
 }
 
-const telaEspera = (emoji, titulo, texto) =>
-  h('div', { class: 'pilha' }, h('h2', {}, `${emoji} ${titulo}`), h('p', { class: 'sub' }, texto), h('button', { class: 'btn block', onclick: (e) => run(e.currentTarget, recarregar) }, 'Atualizar'));
+const telaEspera = (nomeIcone, titulo, texto) =>
+  h('div', { class: 'pilha' }, h('h2', { class: 'linha-status' }, icone(nomeIcone), titulo), h('p', { class: 'sub' }, texto), h('button', { class: 'btn block', onclick: (e) => run(e.currentTarget, recarregar) }, 'Atualizar'));
 
 function telaInicio(d) {
   const alternar = h(
@@ -432,17 +454,19 @@ function telaCorrida(r) {
       },
       'Desistir da corrida'
     );
-  const rota = `https://www.google.com/maps/dir/?api=1&destination=${passo.alvo.lat},${passo.alvo.lng}&travelmode=driving`;
+  const linkRota = `https://www.google.com/maps/dir/?api=1&destination=${passo.alvo.lat},${passo.alvo.lng}&travelmode=driving`;
+  tempoEl = r.status === 'arrived' ? null : h('span');
   return h(
     'div',
     { class: 'pilha' },
     h('div', {}, h('h2', {}, passo.titulo), h('p', { class: 'sub' }, `${brl(r.price)} · ${PAYMENT_PT[r.payment]} · ${km(r.distance_km)}`)),
+    tempoEl && h('p', { class: 'tempo' }, icone('relogio'), tempoEl),
     h(
       'div',
       { class: 'pessoa' },
-      h('div', { class: 'avatar', 'aria-hidden': 'true' }, '🧍'),
+      h('div', { class: 'avatar', 'aria-hidden': 'true' }, icone('usuario')),
       h('div', {}, h('strong', {}, r.passenger_name), h('span', { class: 'muted' }, r.passenger_phone ? phoneMask(r.passenger_phone) : 'Sem telefone')),
-      r.passenger_phone && h('a', { class: 'btn small', href: `tel:${r.passenger_phone}` }, '📞 Ligar')
+      r.passenger_phone && h('a', { class: 'btn small', href: `tel:${r.passenger_phone}` }, icone('telefone'), 'Ligar')
     ),
     h(
       'div',
@@ -451,10 +475,19 @@ function telaCorrida(r) {
       h('div', {}, h('i'), h('span', {}, h('b', {}, 'Levar até'), r.dest.text || 'Local marcado no mapa'))
     ),
     r.notes && h('p', { class: 'tag warn' }, `Obs.: ${r.notes}`),
-    h('a', { class: 'btn block', href: rota, target: '_blank', rel: 'noopener' }, '🧭 Abrir rota no mapa'),
+    h('a', { class: 'btn block', href: linkRota, target: '_blank', rel: 'noopener' }, icone('rota'), 'Abrir rota no mapa'),
     principal,
     desistir
   );
+}
+
+// Tempo estimado até o passageiro (indo buscar) ou até o destino (em viagem).
+function atualizarTempo() {
+  const r = st.ride;
+  if (!tempoEl || !r) return;
+  const indo = r.status === 'accepted';
+  const m = minutosAte(st.pos, indo ? r.origin : r.dest);
+  tempoEl.textContent = m ? `Cerca de ${m} min até ${indo ? 'o passageiro' : 'o destino'}` : indo ? 'Indo buscar' : 'Em viagem';
 }
 
 function telaFinal(r) {
@@ -463,12 +496,12 @@ function telaFinal(r) {
     { class: 'pilha' },
     h('h2', {}, 'Corrida finalizada'),
     h('div', { class: 'preco' }, h('div', {}, h('b', {}, 'Receba do passageiro'), h('br'), h('span', { class: 'muted' }, PAYMENT_PT[r.payment])), h('strong', {}, brl(r.price))),
-    h('button', { class: 'btn primary big block', onclick: () => ((st.final = null), desenhar(), carregarResumo()) }, 'Pronto')
+    h('button', { class: 'btn primary big block', onclick: () => ((st.final = null), desenhar(), carregarResumo()) }, icone('certo'), 'Pronto')
   );
 }
 
 async function desenharGanhos() {
-  mount(pagina, h('h2', {}, 'Meus ganhos'), h('p', { class: 'muted' }, 'Carregando…'));
+  mount(pagina, h('h2', {}, 'Meus ganhos'), esqueleto(3));
   let s, rides;
   try {
     [s, { rides }] = await Promise.all([client.api('/driver/summary'), client.api('/driver/history')]);

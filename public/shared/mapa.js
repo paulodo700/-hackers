@@ -1,13 +1,16 @@
 // Mapa (Leaflet + OpenStreetMap).
 /* global L */
 
+import { svgIcone } from '/shared/icones.js';
+
 const PIN = {
-  origem: { emoji: '🧍', cls: 'pin origem' },
-  destino: { emoji: '🏁', cls: 'pin destino' },
-  moto: { emoji: '🏍️', cls: 'pin moto' },
-  'moto-ocupada': { emoji: '🏍️', cls: 'pin moto ocupada' },
-  'moto-sumida': { emoji: '🏍️', cls: 'pin moto sumida' },
-  eu: { emoji: '', cls: 'pin eu' },
+  origem: { html: svgIcone('usuario'), cls: 'pin origem' },
+  destino: { html: svgIcone('bandeira'), cls: 'pin destino' },
+  moto: { html: svgIcone('moto'), cls: 'pin moto', suave: true },
+  'moto-ocupada': { html: svgIcone('moto'), cls: 'pin moto ocupada', suave: true },
+  'moto-sumida': { html: svgIcone('moto'), cls: 'pin moto sumida', suave: true },
+  eu: { html: '', cls: 'pin eu', suave: true },
+  pulso: { html: '', cls: 'pulso' },
 };
 
 export function criarMapa(el, center, zoom = 15, { animado = true } = {}) {
@@ -56,7 +59,38 @@ export function removerMapa(map) {
 
 export function icone(tipo) {
   const p = PIN[tipo] || PIN.origem;
-  return L.divIcon({ className: '', html: `<div class="${p.cls}">${p.emoji}</div>`, iconSize: [36, 36], iconAnchor: [18, 18] });
+  return L.divIcon({
+    className: p.suave ? 'suave' : '',
+    html: `<div class="${p.cls}">${p.html}</div>`,
+    iconSize: [36, 36],
+    iconAnchor: [18, 18],
+  });
+}
+
+// Desenho da rota no mapa. `set` recebe uma lista de [lat, lng].
+export function criarRota(map) {
+  let linhas = [];
+  return {
+    set(points) {
+      this.clear();
+      if (!Array.isArray(points) || points.length < 2) return;
+      linhas = [
+        L.polyline(points, { color: '#ffffff', weight: 9, opacity: 0.9, interactive: false }),
+        L.polyline(points, { color: '#1a73e8', weight: 5, opacity: 0.95, interactive: false }),
+      ].map((l) => l.addTo(map));
+    },
+    clear() {
+      linhas.forEach((l) => l.remove());
+      linhas = [];
+    },
+  };
+}
+
+// Minutos estimados de moto entre dois pontos (linha reta × 1,3, a 25 km/h).
+export function minutosAte(a, b) {
+  const d = distanciaKm(a, b);
+  if (d === null) return null;
+  return Math.max(1, Math.round(((d * 1.3) / 25) * 60));
 }
 
 // Guarda um marcador por chave: cria, move ou remove conforme a posição informada.
@@ -67,7 +101,7 @@ export function criarCamada(map) {
       if (!pos || typeof pos.lat !== 'number' || typeof pos.lng !== 'number') return this.remove(key);
       let m = marks.get(key);
       if (!m) {
-        m = L.marker([pos.lat, pos.lng], { icon: icone(tipo), keyboard: false }).addTo(map);
+        m = L.marker([pos.lat, pos.lng], { icon: icone(tipo), keyboard: false, interactive: tipo !== 'pulso', zIndexOffset: tipo === 'pulso' ? -500 : 0 }).addTo(map);
         m.tipo = tipo;
         marks.set(key, m);
       } else {

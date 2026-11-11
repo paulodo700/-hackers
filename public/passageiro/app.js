@@ -2,14 +2,16 @@
 import { createClient } from '/shared/api.js';
 import {
   h, mount, brl, km, toast, run, confirmBox, authScreen, registerSW, dateTime, STATUS_PT, PAYMENT_PT,
+  icone, botaoTema, carregarMarca, nomeDaMarca, esqueleto,
 } from '/shared/ui.js';
-import { criarMapa, criarCamada, enquadrar, ondeEstou, campoEndereco } from '/shared/mapa.js';
+import { criarMapa, criarCamada, criarRota, enquadrar, ondeEstou, campoEndereco, minutosAte } from '/shared/mapa.js';
 
 const client = createClient('passageiro');
 const root = document.getElementById('root');
 const ATIVA = ['searching', 'accepted', 'arrived', 'in_progress'];
 
-let map, camada, painel, pagina, mapaEl;
+let map, camada, rota, painel, pagina, mapaEl;
+let tempoEl = null; // texto do tempo estimado, atualizado conforme a moto anda
 const st = {
   aba: 'pedir',
   ride: null, // corrida em andamento ou a última encerrada (até a pessoa dispensar)
@@ -26,6 +28,15 @@ let cotacaoSeq = 0;
 
 registerSW();
 client.onLogout = iniciar;
+document.title = nomeDaMarca();
+// Nome e cor da marca vêm do servidor; se mudaram, a tela de entrada é redesenhada.
+const nomeAntes = nomeDaMarca();
+const configPronta = carregarMarca(client).then((cfg) => {
+  document.title = nomeDaMarca();
+  // Só redesenha a entrada se o nome mudou (para não apagar o que a pessoa já digitou).
+  if (!client.user && nomeDaMarca() !== nomeAntes) iniciar();
+  return cfg;
+});
 iniciar();
 
 function iniciar() {
@@ -34,7 +45,7 @@ function iniciar() {
       root,
       authScreen({
         client,
-        title: 'Mototáxi',
+        title: nomeDaMarca(),
         subtitle: 'Peça sua moto em poucos toques',
         onDone: iniciar,
       })
@@ -48,7 +59,8 @@ async function montarEstrutura() {
   mapaEl = h('div', { class: 'mapa', 'aria-label': 'Mapa' });
   painel = h('section', { class: 'painel', 'aria-live': 'polite' });
   pagina = h('section', { class: 'pagina', hidden: true });
-  const btnHist = h('button', { class: 'btn', onclick: () => trocarAba(st.aba === 'pedir' ? 'historico' : 'pedir') }, 'Histórico');
+  const btnHist = h('button', { class: 'btn', onclick: () => trocarAba(st.aba === 'pedir' ? 'historico' : 'pedir') });
+  mount(btnHist, icone('relogio'), 'Histórico');
   mount(
     root,
     h(
@@ -59,7 +71,8 @@ async function montarEstrutura() {
         { class: 'topo' },
         h('h1', {}, `Olá, ${client.user.name.split(' ')[0]}`),
         btnHist,
-        h('button', { class: 'btn', onclick: sair }, 'Sair')
+        botaoTema(),
+        h('button', { class: 'btn so-icone', onclick: sair, 'aria-label': 'Sair', title: 'Sair' }, icone('sair'))
       ),
       mapaEl,
       painel,
@@ -68,15 +81,12 @@ async function montarEstrutura() {
   );
   st.btnHist = btnHist;
 
-  let cfg = { city_lat: -15.78, city_lng: -47.93 };
-  try {
-    cfg = await client.api('/public/config');
-  } catch {
-    /* segue com o padrão */
-  }
+  const cfg = (await configPronta) || { city_lat: -15.78, city_lng: -47.93 };
+  if (!client.user) return;
   st.centro = { lat: cfg.city_lat, lng: cfg.city_lng };
   map = criarMapa(mapaEl, st.centro, 14);
   camada = criarCamada(map);
+  rota = criarRota(map);
   map.on('click', (e) => marcarNoMapa({ lat: e.latlng.lat, lng: e.latlng.lng }));
 
   const socket = client.connect({ onReconnect: recarregar });
@@ -90,6 +100,7 @@ async function montarEstrutura() {
       st.ride.driver.lat = loc.lat;
       st.ride.driver.lng = loc.lng;
       camada.set('moto', 'moto', loc);
+      atualizarTempo();
     }
   });
   document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && recarregar());
@@ -138,7 +149,7 @@ function trocarAba(aba) {
   mapaEl.hidden = hist;
   painel.hidden = hist;
   pagina.hidden = !hist;
-  st.btnHist.textContent = hist ? 'Voltar' : 'Histórico';
+  mount(st.btnHist, icone(hist ? 'voltar' : 'relogio'), hist ? 'Voltar' : 'Histórico');
   if (hist) desenharHistorico();
   else {
     map.invalidateSize();
@@ -189,6 +200,8 @@ function desenharMapaPedido() {
   camada.set('origem', 'origem', st.origem, 'Partida');
   camada.set('destino', 'destino', st.destino, 'Destino');
   camada.remove('moto');
+  camada.remove('pulso');
+  rota.set(st.origem && st.destino && st.cotacao ? st.cotacao.route : null);
   if (st.origem && st.destino) enquadrar(map, [st.origem, st.destino]);
 }
 
@@ -203,7 +216,10 @@ async function cotar() {
   } catch (err) {
     if (meu === cotacaoSeq) toast(err.message, 'error');
   }
-  if (meu === cotacaoSeq) atualizarFormulario();
+  if (meu === cotacaoSeq) {
+    atualizarFormulario();
+    if (!st.ride) rota.set(st.cotacao ? st.cotacao.route : null);
+  }
 }
 
 function montarFormulario() {
@@ -220,7 +236,7 @@ function montarFormulario() {
     onPick: (p) => definirPonto('destino', p, false),
   });
   f.dica = h('p', { class: 'dica-mapa' });
-  f.gps = h('button', { class: 'btn small', type: 'button', onclick: () => run(f.gps, () => usarMinhaPosicao(false)) }, '📍 Usar minha localização');
+  f.gps = h('button', { class: 'btn small', type: 'button', onclick: () => run(f.gps, () => usarMinhaPosicao(false)) }, icone('gps'), 'Usar minha localização');
   f.resumo = h('div', { class: 'pilha', hidden: true });
   f.preco = h('strong', { class: 'num' });
   f.distancia = h('span', { class: 'muted' });
@@ -239,7 +255,7 @@ function montarFormulario() {
   mount(
     f.resumo,
     h('div', { class: 'preco' }, h('div', {}, h('b', {}, 'Valor da corrida'), h('br'), f.distancia), f.preco),
-    h('div', { class: 'escolha', role: 'radiogroup', 'aria-label': 'Forma de pagamento' }, pagamento('cash', '💵 Dinheiro'), pagamento('pix', 'Pix')),
+    h('div', { class: 'escolha', role: 'radiogroup', 'aria-label': 'Forma de pagamento' }, pagamento('cash', 'Dinheiro'), pagamento('pix', 'Pix')),
     f.obs,
     f.pedir
   );
@@ -262,7 +278,9 @@ function atualizarFormulario(calculando) {
   form.resumo.hidden = !pronto;
   if (pronto) {
     form.preco.textContent = st.cotacao ? brl(st.cotacao.price) : '…';
-    form.distancia.textContent = st.cotacao ? km(st.cotacao.distance_km) : calculando ? 'Calculando…' : '';
+    form.distancia.textContent = st.cotacao
+      ? `${km(st.cotacao.distance_km)} · cerca de ${st.cotacao.duration_min} min`
+      : calculando ? 'Calculando…' : '';
     form.pedir.disabled = !st.cotacao;
     form.pedir.textContent = st.cotacao ? `Pedir mototáxi · ${brl(st.cotacao.price)}` : 'Pedir mototáxi';
   }
@@ -303,8 +321,12 @@ function desenhar() {
     return;
   }
   form = null;
+  tempoEl = null;
   camada.set('origem', 'origem', r.origin, 'Partida');
   camada.set('destino', 'destino', r.dest, 'Destino');
+  rota.set(ATIVA.includes(r.status) ? r.route : null);
+  if (r.status === 'searching') camada.set('pulso', 'pulso', r.origin);
+  else camada.remove('pulso');
   if (r.driver && ['accepted', 'arrived', 'in_progress'].includes(r.status)) {
     camada.set('moto', 'moto', r.driver, r.driver.name);
     enquadrar(map, r.status === 'in_progress' ? [r.driver, r.dest] : [r.driver, r.origin]);
@@ -313,6 +335,31 @@ function desenhar() {
     enquadrar(map, [r.origin, r.dest]);
   }
   mount(painel, (TELAS[r.status] || telaEncerrada)(r));
+  atualizarTempo();
+}
+
+// Barrinha de etapas: procurando → a caminho → no local → em viagem.
+function passos(r) {
+  const feito = { searching: 1, accepted: 2, arrived: 3, in_progress: 4 }[r.status] || 0;
+  return h('div', { class: 'passos', 'aria-hidden': 'true' }, [1, 2, 3, 4].map((n) => h('i', { class: n <= feito ? 'feito' : '' })));
+}
+
+function caixaTempo() {
+  tempoEl = h('span');
+  return h('p', { class: 'tempo' }, icone('relogio'), tempoEl);
+}
+
+// Tempo estimado: até a moto chegar (a caminho) ou até o destino (em viagem).
+function atualizarTempo() {
+  const r = st.ride;
+  if (!tempoEl || !r || !r.driver) return;
+  if (r.status === 'accepted') {
+    const m = minutosAte(r.driver, r.origin);
+    tempoEl.textContent = m ? `Chega em cerca de ${m} min` : 'A caminho';
+  } else if (r.status === 'in_progress') {
+    const m = minutosAte(r.driver, r.dest);
+    tempoEl.textContent = m ? `Cerca de ${m} min até o destino` : 'Em viagem';
+  }
 }
 
 const trajeto = (r) =>
@@ -324,7 +371,7 @@ const trajeto = (r) =>
   );
 
 const valor = (r) =>
-  h('div', { class: 'preco' }, h('div', {}, h('b', {}, 'Valor'), h('br'), h('span', { class: 'muted' }, `${PAYMENT_PT[r.payment]} · ${km(r.distance_km)}`)), h('strong', {}, brl(r.price)));
+  h('div', { class: 'preco' }, h('div', {}, h('b', {}, 'Valor'), h('br'), h('span', { class: 'muted' }, `${PAYMENT_PT[r.payment]} · ${km(r.distance_km)}${r.duration_min ? ` · ${r.duration_min} min` : ''}`)), h('strong', {}, brl(r.price)));
 
 function botaoCancelar(r) {
   const b = h(
@@ -345,9 +392,9 @@ const cartaoMotoqueiro = (r) =>
   h(
     'div',
     { class: 'pessoa' },
-    h('div', { class: 'avatar', 'aria-hidden': 'true' }, '🏍️'),
+    h('div', { class: 'avatar', 'aria-hidden': 'true' }, icone('moto')),
     h('div', {}, h('strong', {}, r.driver.name), h('span', { class: 'muted' }, `${r.driver.moto_model} · `), h('span', { class: 'tag dark' }, r.driver.plate)),
-    h('a', { class: 'btn small', href: `tel:${r.driver.phone}`, 'aria-label': `Ligar para ${r.driver.name}` }, '📞 Ligar')
+    h('a', { class: 'btn small', href: `tel:${r.driver.phone}`, 'aria-label': `Ligar para ${r.driver.name}` }, icone('telefone'), 'Ligar')
   );
 
 const TELAS = {
@@ -355,17 +402,18 @@ const TELAS = {
     h(
       'div',
       { class: 'pilha' },
+      passos(r),
       h('div', { class: 'linha-status' }, h('div', { class: 'girando' }), h('div', {}, h('h2', {}, 'Procurando motoqueiro…'), h('p', { class: 'sub' }, 'Isso costuma levar menos de um minuto.'))),
       trajeto(r),
       valor(r),
       botaoCancelar(r)
     ),
   accepted: (r) =>
-    h('div', { class: 'pilha' }, h('div', {}, h('h2', {}, 'Motoqueiro a caminho'), h('p', { class: 'sub' }, 'Acompanhe a moto no mapa e aguarde no local de partida.')), cartaoMotoqueiro(r), trajeto(r), valor(r), botaoCancelar(r)),
+    h('div', { class: 'pilha' }, passos(r), h('div', {}, h('h2', {}, 'Motoqueiro a caminho'), h('p', { class: 'sub' }, 'Acompanhe a moto no mapa e aguarde no local de partida.')), caixaTempo(), cartaoMotoqueiro(r), trajeto(r), valor(r), botaoCancelar(r)),
   arrived: (r) =>
-    h('div', { class: 'pilha' }, h('div', {}, h('h2', {}, 'Seu motoqueiro chegou!'), h('p', { class: 'sub' }, `Procure a moto de placa ${r.driver.plate}.`)), cartaoMotoqueiro(r), valor(r), botaoCancelar(r)),
+    h('div', { class: 'pilha' }, passos(r), h('div', {}, h('h2', {}, 'Seu motoqueiro chegou!'), h('p', { class: 'sub' }, `Procure a moto de placa ${r.driver.plate}.`)), cartaoMotoqueiro(r), valor(r), botaoCancelar(r)),
   in_progress: (r) =>
-    h('div', { class: 'pilha' }, h('div', {}, h('h2', {}, 'Em viagem'), h('p', { class: 'sub' }, 'Boa viagem! Use o capacete.')), cartaoMotoqueiro(r), trajeto(r), valor(r)),
+    h('div', { class: 'pilha' }, passos(r), h('div', {}, h('h2', {}, 'Em viagem'), h('p', { class: 'sub' }, 'Boa viagem! Use o capacete.')), caixaTempo(), cartaoMotoqueiro(r), trajeto(r), valor(r)),
   completed: telaConcluida,
 };
 
@@ -418,7 +466,7 @@ function telaEncerrada(r) {
 /* ---------- Histórico ---------- */
 
 async function desenharHistorico() {
-  mount(pagina, h('h2', {}, 'Minhas corridas'), h('p', { class: 'muted' }, 'Carregando…'));
+  mount(pagina, h('h2', {}, 'Minhas corridas'), esqueleto(3));
   let rides = [];
   try {
     rides = (await client.api('/rides/history')).rides;

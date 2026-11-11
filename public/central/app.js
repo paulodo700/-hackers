@@ -2,19 +2,20 @@
 import { createClient } from '/shared/api.js';
 import {
   h, mount, brl, km, toast, run, confirmBox, authScreen, registerSW, dateTime, phoneMask, STATUS_PT, PAYMENT_PT,
+  icone, botaoTema, carregarMarca, aplicarMarca, nomeDaMarca, esqueleto,
 } from '/shared/ui.js';
-import { criarMapa, criarCamada, enquadrar, campoEndereco, ondeEstou, removerMapa } from '/shared/mapa.js';
+import { criarMapa, criarCamada, criarRota, enquadrar, campoEndereco, ondeEstou, removerMapa } from '/shared/mapa.js';
 
 const client = createClient('central');
 const root = document.getElementById('root');
 
 const ABAS = [
-  ['vivo', '📡', 'Ao vivo'],
-  ['nova', '➕', 'Nova corrida'],
-  ['motoqueiros', '🏍️', 'Motoqueiros'],
-  ['corridas', '🧾', 'Corridas'],
-  ['relatorios', '📊', 'Relatórios'],
-  ['config', '⚙️', 'Configurações'],
+  ['vivo', 'aovivo', 'Ao vivo'],
+  ['nova', 'mais', 'Nova corrida'],
+  ['motoqueiros', 'moto', 'Motoqueiros'],
+  ['corridas', 'lista', 'Corridas'],
+  ['relatorios', 'grafico', 'Relatórios'],
+  ['config', 'ajustes', 'Configurações'],
 ];
 const TAG = { searching: 'warn', accepted: 'ok', arrived: 'ok', in_progress: 'ok', completed: 'ok', cancelled: 'bad', no_drivers: 'bad' };
 const SITUACAO = { pending: ['Aguardando aprovação', 'warn'], approved: ['Aprovado', 'ok'], blocked: ['Bloqueado', 'bad'] };
@@ -26,13 +27,22 @@ let recarregando = null;
 
 registerSW();
 client.onLogout = iniciar;
+document.title = `${nomeDaMarca()} · Central`;
+// Nome e cor da marca vêm do servidor; se mudaram, a tela de entrada é redesenhada.
+const nomeAntes = nomeDaMarca();
+const configPronta = carregarMarca(client).then((cfg) => {
+  document.title = `${nomeDaMarca()} · Central`;
+  // Só redesenha a entrada se o nome mudou (para não apagar o que a pessoa já digitou).
+  if (!client.user && nomeDaMarca() !== nomeAntes) iniciar();
+  return cfg;
+});
 iniciar();
 
 function iniciar() {
   if (tela && tela.sair) tela.sair();
   tela = null;
   if (!client.user) {
-    mount(root, authScreen({ client, title: 'Central', subtitle: 'Painel de controle do mototáxi', allowRegister: false, onDone: iniciar }));
+    mount(root, authScreen({ client, title: 'Central', subtitle: `Painel de controle · ${nomeDaMarca()}`, allowRegister: false, onDone: iniciar }));
     return;
   }
   montarEstrutura();
@@ -43,12 +53,11 @@ async function montarEstrutura() {
   conteudo = h('main', { class: 'conteudo-central' });
   mount(root, h('div', { class: 'central' }, lateral, conteudo));
 
-  try {
-    const cfg = await client.api('/public/config');
+  const cfg = await configPronta;
+  if (!client.user) return;
+  if (cfg) {
     st.centro = { lat: cfg.city_lat, lng: cfg.city_lng };
     st.cidade = cfg.city_name;
-  } catch {
-    /* segue com o padrão */
   }
 
   const socket = client.connect({ onReconnect: carregarVisao });
@@ -86,17 +95,17 @@ function desenharMenu() {
   const pendentes = st.visao ? st.visao.stats.pending_drivers : 0;
   mount(
     lateral,
-    h('div', { class: 'marca' }, h('img', { src: '/icon.svg', alt: '', width: 34, height: 34 }), 'Central'),
-    ABAS.map(([id, emoji, nome]) =>
+    h('div', { class: 'marca' }, h('div', { class: 'logo pequeno' }, icone('moto')), 'Central'),
+    ABAS.map(([id, nomeIcone, nome]) =>
       h(
         'button',
         { 'aria-current': st.aba === id ? 'page' : null, onclick: () => abrir(id) },
-        h('span', { 'aria-hidden': 'true' }, emoji),
+        icone(nomeIcone),
         nome,
         id === 'motoqueiros' && pendentes > 0 && h('span', { class: 'badge', 'aria-label': `${pendentes} aguardando aprovação` }, pendentes)
       )
     ),
-    h('button', { class: 'fim', onclick: () => client.logout() }, h('span', { 'aria-hidden': 'true' }, '🚪'), 'Sair')
+    h('div', { class: 'fim' }, botaoTema({ comTexto: true, classe: '' }), h('button', { onclick: () => client.logout() }, icone('sair'), 'Sair'))
   );
 }
 
@@ -313,6 +322,7 @@ function telaNova() {
 
   const map = criarMapa(mapaEl, st.centro, 14, { animado: false });
   const camada = criarCamada(map);
+  const rota = criarRota(map);
   map.on('click', (e) => definir(f.alvo, { lat: e.latlng.lat, lng: e.latlng.lng, text: '' }));
 
   function pintar() {
@@ -320,7 +330,8 @@ function telaNova() {
     cDestino.ativo(f.alvo === 'destino');
     dica.textContent = `Digite o endereço ou clique no mapa para marcar ${f.alvo === 'origem' ? 'a partida' : 'o destino'}.`;
     preco.textContent = f.cotacao ? brl(f.cotacao.price) : '—';
-    if (f.cotacao) dist.textContent = km(f.cotacao.distance_km);
+    if (f.cotacao) dist.textContent = `${km(f.cotacao.distance_km)} · cerca de ${f.cotacao.duration_min} min`;
+    rota.set(f.cotacao ? f.cotacao.route : null);
     lancar.disabled = !f.cotacao;
   }
 
@@ -483,6 +494,7 @@ function telaCorridas() {
       )
     );
   }
+  mount(caixa, esqueleto(3));
   run(buscar, carregar);
   return {};
 }
@@ -545,6 +557,7 @@ function telaRelatorios() {
         )
     );
   }
+  mount(corpo, esqueleto(3));
   run(gerar, carregar);
   return {};
 }
@@ -559,6 +572,17 @@ function telaConfig() {
     return h('label', { class: 'field' }, h('span', {}, rotulo), campos[nome]);
   };
   campos.city_name = h('input', { maxlength: 80, required: true });
+  campos.brand_name = h('input', { maxlength: 30, required: true });
+  // A cor é mostrada na hora; só vale para todos depois de salvar.
+  const previa = () => aplicarMarca({ brand_name: campos.brand_name.value, brand_color: campos.brand_color.value });
+  campos.brand_color = h('input', { type: 'color', 'aria-label': 'Cor da marca', oninput: previa });
+  const paleta = h(
+    'div',
+    { class: 'cores' },
+    ['#ffc107', '#ff6b00', '#e53935', '#0a7cff', '#12a150', '#7b3ff2', '#151515'].map((c) =>
+      h('button', { type: 'button', style: `background:${c}`, 'aria-label': `Usar a cor ${c}`, onclick: () => ((campos.brand_color.value = c), previa()) })
+    )
+  );
   const posicao = h('p', { class: 'muted' });
   let centro = { ...st.centro };
   const salvar = h('button', { class: 'btn primary block', type: 'submit' }, 'Salvar configurações');
@@ -571,16 +595,24 @@ function telaConfig() {
       onsubmit: (e) => {
         e.preventDefault();
         run(salvar, async () => {
-          const body = { city_name: campos.city_name.value, city_lat: centro.lat, city_lng: centro.lng };
+          const body = {
+            city_name: campos.city_name.value, city_lat: centro.lat, city_lng: centro.lng,
+            brand_name: campos.brand_name.value, brand_color: campos.brand_color.value,
+          };
           for (const k of ['base_fare', 'per_km', 'min_fare', 'commission_percent', 'offer_timeout_s']) body[k] = Number(campos[k].value);
           const { settings } = await client.api('/admin/settings', { method: 'PUT', body });
           st.centro = { lat: settings.city_lat, lng: settings.city_lng };
           st.cidade = settings.city_name;
+          aplicarMarca(settings);
+          document.title = `${nomeDaMarca()} · Central`;
           toast('Configurações salvas.', 'ok');
         });
       },
     },
-    h('h3', { class: 'bloco-titulo', style: 'margin-top:0' }, 'Preço da corrida'),
+    h('h3', { class: 'bloco-titulo', style: 'margin-top:0' }, 'Sua marca'),
+    h('label', { class: 'field' }, h('span', {}, 'Nome do serviço (aparece para passageiros e motoqueiros)'), campos.brand_name),
+    h('div', { class: 'field' }, h('span', {}, 'Cor da marca'), h('div', { class: 'cor' }, campos.brand_color, paleta)),
+    h('h3', { class: 'bloco-titulo' }, 'Preço da corrida'),
     h('div', { class: 'duas' }, numero('base_fare', 'Taxa inicial (R$)'), numero('per_km', 'Valor por km (R$)')),
     h('div', { class: 'duas' }, numero('min_fare', 'Valor mínimo (R$)'), numero('commission_percent', 'Comissão da central (%)', '1')),
     exemplo,
@@ -591,7 +623,7 @@ function telaConfig() {
     posicao,
     salvar
   );
-  const gps = h('button', { class: 'btn small', onclick: () => run(gps, async () => mover(await ondeEstou())) }, '📍 Usar minha localização');
+  const gps = h('button', { class: 'btn small', onclick: () => run(gps, async () => mover(await ondeEstou())) }, icone('gps'), 'Usar minha localização');
   mount(
     conteudo,
     h('h2', {}, 'Configurações'),
@@ -628,7 +660,13 @@ function telaConfig() {
     }
   })();
 
-  return { sair: () => removerMapa(map) };
+  // Saindo sem salvar, volta a cor que está valendo de verdade.
+  return {
+    sair: () => {
+      removerMapa(map);
+      carregarMarca(client);
+    },
+  };
 }
 
 const TELAS = { vivo: telaVivo, nova: telaNova, motoqueiros: telaMotoqueiros, corridas: telaCorridas, relatorios: telaRelatorios, config: telaConfig };
