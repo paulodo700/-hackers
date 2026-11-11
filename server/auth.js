@@ -52,7 +52,8 @@ function requireAuth(db, ...roles) {
 function ensureAdmin(db, { phone, password }) {
   if (db.prepare("SELECT 1 FROM users WHERE role = 'admin'").get()) return 'exists';
   const normalized = normalizePhone(phone);
-  if (!normalized || String(password || '').length < 6) return 'missing';
+  // A senha de exemplo do .env.example não vale: precisa ser trocada.
+  if (!normalized || String(password || '').length < 6 || password === 'troque-esta-senha') return 'missing';
   db.prepare(
     "INSERT INTO users (role, name, phone, password_hash, created_at) VALUES ('admin', 'Central', ?, ?, ?)"
   ).run(normalized, hashPassword(password), new Date().toISOString());

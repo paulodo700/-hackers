@@ -14,6 +14,13 @@ function createApp(deps) {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Referrer-Policy', 'same-origin');
     res.setHeader('X-Frame-Options', 'DENY');
+    // Só roda código vindo do próprio servidor: barra scripts injetados.
+    res.setHeader(
+      'Content-Security-Policy',
+      "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; " +
+        "img-src 'self' data: https://*.tile.openstreetmap.org; connect-src 'self' ws: wss:; " +
+        "frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+    );
     next();
   });
   app.use(express.json({ limit: '20kb' }));

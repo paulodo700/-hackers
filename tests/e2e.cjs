@@ -103,7 +103,7 @@ try {
   // Passageiro se cadastra e pede.
   const pass = await open('passageiro', '/passageiro/', { ...phone, geolocation: { latitude: -10, longitude: -48 } });
   await tap(pass, 'Não tem conta? Criar agora');
-  await pass.getByLabel('Seu nome').fill('Maria Silva');
+  await pass.getByLabel('Seu nome').fill('Maria Silva <img src=x>'); // nome com HTML: deve aparecer como texto
   await pass.getByLabel('Telefone com DDD').fill('11988887777');
   await pass.getByLabel('Crie uma senha').fill('123456');
   await tap(pass, 'Criar conta');
@@ -126,6 +126,9 @@ try {
   await shot(pass, '08-passageiro-a-caminho');
   await central.getByRole('button', { name: /Ao vivo/ }).click();
   await see(central, 'Maria Silva');
+  await central.locator('.pin.origem').first().hover();
+  await central.locator('.leaflet-tooltip').first().waitFor();
+  if (await central.locator('img[src="x"]').count()) throw new Error('HTML do nome do passageiro foi interpretado no mapa da central');
   await shot(central, '09-central-ao-vivo');
 
   await tap(moto, 'Cheguei ao local');

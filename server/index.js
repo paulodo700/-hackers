@@ -33,13 +33,6 @@ function buildServer({ dbPath = config.dbPath, geoImpl = geo } = {}) {
 }
 
 if (require.main === module) {
-  if (config.usingDevSecret) {
-    if (process.env.NODE_ENV === 'production') {
-      console.error('Defina JWT_SECRET antes de ligar o servidor em produção.');
-      process.exit(1);
-    }
-    console.warn('AVISO: JWT_SECRET não definido. Usando um segredo de desenvolvimento.');
-  }
   const built = buildServer();
   const admin = ensureAdmin(built.db, { phone: config.adminPhone, password: config.adminPassword });
   if (admin === 'created') console.log(`Acesso da central criado para o telefone ${config.adminPhone}.`);

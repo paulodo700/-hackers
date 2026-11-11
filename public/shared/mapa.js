@@ -73,7 +73,13 @@ export function criarCamada(map) {
         m.setLatLng([pos.lat, pos.lng]);
         if (m.tipo !== tipo) (m.setIcon(icone(tipo)), (m.tipo = tipo));
       }
-      if (title) m.bindTooltip(title, { direction: 'top', offset: [0, -16] });
+      if (title) {
+        // Como elemento de texto (e não HTML): nomes digitados por usuários nunca viram código.
+        const label = document.createElement('span');
+        label.textContent = title;
+        m.unbindTooltip();
+        m.bindTooltip(label, { direction: 'top', offset: [0, -16] });
+      }
       return m;
     },
     remove(key) {

@@ -33,14 +33,6 @@
       </div>
     </nav>
   </div>
-  <script>
-    fetch('/api/public/config').then(function (r) { return r.json(); }).then(function (c) {
-      if (c && c.city_name && c.city_name !== 'Minha Cidade') {
-        document.getElementById('cidade').textContent = c.city_name;
-        document.title = 'Mototáxi ' + c.city_name;
-      }
-    }).catch(function () {});
-    if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(function () {});
-  </script>
+  <script src="/inicio.js"></script>
 </body>
 </html>

@@ -13,13 +13,33 @@ function loadEnvFile(file) {
 }
 loadEnvFile(path.join(__dirname, '..', '.env'));
 
-const DEV_SECRET = 'segredo-apenas-para-desenvolvimento';
+const crypto = require('node:crypto');
+
+const dbPath = process.env.DB_PATH || path.join(__dirname, '..', 'data', 'mototaxi.db');
+
+// Segredo que assina os logins. Se não vier por variável de ambiente, é sorteado uma vez e
+// guardado ao lado do banco de dados; nunca existe um segredo padrão conhecido.
+function loadJwtSecret() {
+  if (process.env.JWT_SECRET && process.env.JWT_SECRET !== 'troque-este-segredo') return process.env.JWT_SECRET;
+  const random = () => crypto.randomBytes(48).toString('hex');
+  if (process.env.NODE_TEST_CONTEXT || dbPath === ':memory:') return random();
+  const file = path.join(path.dirname(dbPath), '.jwt-secret');
+  try {
+    const saved = fs.readFileSync(file, 'utf8').trim();
+    if (saved.length >= 32) return saved;
+  } catch {
+    /* ainda não existe */
+  }
+  const secret = random();
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, secret, { mode: 0o600 });
+  return secret;
+}
 
 const config = {
   port: Number(process.env.PORT) || 3000,
-  jwtSecret: process.env.JWT_SECRET || DEV_SECRET,
-  usingDevSecret: !process.env.JWT_SECRET,
-  dbPath: process.env.DB_PATH || path.join(__dirname, '..', 'data', 'mototaxi.db'),
+  jwtSecret: loadJwtSecret(),
+  dbPath,
   adminPhone: process.env.ADMIN_PHONE || '',
   adminPassword: process.env.ADMIN_PASSWORD || '',
   osrmUrl: process.env.OSRM_URL || 'https://router.project-osrm.org',
