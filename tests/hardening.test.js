@@ -171,11 +171,12 @@ test('personalização: ajustes públicos, liga/desliga e validações', async (
   assert.equal(first.base_fare, undefined); // preços e comissão não vão para as telas públicas
   assert.equal(first.commission_percent, undefined);
 
-  await put({ slogan: 'A moto mais rápida da cidade', notice_passenger: '  Promoção:   hoje sem taxa!  ', pix_key: 'pix@moto.com', p_history: false, d_terms: 0, default_theme: 'escuro' });
+  await put({ slogan: 'A moto mais rápida da cidade', notice_passenger: '  Promoção:   hoje sem taxa!  ', pix_key: 'golpe@pix.com', p_history: false, d_terms: 0, default_theme: 'escuro' });
   const now = await pub();
   assert.equal(now.slogan, 'A moto mais rápida da cidade');
   assert.equal(now.notice_passenger, 'Promoção: hoje sem taxa!');
-  assert.equal(now.pix_key, 'pix@moto.com');
+  assert.equal(now.pix_key, undefined); // dados bancários não são públicos...
+  assert.equal((await s.call('/api/admin/bank', { token: s.admin.token })).body.bank, null); // ...nem mudam por aqui
   assert.equal(now.p_history, 0);
   assert.equal(now.d_terms, 0);
   assert.equal(now.default_theme, 'escuro');

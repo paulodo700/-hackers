@@ -7,17 +7,23 @@ const geo = require('./geo');
 const { createRideService } = require('./rides');
 const { createDriverService } = require('./drivers');
 const { createDispatcher } = require('./dispatch');
+const { createAudit } = require('./audit');
+const { createDocs } = require('./docs');
+const { createFinance } = require('./finance');
 const { createApp } = require('./app');
 const { attachRealtime } = require('./realtime');
 
 // Junta todas as peças. `geo` pode ser trocado nos testes.
-function buildServer({ dbPath = config.dbPath, geoImpl = geo } = {}) {
+function buildServer({ dbPath = config.dbPath, geoImpl = geo, docsDir = config.docsDir } = {}) {
   const db = openDb(dbPath);
   const bus = new EventEmitter();
   const rides = createRideService({ db, bus });
   const drivers = createDriverService({ db, bus });
   const dispatch = createDispatcher({ db, bus, rides });
-  const deps = { db, bus, rides, drivers, dispatch, geo: geo.withRouteCache(geoImpl) };
+  const audit = createAudit({ db });
+  const docs = createDocs({ db, dir: docsDir });
+  const finance = createFinance({ db, audit });
+  const deps = { db, bus, rides, drivers, dispatch, audit, docs, finance, geo: geo.withRouteCache(geoImpl) };
   const app = createApp(deps);
   const server = http.createServer(app);
   const io = attachRealtime(server, deps);

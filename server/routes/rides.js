@@ -7,7 +7,7 @@ const { validCoord, completeRoute } = require('../geo');
 const { createLimiter } = require('../limit');
 
 // Rotas do passageiro.
-module.exports = function rideRoutes({ db, rides, geo }) {
+module.exports = function rideRoutes({ db, rides, geo, finance }) {
   const router = express.Router();
   router.use(requireAuth(db, 'passenger'));
   const estimateLimit = createLimiter({ windowMs: 60 * 1000, max: 40 });
@@ -72,6 +72,9 @@ module.exports = function rideRoutes({ db, rides, geo }) {
   router.get('/history', (req, res) => res.json({ rides: rides.list({ passengerId: req.user.id, limit: 30 }) }));
 
   router.get('/:id', (req, res) => res.json({ ride: ownRide(req) }));
+
+  // QR Code Pix da corrida: o valor vai direto para a conta do motoqueiro.
+  router.get('/:id/pix', async (req, res) => res.json(await finance.rideCharge(ownRide(req))));
 
   router.post('/:id/cancel', (req, res) => {
     ownRide(req);

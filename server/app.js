@@ -23,7 +23,7 @@ function createApp(deps) {
     res.setHeader(
       'Content-Security-Policy',
       "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; " +
-        "img-src 'self' data: https://*.tile.openstreetmap.org; connect-src 'self' ws: wss:; " +
+        "img-src 'self' data: blob: https://*.tile.openstreetmap.org; connect-src 'self' ws: wss:; " +
         `${config.demo ? '' : "frame-ancestors 'none'; "}base-uri 'self'; form-action 'self'`
     );
     next();

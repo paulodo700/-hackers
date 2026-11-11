@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { io: ioClient } = require('socket.io-client');
 const { normalizePhone } = require('../server/auth');
-const { startServer: start } = require('./helpers');
+const { startServer: start, BANK } = require('./helpers');
 
 const O = { text: 'Praça Central', lat: -10, lng: -48 };
 const D = { text: 'Rodoviária', lat: -10.02, lng: -48.02 };
@@ -86,7 +86,15 @@ test('corrida completa pelo app do passageiro', async (t) => {
   assert.equal((await s.call('/api/auth/me', { token: pending.token })).body.driver.status, 'pending');
   const blocked = await s.call('/api/driver/online', { token: pending.token, body: { online: true, lat: -10, lng: -48 } });
   assert.equal(blocked.status, 403);
-  await s.call(`/api/admin/drivers/${pending.user.id}/status`, { token: s.admin.token, body: { status: 'approved' } });
+  // Sem documentos e sem conta bancária, a central não consegue aprovar.
+  const approve = () => s.call(`/api/admin/drivers/${pending.user.id}/status`, { token: s.admin.token, body: { status: 'approved' } });
+  const early = await approve();
+  assert.equal(early.status, 409);
+  assert.match(early.body.error, /documentos e a conta bancária/);
+  await s.call('/api/driver/bank', { token: pending.token, method: 'PUT', body: { password: '123456', ...BANK } });
+  assert.match((await approve()).body.error, /falta o motoqueiro enviar os documentos\./);
+  for (const kind of ['cnh', 'crlv', 'selfie']) assert.equal((await s.upload(pending.token, kind)).status, 200);
+  assert.equal((await approve()).status, 200);
   assert.equal((await s.call('/api/driver/online', { token: pending.token, body: { online: true } })).status, 400); // sem GPS
   const on = await s.call('/api/driver/online', { token: pending.token, body: { online: true, lat: -10.001, lng: -48.001 } });
   assert.equal(on.body.driver.online, true);

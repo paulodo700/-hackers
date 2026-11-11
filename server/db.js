@@ -63,6 +63,41 @@ CREATE TABLE IF NOT EXISTS ride_offers (
   created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS offers_ride ON ride_offers(ride_id);
+CREATE TABLE IF NOT EXISTS driver_bank (
+  user_id INTEGER PRIMARY KEY REFERENCES users(id),
+  holder_name TEXT NOT NULL,
+  holder_doc TEXT NOT NULL,
+  bank_name TEXT NOT NULL DEFAULT '',
+  pix_type TEXT NOT NULL,
+  pix_key TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS driver_docs (
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  kind TEXT NOT NULL,
+  file TEXT NOT NULL,
+  mime TEXT NOT NULL,
+  size INTEGER NOT NULL,
+  uploaded_at TEXT NOT NULL,
+  PRIMARY KEY (user_id, kind)
+);
+CREATE TABLE IF NOT EXISTS settlements (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  driver_id INTEGER NOT NULL REFERENCES users(id),
+  amount REAL NOT NULL,
+  rides INTEGER NOT NULL,
+  paid_at TEXT NOT NULL,
+  admin_id INTEGER REFERENCES users(id),
+  note TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS audit_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  at TEXT NOT NULL,
+  user_id INTEGER,
+  user_name TEXT NOT NULL DEFAULT '',
+  action TEXT NOT NULL,
+  detail TEXT NOT NULL DEFAULT ''
+);
 CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
@@ -98,10 +133,19 @@ const DEFAULTS = {
   d_earnings: 1,
   d_support: 1,
   d_terms: 1,
+  // Só aprova motoqueiro com documentos e dados bancários enviados
+  require_docs: 1,
+  // Conta da central (para receber a comissão). `pix_key` acima é a chave dela.
+  central_holder: '',
+  central_doc: '',
+  central_bank: '',
+  central_pix_type: '',
 };
 
 // Chaves de liga/desliga.
-const FLAGS = ['pay_cash', 'pay_pix', 'p_history', 'p_support', 'p_terms', 'd_earnings', 'd_support', 'd_terms'];
+const FLAGS = ['pay_cash', 'pay_pix', 'p_history', 'p_support', 'p_terms', 'd_earnings', 'd_support', 'd_terms', 'require_docs'];
+// Dados bancários da central: só mudam pela rota própria, que exige a senha.
+const BANK_KEYS = ['pix_key', 'central_holder', 'central_doc', 'central_bank', 'central_pix_type'];
 // Textos: tamanho máximo e se podem ficar vazios.
 const TEXTS = {
   city_name: { max: 80 },
@@ -112,12 +156,16 @@ const TEXTS = {
   notice_passenger: { max: 160, optional: true },
   notice_driver: { max: 160, optional: true },
   pix_key: { max: 80, optional: true },
+  central_holder: { max: 60, optional: true },
+  central_doc: { max: 20, optional: true },
+  central_bank: { max: 40, optional: true },
+  central_pix_type: { max: 12, optional: true },
   default_theme: { max: 10 },
 };
 // O que as telas de passageiro e motoqueiro podem saber (preços e comissão ficam de fora).
 const PUBLIC_KEYS = [
   'city_name', 'city_lat', 'city_lng', 'brand_name', 'brand_color', 'support_phone', 'slogan',
-  'notice_passenger', 'notice_driver', 'pix_key', 'default_theme', ...FLAGS,
+  'notice_passenger', 'notice_driver', 'default_theme', ...FLAGS.filter((k) => k !== 'require_docs'),
 ];
 
 // Limites aceitos em cada configuração numérica.
@@ -145,8 +193,16 @@ function openDb(file) {
   if (!rideCols.has('route')) db.exec('ALTER TABLE rides ADD COLUMN route TEXT');
   const userCols = new Set(db.prepare('PRAGMA table_info(users)').all().map((c) => c.name));
   if (!userCols.has('blocked')) db.exec('ALTER TABLE users ADD COLUMN blocked INTEGER NOT NULL DEFAULT 0');
+  for (const [col, type] of [['commission', 'REAL'], ['settled_at', 'TEXT'], ['settlement_id', 'INTEGER']]) {
+    if (!rideCols.has(col)) db.exec(`ALTER TABLE rides ADD COLUMN ${col} ${type}`);
+  }
+  const driverCols = new Set(db.prepare('PRAGMA table_info(drivers)').all().map((c) => c.name));
+  if (!driverCols.has('pay_notice_at')) db.exec('ALTER TABLE drivers ADD COLUMN pay_notice_at TEXT');
   const insert = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');
   for (const [key, value] of Object.entries(DEFAULTS)) insert.run(key, String(value));
+  // Corridas concluídas antes de existir o controle de comissão recebem o valor pela taxa atual.
+  const pct = Number(db.prepare("SELECT value FROM settings WHERE key = 'commission_percent'").get().value);
+  db.prepare("UPDATE rides SET commission = ROUND(price * ? / 100, 2) WHERE status = 'completed' AND commission IS NULL").run(pct);
   return db;
 }
 
@@ -162,7 +218,7 @@ function getSettings(db) {
 function setSettings(db, patch) {
   const clean = {};
   for (const [key, raw] of Object.entries(patch || {})) {
-    if (!(key in DEFAULTS)) continue;
+    if (!(key in DEFAULTS) || BANK_KEYS.includes(key)) continue;
     if (FLAGS.includes(key)) {
       if (raw === true || raw === 1 || raw === '1') clean[key] = 1;
       else if (raw === false || raw === 0 || raw === '0') clean[key] = 0;
@@ -209,4 +265,18 @@ function publicSettings(db) {
   return Object.fromEntries(PUBLIC_KEYS.map((k) => [k, all[k]]));
 }
 
-module.exports = { openDb, getSettings, setSettings, publicSettings, DEFAULTS, FLAGS };
+// Grava os dados bancários da central (já validados por quem chama).
+function setCentralBank(db, bank) {
+  const save = db.prepare(
+    'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value'
+  );
+  db.transaction(() => {
+    save.run('central_holder', bank.holder_name);
+    save.run('central_doc', bank.holder_doc);
+    save.run('central_bank', bank.bank_name);
+    save.run('central_pix_type', bank.pix_type);
+    save.run('pix_key', bank.pix_key);
+  })();
+}
+
+module.exports = { openDb, getSettings, setSettings, setCentralBank, publicSettings, DEFAULTS, FLAGS };

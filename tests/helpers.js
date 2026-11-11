@@ -34,6 +34,9 @@ function makeCtx({ withDispatch = true } = {}) {
   return { db, bus, rides, drivers, dispatch, clock, scheduled, events };
 }
 
+const BANK = { holder_name: 'João da Moto', holder_doc: '529.982.247-25', bank_name: 'Banco Teste', pix_type: 'telefone', pix_key: '(11) 95555-4444' };
+const FAKE_JPEG = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(300, 7)]);
+
 function addUser(db, { role = 'passenger', name = 'Fulano', phone = nextPhone() } = {}) {
   const info = db
     .prepare('INSERT INTO users (role, name, phone, password_hash, created_at) VALUES (?, ?, ?, ?, ?)')
@@ -72,7 +75,8 @@ async function startServer({ geo } = {}) {
     searchAddress: async (q) => [{ label: `Resultado ${q}`, lat: -10, lng: -48 }],
     reverseAddress: async () => 'Rua Teste, 1 - Centro',
   };
-  const built = buildServer({ dbPath: ':memory:', geoImpl });
+  const docsDir = require('node:fs').mkdtempSync(require('node:path').join(require('node:os').tmpdir(), 'mototaxi-docs-'));
+  const built = buildServer({ dbPath: ':memory:', geoImpl, docsDir });
   ensureAdmin(built.db, { phone: '11900000000', password: 'central123' });
   await new Promise((r) => built.server.listen(0, r));
   const base = `http://127.0.0.1:${built.server.address().port}`;
@@ -86,15 +90,28 @@ async function startServer({ geo } = {}) {
   };
   const register = async (role, name, phone, extra = {}) =>
     (await call('/api/auth/register', { body: { role, name, phone, password: '123456', ...extra } })).body;
+  // Envia uma foto (JPEG mínimo de teste) como documento do motoqueiro.
+  const upload = async (token, kind, bytes = FAKE_JPEG, type = 'image/jpeg') => {
+    const res = await fetch(`${base}/api/driver/documents/${kind}`, {
+      method: 'POST',
+      headers: { 'Content-Type': type, Authorization: `Bearer ${token}` },
+      body: bytes,
+    });
+    return { status: res.status, body: await res.json() };
+  };
   const admin = (await call('/api/auth/login', { body: { phone: '11900000000', password: 'central123' } })).body;
   const approvedDriver = async (name, phone, pos = { lat: -10.001, lng: -48.001 }) => {
     const d = await register('driver', name, phone, { plate: 'abc1d23', moto_model: 'CG 160' });
-    await call(`/api/admin/drivers/${d.user.id}/status`, { token: admin.token, body: { status: 'approved' } });
+    // Cadastro completo (conta e documentos) e aprovação, como a central faria.
+    await call('/api/driver/bank', { token: d.token, method: 'PUT', body: { password: '123456', ...BANK } });
+    for (const kind of ['cnh', 'crlv', 'selfie']) await upload(d.token, kind);
+    const ok = await call(`/api/admin/drivers/${d.user.id}/status`, { token: admin.token, body: { status: 'approved' } });
+    if (ok.status !== 200) throw new Error(`aprovação falhou: ${JSON.stringify(ok.body)}`);
     await call('/api/driver/online', { token: d.token, body: { online: true, ...pos } });
     return d;
   };
-  return { ...built, base, call, register, admin, approvedDriver };
+  return { ...built, base, call, register, admin, approvedDriver, upload, docsDir };
 }
 
 
-module.exports = { startServer, makeCtx, addUser, addDriver, rideInput, ORIGIN, DEST };
+module.exports = { BANK, FAKE_JPEG, startServer, makeCtx, addUser, addDriver, rideInput, ORIGIN, DEST };

@@ -1,11 +1,14 @@
 const express = require('express');
+const auth = require('../auth');
+const { KINDS, MAX_BYTES } = require('../docs');
+const { createLimiter } = require('../limit');
 const { AppError } = require('../errors');
 const { getSettings } = require('../db');
 const { requireAuth } = require('../auth');
 const { localDay, dayRange, shiftDay } = require('../time');
 
 // Rotas do motoqueiro.
-module.exports = function driverRoutes({ db, rides, dispatch, drivers }) {
+module.exports = function driverRoutes({ db, rides, dispatch, drivers, docs, finance }) {
   const router = express.Router();
   router.use(requireAuth(db, 'driver'));
 
@@ -40,6 +43,67 @@ module.exports = function driverRoutes({ db, rides, dispatch, drivers }) {
     if (!['arrive', 'start', 'complete', 'cancel'].includes(action)) throw new AppError(404, 'Rota não encontrada');
     const ride = rides.act(req.params.id, action, req.user, req.body && req.body.reason);
     res.json({ ...state(req.user.id), last: ride });
+  });
+
+  /* ----- Cadastro completo: documentos e conta bancária ----- */
+
+  const onboarding = (id) => {
+    const docStatus = docs.status(id);
+    const bank = finance.driverBank(id);
+    return {
+      docs: docStatus,
+      labels: KINDS,
+      bank: finance.present(bank),
+      complete: Object.values(docStatus).every(Boolean) && !!bank,
+    };
+  };
+
+  router.get('/onboarding', (req, res) => res.json(onboarding(req.user.id)));
+
+  // A foto chega como arquivo (não como texto). Limite de envios para não encher o disco.
+  const uploadLimit = createLimiter({ windowMs: 60 * 60 * 1000, max: 30, message: 'Muitos envios. Tente de novo mais tarde.' });
+  router.post(
+    '/documents/:kind',
+    uploadLimit,
+    express.raw({ type: ['image/jpeg', 'image/png', 'image/webp', 'application/octet-stream'], limit: MAX_BYTES }),
+    (req, res) => {
+      docs.save(req.user.id, req.params.kind, req.body);
+      res.json(onboarding(req.user.id));
+    }
+  );
+
+  // Mudar a conta bancária exige a senha: evita que alguém com o celular na mão desvie os pagamentos.
+  router.put('/bank', (req, res) => {
+    const body = req.body || {};
+    const row = db.prepare('SELECT password_hash FROM users WHERE id = ?').get(req.user.id);
+    if (!auth.verifyPassword(body.password, row.password_hash)) throw new AppError(401, 'Senha incorreta');
+    finance.setDriverBank(req.user, body);
+    res.json(onboarding(req.user.id));
+  });
+
+  /* ----- Pix e comissão ----- */
+
+  router.get('/rides/:id/pix', async (req, res) => {
+    const ride = rides.getRide(req.params.id);
+    if (!ride || ride.driver_id !== req.user.id) throw new AppError(404, 'Corrida não encontrada');
+    res.json(await finance.rideCharge(ride));
+  });
+
+  router.get('/settlement', (req, res) => {
+    const d = db.prepare('SELECT pay_notice_at FROM drivers WHERE user_id = ?').get(req.user.id);
+    res.json({
+      owed: finance.owed(req.user.id),
+      central_ready: !!finance.centralBank(),
+      notice_at: d ? d.pay_notice_at : null,
+      history: finance.history(req.user.id),
+    });
+  });
+
+  router.get('/settlement/pix', async (req, res) => res.json(await finance.settlementCharge(req.user.id)));
+
+  router.post('/settlement/notify', (req, res) => {
+    finance.notifyPaid(req.user);
+    res.json({ ok: true });
   });
 
   router.get('/history', (req, res) =>

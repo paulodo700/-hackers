@@ -208,7 +208,13 @@ function createRideService({ db, bus }) {
     if (!isDriver && actor.role !== 'admin') throw new AppError(403, 'Esta corrida não é sua');
     if (action === 'arrive') return step(row, 'accepted', 'arrived', 'arrived_at');
     if (action === 'start') return step(row, 'arrived', 'in_progress', 'started_at');
-    if (action === 'complete') return step(row, 'in_progress', 'completed', 'completed_at');
+    if (action === 'complete') {
+      const done = step(row, 'in_progress', 'completed', 'completed_at');
+      // A comissão fica gravada na corrida: mudar a taxa depois não altera o que já foi feito.
+      const pct = getSettings(db).commission_percent;
+      db.prepare('UPDATE rides SET commission = ROUND(price * ? / 100, 2) WHERE id = ?').run(pct, row.id);
+      return done;
+    }
     throw new AppError(400, 'Ação desconhecida');
   }
 

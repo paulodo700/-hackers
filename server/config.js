@@ -44,6 +44,8 @@ const config = {
   demo: !!process.env.DEMO_MODE,
   // Pasta das cópias de segurança diárias (pode apontar para um pendrive ou pasta do Google Drive).
   backupDir: process.env.BACKUP_DIR || path.join(path.dirname(dbPath), 'backups'),
+  // Documentos dos motoqueiros ficam ao lado do banco de dados, fora da pasta pública.
+  docsDir: process.env.DOCS_DIR || path.join(path.dirname(dbPath), 'docs'),
   adminPhone: process.env.ADMIN_PHONE || '',
   adminPassword: process.env.ADMIN_PASSWORD || '',
   osrmUrl: process.env.OSRM_URL || 'https://router.project-osrm.org',

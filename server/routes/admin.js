@@ -1,19 +1,20 @@
 const express = require('express');
 const { AppError } = require('../errors');
 const { getSettings, setSettings } = require('../db');
-const { requireAuth, normalizePhone, hashPassword } = require('../auth');
+const { requireAuth, normalizePhone, hashPassword, verifyPassword } = require('../auth');
+const { KINDS } = require('../docs');
 const { validCoord, completeRoute } = require('../geo');
 const { calcPrice } = require('../pricing');
 const { ACTIVE } = require('../rides');
 const { localDay, dayRange, isDay, shiftDay } = require('../time');
 
 // Rotas da central.
-module.exports = function adminRoutes({ db, rides, dispatch, drivers, geo }) {
+module.exports = function adminRoutes({ db, rides, dispatch, drivers, geo, docs, finance, audit }) {
   const router = express.Router();
   router.use(requireAuth(db, 'admin'));
 
   const completedBetween = db.prepare(
-    `SELECT r.id, r.price, r.completed_at, r.driver_id, u.name AS driver_name
+    `SELECT r.id, r.price, r.commission, r.completed_at, r.driver_id, u.name AS driver_name
        FROM rides r LEFT JOIN users u ON u.id = r.driver_id
       WHERE r.status = 'completed' AND r.completed_at >= ? AND r.completed_at < ?`
   );
@@ -72,12 +73,67 @@ module.exports = function adminRoutes({ db, rides, dispatch, drivers, geo }) {
     const blocked = req.body && req.body.blocked ? 1 : 0;
     const info = db.prepare("UPDATE users SET blocked = ? WHERE id = ? AND role = 'passenger'").run(blocked, Number(req.params.id));
     if (info.changes !== 1) throw new AppError(404, 'Passageiro não encontrado');
+    audit.log(req.user, blocked ? 'Passageiro bloqueado' : 'Passageiro desbloqueado', `#${Number(req.params.id)}`);
     res.json({ ok: true, blocked: !!blocked });
   });
 
   router.post('/drivers/:id/status', (req, res) => {
-    res.json({ driver: drivers.setStatus(req.params.id, req.body && req.body.status) });
+    const status = req.body && req.body.status;
+    const id = Number(req.params.id);
+    // Para aprovar, o cadastro precisa estar completo (a central pode desligar essa exigência nas configurações).
+    if (status === 'approved' && getSettings(db).require_docs) {
+      const missing = [];
+      if (!docs.complete(id)) missing.push('os documentos');
+      if (!finance.driverBank(id)) missing.push('a conta bancária');
+      if (missing.length && drivers.get(id)) {
+        throw new AppError(409, `Não dá para aprovar ainda: falta o motoqueiro enviar ${missing.join(' e ')}.`);
+      }
+    }
+    const driver = drivers.setStatus(id, status);
+    const names = { approved: 'aprovado', blocked: 'bloqueado', pending: 'voltou para análise' };
+    audit.log(req.user, `Motoqueiro ${names[status] || status}`, driver.name);
+    res.json({ driver });
   });
+
+  // Ficha completa do motoqueiro: dados, conta, documentos e comissão em aberto.
+  router.get('/drivers/:id', (req, res) => {
+    const driver = drivers.get(req.params.id);
+    if (!driver) throw new AppError(404, 'Motoqueiro não encontrado');
+    res.json({
+      driver,
+      bank: finance.driverBank(driver.id),
+      docs: docs.status(driver.id),
+      labels: KINDS,
+      owed: finance.owed(driver.id),
+    });
+  });
+
+  router.get('/drivers/:id/documents/:kind', (req, res) => {
+    const file = docs.read(req.params.id, req.params.kind);
+    audit.log(req.user, 'Documento de motoqueiro visualizado', `${KINDS[req.params.kind] || req.params.kind} do motoqueiro #${Number(req.params.id)}`);
+    res.setHeader('Cache-Control', 'no-store');
+    res.type(file.mime).send(file.data);
+  });
+
+  /* ----- Comissão e conta da central ----- */
+
+  router.get('/settlements', (req, res) => res.json({ ...finance.overview(), central_ready: !!finance.centralBank() }));
+
+  router.post('/settlements', (req, res) => {
+    const body = req.body || {};
+    res.status(201).json({ settlement: finance.settle(req.user, body.driver_id, body.note) });
+  });
+
+  router.get('/bank', (req, res) => res.json({ bank: finance.centralBank() }));
+
+  router.put('/bank', (req, res) => {
+    const body = req.body || {};
+    const row = db.prepare('SELECT password_hash FROM users WHERE id = ?').get(req.user.id);
+    if (!verifyPassword(body.password, row.password_hash)) throw new AppError(401, 'Senha incorreta');
+    res.json({ bank: finance.setCentral(req.user, body) });
+  });
+
+  router.get('/audit', (req, res) => res.json({ entries: audit.list(150) }));
 
   router.post('/rides/estimate', async (req, res) => {
     const { origin, dest } = req.body || {};
@@ -150,14 +206,19 @@ module.exports = function adminRoutes({ db, rides, dispatch, drivers, geo }) {
     const done = completedBetween.all(from, to);
     const commission = (v) => Math.round(v * pct) / 100;
 
+    // Usa a comissão gravada em cada corrida (a taxa pode ter mudado ao longo do tempo).
+    const fee = (r) => (r.commission === null || r.commission === undefined ? commission(r.price) : r.commission);
     const byDriver = new Map();
     const byDay = new Map();
     let revenue = 0;
+    let fees = 0;
     for (const r of done) {
       revenue += r.price;
-      const d = byDriver.get(r.driver_id) || { driver_id: r.driver_id, name: r.driver_name || '—', rides: 0, revenue: 0 };
+      fees += fee(r);
+      const d = byDriver.get(r.driver_id) || { driver_id: r.driver_id, name: r.driver_name || '—', rides: 0, revenue: 0, commission: 0 };
       d.rides += 1;
       d.revenue += r.price;
+      d.commission += fee(r);
       byDriver.set(r.driver_id, d);
       const day = localDay(r.completed_at, tz);
       const e = byDay.get(day) || { day, rides: 0, revenue: 0 };
@@ -165,6 +226,7 @@ module.exports = function adminRoutes({ db, rides, dispatch, drivers, geo }) {
       e.revenue += r.price;
       byDay.set(day, e);
     }
+    const cents = (n) => Math.round(n * 100) / 100;
     const cancelled = db
       .prepare("SELECT COUNT(*) AS n FROM rides WHERE status = 'cancelled' AND cancelled_at >= ? AND cancelled_at < ?")
       .get(from, to).n;
@@ -173,9 +235,9 @@ module.exports = function adminRoutes({ db, rides, dispatch, drivers, geo }) {
       from: fromDay,
       to: toDay,
       commission_percent: pct,
-      totals: { rides: done.length, revenue, commission: commission(revenue), cancelled },
+      totals: { rides: done.length, revenue, commission: cents(fees), cancelled },
       byDriver: [...byDriver.values()]
-        .map((d) => ({ ...d, commission: commission(d.revenue) }))
+        .map((d) => ({ ...d, commission: cents(d.commission) }))
         .sort((a, b) => b.revenue - a.revenue),
       byDay: [...byDay.values()].sort((a, b) => (a.day < b.day ? -1 : 1)),
     });
@@ -193,6 +255,7 @@ module.exports = function adminRoutes({ db, rides, dispatch, drivers, geo }) {
     if (!user) throw new AppError(404, 'Nenhuma conta com este telefone');
     if (user.role === 'admin') throw new AppError(403, 'A senha da central é trocada em "Minha senha"');
     db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hashPassword(password), user.id);
+    audit.log(req.user, 'Senha de usuário redefinida', user.name);
     res.json({ ok: true, name: user.name, role: user.role });
   });
 
@@ -200,6 +263,7 @@ module.exports = function adminRoutes({ db, rides, dispatch, drivers, geo }) {
 
   router.put('/settings', (req, res) => {
     setSettings(db, req.body || {});
+    audit.log(req.user, 'Configurações alteradas', Object.keys(req.body || {}).slice(0, 12).join(', '));
     res.json({ settings: getSettings(db) });
   });
 
