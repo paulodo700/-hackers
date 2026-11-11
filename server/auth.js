@@ -1,3 +1,4 @@
+const crypto = require('node:crypto');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const config = require('./config');
@@ -14,14 +15,20 @@ function normalizePhone(raw) {
 const hashPassword = (password) => bcrypt.hashSync(password, 10);
 const verifyPassword = (password, hash) => bcrypt.compareSync(String(password ?? ''), hash);
 
+// "Impressão" da senha atual. Vai dentro do token: quando a senha muda, os logins antigos param de valer.
+const passwordMark = (hash) => crypto.createHash('sha256').update(String(hash)).digest('hex').slice(0, 12);
+
+// `user` precisa trazer id, role e password_hash.
 function signToken(user) {
-  return jwt.sign({ id: user.id, role: user.role }, config.jwtSecret, { expiresIn: '30d' });
+  return jwt.sign({ id: user.id, role: user.role, v: passwordMark(user.password_hash) }, config.jwtSecret, {
+    expiresIn: '30d',
+  });
 }
 
 function verifyToken(token) {
   try {
-    const { id, role } = jwt.verify(String(token || ''), config.jwtSecret);
-    return { id, role };
+    const { id, role, v } = jwt.verify(String(token || ''), config.jwtSecret);
+    return { id, role, v };
   } catch {
     return null;
   }
@@ -31,8 +38,9 @@ function verifyToken(token) {
 function userFromToken(db, token) {
   const payload = verifyToken(token);
   if (!payload) return null;
-  const user = db.prepare('SELECT id, role, name, phone FROM users WHERE id = ?').get(payload.id);
-  return user && user.role === payload.role ? user : null;
+  const row = db.prepare('SELECT id, role, name, phone, password_hash FROM users WHERE id = ?').get(payload.id);
+  if (!row || row.role !== payload.role || passwordMark(row.password_hash) !== payload.v) return null;
+  return { id: row.id, role: row.role, name: row.name, phone: row.phone };
 }
 
 function requireAuth(db, ...roles) {

@@ -81,6 +81,7 @@ const DEFAULTS = {
   tz_offset_hours: -3,
   brand_name: 'Mototáxi',
   brand_color: '#ffc107',
+  support_phone: '',
 };
 
 // Limites aceitos em cada configuração numérica.
@@ -132,6 +133,13 @@ function setSettings(db, patch) {
       clean[key] = n;
     } else {
       const s = String(raw ?? '').trim().slice(0, key === 'brand_name' ? 30 : 80);
+      if (key === 'support_phone') {
+        // Telefone/WhatsApp da central mostrado aos usuários. Vazio = não mostrar.
+        const digits = s.replace(/\D/g, '').replace(/^55(?=\d{10,11}$)/, '');
+        if (s && digits.length !== 10 && digits.length !== 11) throw new AppError(400, 'Telefone da central inválido (use DDD + número)');
+        clean[key] = s ? digits : '';
+        continue;
+      }
       if (!s) throw new AppError(400, `Valor inválido para ${key}`);
       if (key === 'brand_color' && !/^#[0-9a-f]{6}$/i.test(s)) throw new AppError(400, 'Cor inválida');
       clean[key] = key === 'brand_color' ? s.toLowerCase() : s;

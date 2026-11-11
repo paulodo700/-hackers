@@ -60,7 +60,16 @@ async function montarEstrutura() {
     st.cidade = cfg.city_name;
   }
 
-  const socket = client.connect({ onReconnect: carregarVisao });
+  client.connect({ onReconnect: carregarVisao });
+  ligarEventos();
+  setInterval(() => client.user && carregarVisao(), 30000);
+
+  await carregarVisao();
+  abrir(st.aba);
+}
+
+function ligarEventos() {
+  const socket = client.socket;
   // Qualquer novidade pede uma nova fotografia do sistema (agrupada para não sobrecarregar).
   for (const ev of ['ride:update', 'drivers:update', 'offers:update']) socket.on(ev, agendarVisao);
   socket.on('driver:location', (loc) => {
@@ -68,10 +77,6 @@ async function montarEstrutura() {
     if (d) Object.assign(d, { lat: loc.lat, lng: loc.lng, fresh: true });
     if (tela && tela.posicao) tela.posicao(loc);
   });
-  setInterval(() => client.user && carregarVisao(), 30000);
-
-  await carregarVisao();
-  abrir(st.aba);
 }
 
 function agendarVisao() {
@@ -169,6 +174,7 @@ function telaVivo() {
   const map = criarMapa(mapaEl, st.centro, 14, { animado: false });
   const camada = criarCamada(map);
   let enquadrado = false;
+  let listaAtual = null;
 
   function atualizar() {
     const v = st.visao;
@@ -206,12 +212,20 @@ function telaVivo() {
       }
     }
 
-    mount(
-      lista,
-      v.activeRides.length
-        ? v.activeRides.map((r) => cartaoCorrida(r))
-        : h('p', { class: 'vazio-lista' }, 'Nenhuma corrida em andamento.')
-    );
+    // A lista só é refeita quando algo mudou; assim uma escolha em andamento (ex.: motoqueiro) não se perde.
+    const assinatura = JSON.stringify([
+      v.activeRides.map((r) => [r.id, r.status, r.driver_id]),
+      v.drivers.filter((d) => d.status === 'approved' && d.online && !d.busy).map((d) => d.id),
+    ]);
+    if (assinatura !== listaAtual) {
+      listaAtual = assinatura;
+      mount(
+        lista,
+        v.activeRides.length
+          ? v.activeRides.map((r) => cartaoCorrida(r))
+          : h('p', { class: 'vazio-lista' }, 'Nenhuma corrida em andamento.')
+      );
+    }
   }
 
   function cartaoCorrida(r) {
@@ -573,6 +587,7 @@ function telaConfig() {
   };
   campos.city_name = h('input', { maxlength: 80, required: true });
   campos.brand_name = h('input', { maxlength: 30, required: true });
+  campos.support_phone = h('input', { type: 'tel', placeholder: '(00) 00000-0000' });
   // A cor é mostrada na hora; só vale para todos depois de salvar.
   const previa = () => aplicarMarca({ brand_name: campos.brand_name.value, brand_color: campos.brand_color.value });
   campos.brand_color = h('input', { type: 'color', 'aria-label': 'Cor da marca', oninput: previa });
@@ -598,6 +613,7 @@ function telaConfig() {
           const body = {
             city_name: campos.city_name.value, city_lat: centro.lat, city_lng: centro.lng,
             brand_name: campos.brand_name.value, brand_color: campos.brand_color.value,
+            support_phone: campos.support_phone.value,
           };
           for (const k of ['base_fare', 'per_km', 'min_fare', 'commission_percent', 'offer_timeout_s']) body[k] = Number(campos[k].value);
           const { settings } = await client.api('/admin/settings', { method: 'PUT', body });
@@ -612,6 +628,7 @@ function telaConfig() {
     h('h3', { class: 'bloco-titulo', style: 'margin-top:0' }, 'Sua marca'),
     h('label', { class: 'field' }, h('span', {}, 'Nome do serviço (aparece para passageiros e motoqueiros)'), campos.brand_name),
     h('div', { class: 'field' }, h('span', {}, 'Cor da marca'), h('div', { class: 'cor' }, campos.brand_color, paleta)),
+    h('label', { class: 'field' }, h('span', {}, 'Telefone/WhatsApp da central (aparece para quem precisa de ajuda)'), campos.support_phone),
     h('h3', { class: 'bloco-titulo' }, 'Preço da corrida'),
     h('div', { class: 'duas' }, numero('base_fare', 'Taxa inicial (R$)'), numero('per_km', 'Valor por km (R$)')),
     h('div', { class: 'duas' }, numero('min_fare', 'Valor mínimo (R$)'), numero('commission_percent', 'Comissão da central (%)', '1')),
@@ -627,7 +644,7 @@ function telaConfig() {
   mount(
     conteudo,
     h('h2', {}, 'Configurações'),
-    h('div', { class: 'config' }, form, h('div', { class: 'pilha' }, h('p', { class: 'muted' }, 'Clique no mapa para marcar o centro da cidade. É onde o mapa abre e onde a busca de endereços procura.'), mapaEl, gps))
+    h('div', { class: 'config' }, h('div', { class: 'pilha' }, form, cartaoRedefinir(), cartaoMinhaSenha()), h('div', { class: 'pilha' }, h('p', { class: 'muted' }, 'Clique no mapa para marcar o centro da cidade. É onde o mapa abre e onde a busca de endereços procura.'), mapaEl, gps))
   );
 
   const map = criarMapa(mapaEl, centro, 13, { animado: false });
@@ -667,6 +684,60 @@ function telaConfig() {
       carregarMarca(client);
     },
   };
+}
+
+// Quem esqueceu a senha liga para a central, que cria uma nova pelo telefone cadastrado.
+function cartaoRedefinir() {
+  const fone = h('input', { type: 'tel', placeholder: '(00) 00000-0000', required: true, 'aria-label': 'Telefone da conta' });
+  const nova = h('input', { type: 'text', minlength: 6, maxlength: 72, required: true, placeholder: 'Nova senha (mínimo 6)', 'aria-label': 'Nova senha', autocomplete: 'off' });
+  const botao = h('button', { class: 'btn dark block', type: 'submit' }, 'Definir nova senha');
+  return h(
+    'form',
+    {
+      class: 'card',
+      onsubmit: (e) => {
+        e.preventDefault();
+        run(botao, async () => {
+          const r = await client.api('/admin/users/password', { body: { phone: fone.value, password: nova.value } });
+          toast(`Senha de ${r.name} trocada. Avise a nova senha a ${r.role === 'driver' ? 'ele(a)' : 'quem pediu'}.`, 'ok');
+          fone.value = '';
+          nova.value = '';
+        });
+      },
+    },
+    h('h3', { class: 'bloco-titulo', style: 'margin-top:0' }, 'Esqueceram a senha?'),
+    h('p', { class: 'muted', style: 'margin-bottom:12px' }, 'Digite o telefone do passageiro ou motoqueiro e crie uma senha nova para ele.'),
+    h('label', { class: 'field' }, h('span', {}, 'Telefone da conta'), fone),
+    h('label', { class: 'field' }, h('span', {}, 'Nova senha'), nova),
+    botao
+  );
+}
+
+function cartaoMinhaSenha() {
+  const atual = h('input', { type: 'password', required: true, autocomplete: 'current-password' });
+  const nova = h('input', { type: 'password', minlength: 6, maxlength: 72, required: true, autocomplete: 'new-password' });
+  const botao = h('button', { class: 'btn dark block', type: 'submit' }, 'Trocar minha senha');
+  return h(
+    'form',
+    {
+      class: 'card',
+      onsubmit: (e) => {
+        e.preventDefault();
+        run(botao, async () => {
+          client.adopt(await client.api('/auth/password', { body: { current: atual.value, password: nova.value } }));
+          client.connect({ onReconnect: carregarVisao }); // reconecta o tempo real com o login novo
+          ligarEventos();
+          atual.value = '';
+          nova.value = '';
+          toast('Senha da central trocada.', 'ok');
+        });
+      },
+    },
+    h('h3', { class: 'bloco-titulo', style: 'margin-top:0' }, 'Minha senha'),
+    h('label', { class: 'field' }, h('span', {}, 'Senha atual'), atual),
+    h('label', { class: 'field' }, h('span', {}, 'Nova senha (mínimo 6)'), nova),
+    botao
+  );
 }
 
 const TELAS = { vivo: telaVivo, nova: telaNova, motoqueiros: telaMotoqueiros, corridas: telaCorridas, relatorios: telaRelatorios, config: telaConfig };

@@ -4,11 +4,14 @@ const { getSettings } = require('../db');
 const { requireAuth } = require('../auth');
 const { calcPrice } = require('../pricing');
 const { validCoord, completeRoute } = require('../geo');
+const { createLimiter } = require('../limit');
 
 // Rotas do passageiro.
 module.exports = function rideRoutes({ db, rides, geo }) {
   const router = express.Router();
   router.use(requireAuth(db, 'passenger'));
+  const estimateLimit = createLimiter({ windowMs: 60 * 1000, max: 40 });
+  const orderLimit = createLimiter({ windowMs: 10 * 60 * 1000, max: 30 });
 
   function points(body) {
     const origin = body && body.origin;
@@ -25,7 +28,7 @@ module.exports = function rideRoutes({ db, rides, geo }) {
     return ride;
   }
 
-  router.post('/estimate', async (req, res) => {
+  router.post('/estimate', estimateLimit, async (req, res) => {
     const { origin, dest } = points(req.body);
     const route = completeRoute(await geo.routeDistanceKm(origin, dest), origin, dest);
     res.json({
@@ -37,7 +40,7 @@ module.exports = function rideRoutes({ db, rides, geo }) {
     });
   });
 
-  router.post('/', async (req, res) => {
+  router.post('/', orderLimit, async (req, res) => {
     const { origin, dest } = points(req.body);
     const route = completeRoute(await geo.routeDistanceKm(origin, dest), origin, dest);
     const ride = rides.createRide({

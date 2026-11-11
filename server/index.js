@@ -17,7 +17,7 @@ function buildServer({ dbPath = config.dbPath, geoImpl = geo } = {}) {
   const rides = createRideService({ db, bus });
   const drivers = createDriverService({ db, bus });
   const dispatch = createDispatcher({ db, bus, rides });
-  const deps = { db, bus, rides, drivers, dispatch, geo: geoImpl };
+  const deps = { db, bus, rides, drivers, dispatch, geo: geo.withRouteCache(geoImpl) };
   const app = createApp(deps);
   const server = http.createServer(app);
   const io = attachRealtime(server, deps);

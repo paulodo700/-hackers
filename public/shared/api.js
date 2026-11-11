@@ -91,6 +91,8 @@ export function createClient(app) {
     register: (fields) => enter('/auth/register', { ...fields, role }),
     logout,
     connect,
+    // Depois de trocar a senha o servidor devolve um login novo; o antigo deixa de valer.
+    adopt: (data) => save(data),
     get user() {
       return session ? session.user : null;
     },

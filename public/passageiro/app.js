@@ -2,7 +2,7 @@
 import { createClient } from '/shared/api.js';
 import {
   h, mount, brl, km, toast, run, confirmBox, authScreen, registerSW, dateTime, STATUS_PT, PAYMENT_PT,
-  icone, botaoTema, carregarMarca, nomeDaMarca, esqueleto,
+  icone, botaoTema, carregarMarca, nomeDaMarca, esqueleto, contatoCentral,
 } from '/shared/ui.js';
 import { criarMapa, criarCamada, criarRota, enquadrar, ondeEstou, campoEndereco, minutosAte } from '/shared/mapa.js';
 
@@ -84,6 +84,7 @@ async function montarEstrutura() {
   const cfg = (await configPronta) || { city_lat: -15.78, city_lng: -47.93 };
   if (!client.user) return;
   st.centro = { lat: cfg.city_lat, lng: cfg.city_lng };
+  st.central = cfg.support_phone || '';
   map = criarMapa(mapaEl, st.centro, 14);
   camada = criarCamada(map);
   rota = criarRota(map);
@@ -449,8 +450,9 @@ function telaEncerrada(r) {
     return h(
       'div',
       { class: 'pilha' },
-      h('div', {}, h('h2', {}, 'Nenhum motoqueiro livre agora'), h('p', { class: 'sub' }, 'Tente de novo em instantes ou ligue para a central.')),
+      h('div', {}, h('h2', {}, 'Nenhum motoqueiro livre agora'), h('p', { class: 'sub' }, st.central ? 'Tente de novo em instantes ou fale com a central.' : 'Tente de novo em instantes.')),
       h('button', { class: 'btn primary block', onclick: () => novaCorrida(true) }, 'Tentar de novo'),
+      contatoCentral(st.central, 'Olá! Não encontrei motoqueiro pelo aplicativo. Pode me ajudar?'),
       h('button', { class: 'btn link', onclick: () => novaCorrida(false) }, 'Mudar o destino')
     );
   }

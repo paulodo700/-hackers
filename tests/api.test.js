@@ -1,42 +1,11 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { io: ioClient } = require('socket.io-client');
-const { buildServer } = require('../server/index');
-const { ensureAdmin, normalizePhone } = require('../server/auth');
+const { normalizePhone } = require('../server/auth');
+const { startServer: start } = require('./helpers');
 
 const O = { text: 'Praça Central', lat: -10, lng: -48 };
 const D = { text: 'Rodoviária', lat: -10.02, lng: -48.02 };
-
-// Servidor de verdade em porta livre, com mapa falso (sempre 2 km) para não depender da internet.
-async function start() {
-  const geoImpl = {
-    routeDistanceKm: async () => ({ km: 2, source: 'osrm' }),
-    searchAddress: async (q) => [{ label: `Resultado ${q}`, lat: -10, lng: -48 }],
-    reverseAddress: async () => 'Rua Teste, 1 - Centro',
-  };
-  const built = buildServer({ dbPath: ':memory:', geoImpl });
-  ensureAdmin(built.db, { phone: '11900000000', password: 'central123' });
-  await new Promise((r) => built.server.listen(0, r));
-  const base = `http://127.0.0.1:${built.server.address().port}`;
-  const call = async (path, { token, body, method } = {}) => {
-    const res = await fetch(base + path, {
-      method: method || (body ? 'POST' : 'GET'),
-      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-      body: body ? JSON.stringify(body) : undefined,
-    });
-    return { status: res.status, body: await res.json() };
-  };
-  const register = async (role, name, phone, extra = {}) =>
-    (await call('/api/auth/register', { body: { role, name, phone, password: '123456', ...extra } })).body;
-  const admin = (await call('/api/auth/login', { body: { phone: '11900000000', password: 'central123' } })).body;
-  const approvedDriver = async (name, phone, pos = { lat: -10.001, lng: -48.001 }) => {
-    const d = await register('driver', name, phone, { plate: 'abc1d23', moto_model: 'CG 160' });
-    await call(`/api/admin/drivers/${d.user.id}/status`, { token: admin.token, body: { status: 'approved' } });
-    await call('/api/driver/online', { token: d.token, body: { online: true, ...pos } });
-    return d;
-  };
-  return { ...built, base, call, register, admin, approvedDriver };
-}
 
 test('telefone: formatos diferentes viram o mesmo número', () => {
   assert.equal(normalizePhone('+55 (11) 98888-7777'), '11988887777');

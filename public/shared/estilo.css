@@ -356,6 +356,15 @@ body, .painel, .card, .item, .indicador, .tabela-caixa { transition: background-
 .cores { display: flex; gap: 8px; flex-wrap: wrap; }
 .cores button { width: 34px; height: 34px; border-radius: 50%; border: 2px solid var(--linha); cursor: pointer; }
 
+/* Termos e textos longos */
+.aceite { font-size: 0.82rem; color: var(--cinza); text-align: center; margin-top: 12px; }
+.aceite a, .texto a:not(.btn) { color: inherit; }
+.texto { max-width: 680px; margin: 0 auto; padding: 28px 20px 48px; }
+.texto h1 { font-size: 1.6rem; letter-spacing: -0.02em; margin-bottom: 6px; }
+.texto h2 { font-size: 1.05rem; margin: 26px 0 6px; }
+.texto p, .texto li { color: var(--tinta); margin-bottom: 8px; }
+.texto ul { padding-left: 20px; margin: 0 0 8px; }
+
 /* Quem pede menos movimento no aparelho não recebe animações. */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }

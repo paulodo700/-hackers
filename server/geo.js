@@ -148,4 +148,25 @@ async function reverseAddress(lat, lng, fetchImpl = fetch, timeoutMs = 5000) {
   return shortLabel(data) || null;
 }
 
-module.exports = { validCoord, haversineKm, routeDistanceKm, completeRoute, searchAddress, reverseAddress };
+// Guarda as rotas calculadas por alguns minutos. Assim o preço mostrado na estimativa é o mesmo
+// cobrado ao confirmar, e o serviço de rotas recebe menos pedidos.
+function withRouteCache(geoImpl, { ttlMs = 10 * 60 * 1000, max = 500, now = Date.now } = {}) {
+  const cache = new Map();
+  const key = (a, b) => [a.lat, a.lng, b.lat, b.lng].map((n) => n.toFixed(5)).join(',');
+  return {
+    ...geoImpl,
+    async routeDistanceKm(a, b) {
+      const k = key(a, b);
+      const hit = cache.get(k);
+      if (hit && hit.until > now()) return hit.route;
+      const route = await geoImpl.routeDistanceKm(a, b);
+      // Estimativa (serviço fora do ar) fica guardada por pouco tempo, para tentar de novo logo.
+      cache.delete(k);
+      cache.set(k, { route, until: now() + (route.source === 'osrm' ? ttlMs : Math.min(ttlMs, 2 * 60 * 1000)) });
+      if (cache.size > max) cache.delete(cache.keys().next().value);
+      return route;
+    },
+  };
+}
+
+module.exports = { validCoord, haversineKm, routeDistanceKm, completeRoute, withRouteCache, searchAddress, reverseAddress };

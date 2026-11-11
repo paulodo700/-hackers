@@ -13,6 +13,8 @@ function createApp(deps) {
 
   app.use((req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
+    // Em HTTPS, o navegador passa a recusar a versão sem cadeado deste endereço.
+    if (req.secure) res.setHeader('Strict-Transport-Security', 'max-age=15552000');
     // Envia só o endereço do site (sem o caminho) para serviços de fora. O mapa do OpenStreetMap
     // exige essa identificação e bloqueia quem não manda.
     res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
@@ -42,6 +44,7 @@ function createApp(deps) {
       city_lng: s.city_lng,
       brand_name: s.brand_name,
       brand_color: s.brand_color,
+      support_phone: s.support_phone,
       demo: config.demo,
     });
   });
@@ -58,6 +61,37 @@ function createApp(deps) {
   app.use(['/motoqueiro', '/central'], (req, res, next) => {
     res.setHeader('X-Robots-Tag', 'noindex, nofollow'); // não aparecer em buscadores
     next();
+  });
+
+  // Ao instalar como aplicativo, o nome e a cor seguem a marca configurada na central.
+  const APPS = {
+    passageiro: { suffix: '', short: null, orientation: 'portrait' },
+    motoqueiro: { suffix: ' Motoqueiro', short: 'Motoqueiro', orientation: 'portrait' },
+    central: { suffix: ' Central', short: 'Central', orientation: 'any' },
+  };
+  app.get('/:app/manifest.webmanifest', (req, res, next) => {
+    const meta = APPS[req.params.app];
+    if (!meta) return next();
+    const s = getSettings(db);
+    res.type('application/manifest+json').setHeader('Cache-Control', 'no-cache');
+    res.json({
+      name: `${s.brand_name}${meta.suffix}`,
+      short_name: meta.short || s.brand_name.slice(0, 12),
+      id: `/${req.params.app}/`,
+      start_url: `/${req.params.app}/`,
+      scope: '/',
+      display: 'standalone',
+      orientation: meta.orientation,
+      lang: 'pt-BR',
+      background_color: '#151515',
+      theme_color: '#151515',
+      icons: [
+        { src: '/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+        { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+        { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+        { src: '/icon.svg', sizes: 'any', type: 'image/svg+xml' },
+      ],
+    });
   });
 
   // Biblioteca do mapa servida pelo próprio servidor (sem depender de CDN).

@@ -3,10 +3,12 @@ const { AppError } = require('../errors');
 const { getSettings } = require('../db');
 const { requireAuth } = require('../auth');
 const { validCoord } = require('../geo');
+const { createLimiter } = require('../limit');
 
 module.exports = function geoRoutes({ db, geo }) {
   const router = express.Router();
   router.use(requireAuth(db));
+  router.use(createLimiter({ windowMs: 60 * 1000, max: 60 }));
 
   router.get('/search', async (req, res) => {
     const settings = getSettings(db);

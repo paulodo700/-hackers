@@ -70,10 +70,18 @@ function createDispatcher({ db, bus, rides, now = Date.now, schedule = setTimeou
       .prepare("INSERT INTO ride_offers (ride_id, driver_id, status, exclusive, created_at) VALUES (?, ?, 'pending', ?, ?)")
       .run(ride.id, driverId, onlyDriverId ? 1 : 0, now());
     const offerId = Number(info.lastInsertRowid);
-    const timer = schedule(() => expire(offerId), timeoutS * 1000);
+    // Um erro aqui não pode derrubar o servidor inteiro.
+    const timer = schedule(() => {
+      try {
+        expire(offerId);
+      } catch (err) {
+        console.error('Falha ao expirar oferta:', err);
+      }
+    }, timeoutS * 1000);
     if (timer && typeof timer.unref === 'function') timer.unref();
     timers.set(offerId, timer);
-    bus.emit('ride:offer', { offerId, driverId, ride, timeoutS, expiresAt: now() + timeoutS * 1000 });
+    // `serverNow` deixa o celular calcular o tempo restante mesmo com o relógio dele errado.
+    bus.emit('ride:offer', { offerId, driverId, ride, timeoutS, expiresAt: now() + timeoutS * 1000, serverNow: now() });
     return offerId;
   }
 
@@ -134,6 +142,7 @@ function createDispatcher({ db, bus, rides, now = Date.now, schedule = setTimeou
       ride: rides.getRide(offer.ride_id),
       timeoutS,
       expiresAt: offer.created_at + timeoutS * 1000,
+      serverNow: now(),
     };
   }
 

@@ -2,7 +2,7 @@
 import { createClient } from '/shared/api.js';
 import {
   h, mount, brl, km, toast, run, confirmBox, authScreen, registerSW, dateTime, phoneMask, PAYMENT_PT, beep, unlockSound,
-  icone, botaoTema, carregarMarca, nomeDaMarca, esqueleto,
+  icone, botaoTema, carregarMarca, nomeDaMarca, esqueleto, contatoCentral,
 } from '/shared/ui.js';
 import { criarMapa, criarCamada, criarRota, enquadrar, distanciaKm, minutosAte } from '/shared/mapa.js';
 
@@ -91,6 +91,7 @@ async function montarEstrutura() {
   rota = criarRota(map);
   // Modo de teste (servidor com DEMO_MODE): sem GPS, um toque no mapa define a posição do motoqueiro.
   st.demo = !!cfg.demo;
+  st.central = cfg.support_phone || '';
   if (st.demo) {
     map.on('click', (e) => {
       if (!st.gpsErro && st.pos && !st.posManual) return;
@@ -297,8 +298,10 @@ function abrirOferta() {
 
   let ultimoBip = 0;
   const total = o.timeoutS * 1000;
+  // O prazo é contado a partir da hora do servidor: funciona mesmo se o relógio do celular estiver errado.
+  if (!o.fimLocal) o.fimLocal = Date.now() + Math.min(total, o.expiresAt - (o.serverNow || Date.now()));
   const tick = () => {
-    const resta = Math.max(0, o.expiresAt - Date.now());
+    const resta = Math.max(0, o.fimLocal - Date.now());
     barra.style.transform = `scaleX(${Math.min(1, resta / total)})`;
     segundos.textContent = `${Math.ceil(resta / 1000)} s`;
     if (Date.now() - ultimoBip > 2500) {
@@ -380,7 +383,7 @@ function desenhar() {
 }
 
 const telaEspera = (nomeIcone, titulo, texto) =>
-  h('div', { class: 'pilha' }, h('h2', { class: 'linha-status' }, icone(nomeIcone), titulo), h('p', { class: 'sub' }, texto), h('button', { class: 'btn block', onclick: (e) => run(e.currentTarget, recarregar) }, 'Atualizar'));
+  h('div', { class: 'pilha' }, h('h2', { class: 'linha-status' }, icone(nomeIcone), titulo), h('p', { class: 'sub' }, texto), h('button', { class: 'btn block', onclick: (e) => run(e.currentTarget, recarregar) }, 'Atualizar'), contatoCentral(st.central, 'Olá! Sou motoqueiro e preciso de ajuda com meu cadastro.'));
 
 function telaInicio(d) {
   const alternar = h(

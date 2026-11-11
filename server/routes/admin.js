@@ -1,7 +1,7 @@
 const express = require('express');
 const { AppError } = require('../errors');
 const { getSettings, setSettings } = require('../db');
-const { requireAuth, normalizePhone } = require('../auth');
+const { requireAuth, normalizePhone, hashPassword } = require('../auth');
 const { validCoord, completeRoute } = require('../geo');
 const { calcPrice } = require('../pricing');
 const { ACTIVE } = require('../rides');
@@ -141,6 +141,21 @@ module.exports = function adminRoutes({ db, rides, dispatch, drivers, geo }) {
         .sort((a, b) => b.revenue - a.revenue),
       byDay: [...byDay.values()].sort((a, b) => (a.day < b.day ? -1 : 1)),
     });
+  });
+
+  // Quem esqueceu a senha fala com a central, que define uma nova pelo telefone cadastrado.
+  router.post('/users/password', (req, res) => {
+    const { phone, password } = req.body || {};
+    const clean = normalizePhone(phone);
+    if (!clean) throw new AppError(400, 'Informe o telefone com DDD');
+    if (typeof password !== 'string' || password.length < 6 || password.length > 72) {
+      throw new AppError(400, 'A senha precisa ter pelo menos 6 caracteres');
+    }
+    const user = db.prepare('SELECT id, role, name FROM users WHERE phone = ?').get(clean);
+    if (!user) throw new AppError(404, 'Nenhuma conta com este telefone');
+    if (user.role === 'admin') throw new AppError(403, 'A senha da central é trocada em "Minha senha"');
+    db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hashPassword(password), user.id);
+    res.json({ ok: true, name: user.name, role: user.role });
   });
 
   router.get('/settings', (req, res) => res.json({ settings: getSettings(db) }));

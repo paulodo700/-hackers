@@ -171,7 +171,9 @@ export function authScreen({ client, title, subtitle, allowRegister = true, extr
         minlength: 6,
         autocomplete: registering ? 'new-password' : 'current-password',
       }),
-      submit
+      submit,
+      registering &&
+        h('p', { class: 'aceite' }, 'Ao criar a conta, você concorda com os ', h('a', { href: '/termos.html', target: '_blank', rel: 'noopener' }, 'Termos de uso e a Política de privacidade'), '.')
     );
     mount(
       root,
@@ -275,3 +277,15 @@ export function esqueleto(n = 3) {
 }
 
 export const minutos = (n) => (n ? `${n} min` : '');
+
+// Botões para falar com a central (telefone e WhatsApp). Sem número configurado, não mostra nada.
+export function contatoCentral(digitos, mensagem = 'Olá! Preciso de ajuda.') {
+  const d = String(digitos || '');
+  if (d.length !== 10 && d.length !== 11) return null;
+  return h(
+    'div',
+    { class: 'row' },
+    h('a', { class: 'btn small', href: `tel:+55${d}` }, icone('telefone'), 'Ligar para a central'),
+    h('a', { class: 'btn small', href: `https://wa.me/55${d}?text=${encodeURIComponent(mensagem)}`, target: '_blank', rel: 'noopener' }, 'WhatsApp')
+  );
+}
