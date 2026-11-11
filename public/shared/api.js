@@ -59,8 +59,8 @@ export function createClient(app) {
   async function enter(path, body) {
     const data = await api(path, { body });
     if (data.user.role !== role) {
-      const where = { passenger: 'do passageiro', driver: 'do motoqueiro', admin: 'da central' }[data.user.role];
-      throw new Error(`Esta conta é ${where}. Abra a tela certa para entrar.`);
+      // Não revela quais outras telas existem.
+      throw new Error('Esta conta não pode entrar por aqui.');
     }
     save(data);
     return data.user;

@@ -66,18 +66,21 @@ Não crie as variáveis `DEMO_MODE`, `PORT` nem `DB_PATH`: elas já estão certa
 2. Clique em **View logs**. Devem aparecer estas linhas:
    - `Acesso da central criado para o telefone ...`
    - `Banco de dados em /data/mototaxi.db`  ← se o caminho for outro, o Passo 3 não foi feito direito.
-3. Abra o link do Passo 5 no navegador. Deve aparecer a tela inicial do Mototáxi com um **cadeado** ao lado do endereço.
+3. Abra o link do Passo 5 no navegador. Deve aparecer a tela do passageiro com um **cadeado** ao lado do endereço.
 
 ## Passo 7 — Testar no celular
 
-1. Abra o link e toque em **Central**. Entre com o telefone e a senha do Passo 4.
+Cada público tem o seu endereço, e nenhuma tela mostra o link das outras: o link puro é do **passageiro**;
+com `/motoqueiro/` no fim é do **motoqueiro**; com `/central/` no fim é da **central**.
+
+1. Abra o link com `/central/` no fim. Entre com o telefone e a senha do Passo 4.
 2. Vá em **Configurações**: escreva o nome da cidade, toque em **Usar minha localização**
    (ou toque no mapa no centro da cidade) e em **Salvar configurações**.
-3. Em outro celular (ou em outra aba), abra o link e toque em **Sou motoqueiro** → **Não tem conta? Criar agora**.
+3. Em outro celular (ou em outra aba), abra o link com `/motoqueiro/` no fim e toque em **Não tem conta? Criar agora**.
    Preencha e crie. Vai aparecer "Cadastro em análise".
 4. Volte à **Central** → **Motoqueiros** → **Aprovar**.
 5. No celular do motoqueiro, permita o uso da **localização** quando o navegador pedir e toque em **Ficar online**.
-6. Em outro celular, abra o link, toque em **Quero uma corrida**, crie a conta, permita a localização,
+6. Em outro celular, abra o link puro, toque em **Não tem conta? Criar agora**, crie a conta, permita a localização,
    digite o destino (ou toque no mapa) e toque em **Pedir mototáxi**.
 7. O celular do motoqueiro toca e mostra a corrida. Aceite e siga os botões até **Finalizar**.
 
@@ -89,7 +92,8 @@ Quando voltar, entre de novo com a mesma conta. Se entrar, o banco está salvo d
 - **Android (Chrome):** abra o link → menu ⋮ → **Adicionar à tela inicial** / **Instalar app**.
 - **iPhone (Safari):** abra o link → botão de compartilhar → **Adicionar à Tela de Início**.
 
-Mande para os motoqueiros o link terminando em `/motoqueiro/` e para os passageiros o link terminando em `/passageiro/`.
+Divulgue para os passageiros o link puro. Mande o link terminando em `/motoqueiro/` só para os motoqueiros,
+e guarde o link terminando em `/central/` só para você e os atendentes.
 
 ## Atualizações
 

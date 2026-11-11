@@ -59,7 +59,10 @@ async function clickMap(page, dx, dy) {
 
 try {
   const home = await open('inicio', '/', phone);
-  await see(home, 'Quero uma corrida');
+  // O endereço principal abre direto o passageiro, sem mostrar as outras telas.
+  await see(home, 'Peça sua moto em poucos toques');
+  if (!home.url().endsWith('/passageiro/')) throw new Error('A raiz deveria abrir a tela do passageiro');
+  if (await home.getByText(/central|motoqueiro/i).count()) throw new Error('A tela do passageiro cita as outras telas');
   await shot(home, '01-inicio');
 
   // Motoqueiro se cadastra e fica aguardando aprovação.

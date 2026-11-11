@@ -40,14 +40,22 @@ São duas etapas: primeiro fazer funcionar no computador (Parte 1), depois abrir
 
 ### Passo 5 — Testar no próprio computador
 
-1. Abra o navegador (Chrome ou Edge) e digite: `localhost:3000`
-2. Deve aparecer a tela inicial do Mototáxi.
-3. Clique em **Central** e entre com o telefone e a senha do Passo 3.
+Cada público tem o seu endereço. Nenhuma tela mostra o link das outras:
+
+| Tela | Endereço no seu computador |
+|---|---|
+| Passageiro | `localhost:3000` (ou `localhost:3000/passageiro/`) |
+| Motoqueiro | `localhost:3000/motoqueiro/` |
+| Central | `localhost:3000/central/` |
+
+1. Abra o navegador (Chrome ou Edge) e digite: `localhost:3000/central/`
+2. Deve aparecer a tela de entrada da Central.
+3. Entre com o telefone e a senha do Passo 3.
 4. Vá em **Configurações**, escreva o nome da cidade, clique no mapa no centro da cidade e em **Salvar configurações**.
-5. Abra outra aba em `localhost:3000`, clique em **Sou motoqueiro** → **Não tem conta? Criar agora** e crie a conta.
+5. Abra outra aba em `localhost:3000/motoqueiro/`, clique em **Não tem conta? Criar agora** e crie a conta.
 6. Volte à aba da **Central** → **Motoqueiros** → **Aprovar**.
 7. Na aba do motoqueiro, permita a localização quando o navegador pedir e clique em **Ficar online**.
-8. Abra uma terceira aba, clique em **Quero uma corrida**, crie a conta, marque o destino no mapa e clique em **Pedir mototáxi**.
+8. Abra uma terceira aba em `localhost:3000`, clique em **Não tem conta? Criar agora**, crie a conta, marque o destino no mapa e clique em **Pedir mototáxi**.
 9. A aba do motoqueiro mostra a corrida. Aceite e siga os botões até **Finalizar**.
 
 Se tudo isso funcionou, o sistema está certo. Falta só abrir para os celulares.
@@ -68,7 +76,8 @@ Serve para testar com alguns celulares. **O link muda toda vez que você fecha a
 3. Mude o nome dele para **cloudflared.exe** e coloque dentro da pasta `C:\mototaxi\windows`.
 4. Com o **2-iniciar.bat** aberto, dê dois cliques em **3-link-da-internet.bat**.
 5. Depois de alguns segundos aparece um endereço parecido com `https://alguma-coisa.trycloudflare.com`.
-6. Abra esse endereço no celular. Deve aparecer o Mototáxi com o cadeado.
+6. Abra esse endereço no celular. Deve aparecer a tela do passageiro com o cadeado.
+   Para o motoqueiro, acrescente `/motoqueiro/` no fim do endereço; para a central, `/central/`.
 7. Repita o teste da Parte 1 usando celulares de verdade: um como motoqueiro, outro como passageiro.
 
 ### Opção B — Link fixo (para uso de verdade)

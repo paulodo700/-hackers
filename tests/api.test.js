@@ -81,7 +81,16 @@ test('cadastro, login e permissões', async (t) => {
 
   assert.deepEqual((await s.call('/api/health')).body, { ok: true });
   // O mapa (OpenStreetMap) bloqueia sites que escondem a própria identificação.
-  const page = await fetch(s.base + '/');
+  // O endereço principal leva direto ao passageiro; nada aponta para as outras telas.
+  const root = await fetch(s.base + '/', { redirect: 'manual' });
+  assert.equal(root.status, 302);
+  assert.equal(root.headers.get('location'), '/passageiro/');
+  const passengerHtml = await (await fetch(s.base + '/passageiro/')).text();
+  assert.ok(!/central|motoqueiro/i.test(passengerHtml.replace(/<title>.*?<\/title>/, '')));
+  assert.equal((await fetch(s.base + '/central/')).headers.get('x-robots-tag'), 'noindex, nofollow');
+  assert.equal((await fetch(s.base + '/motoqueiro/')).headers.get('x-robots-tag'), 'noindex, nofollow');
+  assert.equal((await fetch(s.base + '/passageiro/')).headers.get('x-robots-tag'), null);
+  const page = await fetch(s.base + '/passageiro/');
   assert.equal(page.headers.get('referrer-policy'), 'strict-origin-when-cross-origin');
   const cfg = await s.call('/api/public/config');
   assert.equal(cfg.status, 200);

@@ -45,6 +45,14 @@ function createApp(deps) {
   app.use('/api/geo', require('./routes/geo')(deps));
   app.use('/api', (req, res, next) => next(new AppError(404, 'Rota não encontrada')));
 
+  // O endereço principal abre direto a tela do passageiro. As telas do motoqueiro (/motoqueiro/) e da
+  // central (/central/) não têm link em lugar nenhum: só entra quem recebe o endereço.
+  app.get('/', (req, res) => res.redirect(302, '/passageiro/'));
+  app.use(['/motoqueiro', '/central'], (req, res, next) => {
+    res.setHeader('X-Robots-Tag', 'noindex, nofollow'); // não aparecer em buscadores
+    next();
+  });
+
   // Biblioteca do mapa servida pelo próprio servidor (sem depender de CDN).
   app.use(
     '/vendor/leaflet',

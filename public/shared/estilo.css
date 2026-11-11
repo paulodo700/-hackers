@@ -108,26 +108,6 @@ input::placeholder { color: #9a9993; }
 .brand h1 { font-size: 1.6rem; margin-top: 10px; letter-spacing: -0.02em; }
 .brand p { color: var(--cinza); }
 
-/* Página inicial */
-.inicio { min-height: 100%; background: var(--preto); color: #fff; display: flex; flex-direction: column; }
-.inicio header { padding: 44px 24px 28px; max-width: 560px; width: 100%; margin: 0 auto; }
-.inicio header img { border-radius: 18px; }
-.inicio h1 { font-size: clamp(2rem, 8vw, 2.8rem); line-height: 1.05; letter-spacing: -0.03em; margin-top: 18px; }
-.inicio h1 em { font-style: normal; color: var(--amarelo); }
-.inicio header p { color: #c9c8c2; margin-top: 10px; font-size: 1.05rem; }
-.inicio nav { flex: 1; background: var(--fundo); color: var(--tinta); border-radius: 28px 28px 0 0; padding: 24px 20px 32px; }
-.inicio nav > div { max-width: 520px; margin: 0 auto; display: grid; gap: 12px; }
-.acesso {
-  display: flex; align-items: center; gap: 16px; padding: 18px; border-radius: 18px;
-  background: var(--branco); color: inherit; text-decoration: none; box-shadow: 0 1px 0 var(--linha);
-}
-.acesso.destaque { background: var(--amarelo); }
-.acesso .emoji { font-size: 2rem; width: 56px; height: 56px; display: grid; place-items: center; border-radius: 14px; background: rgba(0, 0, 0, 0.07); flex: none; }
-.acesso strong { display: block; font-size: 1.15rem; }
-.acesso span { color: rgba(0, 0, 0, 0.66); font-size: 0.92rem; }
-.acesso::after { content: '›'; margin-left: auto; font-size: 1.8rem; opacity: 0.5; }
-.inicio .dica { text-align: center; font-size: 0.85rem; color: var(--cinza); margin-top: 8px; }
-
 /* Apps de celular: mapa em cima, painel embaixo */
 .app { height: 100dvh; display: flex; flex-direction: column; max-width: 560px; margin: 0 auto; background: var(--fundo); position: relative; }
 .topo {

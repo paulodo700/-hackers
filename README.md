@@ -4,9 +4,12 @@ Sistema de mototáxi para uma cidade, no estilo dos apps de corrida. São três 
 
 | Tela | Endereço | Quem usa |
 |---|---|---|
-| **Passageiro** | `/passageiro/` | Pede a moto, vê o preço antes, acompanha no mapa, avalia |
+| **Passageiro** | `/` ou `/passageiro/` | Pede a moto, vê o preço antes, acompanha no mapa, avalia |
 | **Motoqueiro** | `/motoqueiro/` | Fica online, recebe a corrida com som, aceita e conduz |
 | **Central** | `/central/` | Mapa ao vivo, lança corrida de quem ligou, aprova motoqueiros, relatórios, preços |
+
+Cada público só vê a própria tela: o endereço principal abre o passageiro, e as telas do motoqueiro e da central
+não têm link em lugar nenhum (só entra quem recebe o endereço e tem conta).
 
 Funciona no navegador do celular e pode ser instalado como aplicativo ("Adicionar à tela inicial").
 
@@ -20,7 +23,7 @@ cp .env.example .env      # depois abra o .env e troque o telefone e a senha da 
 npm start
 ```
 
-Abra `http://localhost:3000`. O primeiro acesso da central é o telefone e a senha que você colocou no `.env`
+Abra `http://localhost:3000/central/`. O primeiro acesso da central é o telefone e a senha que você colocou no `.env`
 (`ADMIN_PHONE` e `ADMIN_PASSWORD`).
 
 ### Primeiros passos

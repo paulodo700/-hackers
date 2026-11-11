@@ -179,8 +179,7 @@ export function authScreen({ client, title, subtitle, allowRegister = true, extr
           'button',
           { class: 'btn link', onclick: () => ((mode = registering ? 'login' : 'register'), render()) },
           registering ? 'Já tenho conta. Entrar' : 'Não tem conta? Criar agora'
-        ),
-      h('a', { class: 'btn link small', href: '/' }, 'Voltar ao início')
+        )
     );
   }
   render();

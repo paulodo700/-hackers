@@ -13,6 +13,8 @@
 ## Sobre o projeto
 
 - Sistema web com três telas: `/passageiro/`, `/motoqueiro/`, `/central/`. Detalhes no `README.md`.
+- A pedido do dono (11/11/2026), não existe página inicial com os três acessos: `/` abre o passageiro e nenhuma
+  tela pode ter link ou texto que revele as outras. Manter assim.
 - Especificação e plano da versão 1 em `docs/superpowers/`.
 - Rodar: `npm install`, criar `.env` a partir de `.env.example`, `npm start` (porta 3000).
 - Testes: `npm test` (unidade e API) e `node tests/e2e.cjs` (navegador, precisa do Playwright).
