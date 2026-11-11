@@ -80,6 +80,9 @@ test('cadastro, login e permissões', async (t) => {
   assert.equal((await s.call('/api/nao-existe')).status, 404);
 
   assert.deepEqual((await s.call('/api/health')).body, { ok: true });
+  // O mapa (OpenStreetMap) bloqueia sites que escondem a própria identificação.
+  const page = await fetch(s.base + '/');
+  assert.equal(page.headers.get('referrer-policy'), 'strict-origin-when-cross-origin');
   const cfg = await s.call('/api/public/config');
   assert.equal(cfg.status, 200);
   assert.ok(cfg.body.city_name);

@@ -22,6 +22,7 @@ export function criarMapa(el, center, zoom = 15, { animado = true } = {}) {
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
     attribution: '© OpenStreetMap',
+    referrerPolicy: 'strict-origin-when-cross-origin', // o OpenStreetMap bloqueia pedidos sem identificação
   }).addTo(map);
   L.control.zoom({ position: 'topright' }).addTo(map);
   // O painel de baixo muda de altura conforme a etapa: o mapa acompanha e mantém os pontos à vista.

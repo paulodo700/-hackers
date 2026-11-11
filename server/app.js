@@ -13,7 +13,9 @@ function createApp(deps) {
 
   app.use((req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.setHeader('Referrer-Policy', 'same-origin');
+    // Envia só o endereço do site (sem o caminho) para serviços de fora. O mapa do OpenStreetMap
+    // exige essa identificação e bloqueia quem não manda.
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
     if (!config.demo) res.setHeader('X-Frame-Options', 'DENY');
     // Só roda código vindo do próprio servidor: barra scripts injetados.
     res.setHeader(
