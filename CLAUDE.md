@@ -49,12 +49,13 @@
 - Versão 4 (12/11/2026): endereços com número (`server/places.js`, `searchAddress` em `server/geo.js`). Busca
   aproximada marca `approx`; posição só vira "exata" (`precise`) por toque no mapa, GPS, endereço exato ou local
   conhecido. Locais aprendem com corridas concluídas. Serviço de mapa liberado no ambiente "mototaxi" (hosts
-  nominatim/OSRM/photon). Falta: tela de locais na central.
+  nominatim/OSRM/photon). Tela de Locais na central: feita (versão 6).
 - Versão 5 (12/11/2026): carteira interna (`server/wallet.js`): divisão automática da corrida paga (motorista + comissão
   da central), saques com senha e confirmação da central, webhook de pagamento com segredo (`/api/payments/webhook`).
   O sistema NÃO movimenta dinheiro sozinho: divisão real exige gateway licenciado (ver `docs/PAGAMENTOS-AUTOMATICOS.md`).
   Os acertos antigos de comissão foram removidos; a aba da central agora é **Carteira**.
-- Versão 6 (12/11/2026): integração com o **Asaas** (`server/asaas.js`, `server/asaas-charge.js`). Cobrança Pix com
+- Versão 6 e 7 (12/11/2026): aplicativos separados (botão Instalar em cada tela, `public/shared/instalar.js`; guia
+  `docs/APLICATIVOS.md`). Integração com o **Asaas** (`server/asaas.js`, `server/asaas-charge.js`). Cobrança Pix com
   split para a subconta do motorista (`drivers.asaas_wallet_id`), cliente com CPF do passageiro (`users.cpf`), webhook
   `/api/payments/asaas` (cabeçalho `asaas-access-token`). Ambiente sandbox: https://api-sandbox.asaas.com/v3; produção:
   https://api.asaas.com/v3. Cabeçalho da chave: `access_token`. Com o Asaas ligado, o saque interno é bloqueado.

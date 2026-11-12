@@ -280,7 +280,7 @@ try {
   await see(central, 'Pagamentos a confirmar');
   await shot(central, '15c-central-carteira');
   for (let i = 0; i < 5; i++) {
-    const botao = central.getByRole('button', { name: 'Pix recebido' }).first();
+    const botao = central.getByRole('button', { name: 'Pagamento recebido' }).first();
     if (!(await botao.count())) break;
     await botao.click();
     await see(central, 'Divisão feita.');

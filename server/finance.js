@@ -4,7 +4,6 @@ const { AppError } = require('./errors');
 const { getSettings, setCentralBank } = require('./db');
 const { cleanBank, pixCharge, maskDoc } = require('./pix');
 
-const round2 = (n) => Math.round(n * 100) / 100;
 
 function createFinance({ db, audit }) {
   /* ----- Banco do motoqueiro ----- */

@@ -975,7 +975,7 @@ async function abrirFicha(id) {
   );
 }
 
-/* ---------- Acertos (comissão) ---------- */
+/* ---------- Carteira ---------- */
 
 function telaAcertos() {
   const corpo = h('div', {}, esqueleto(3));
@@ -1017,7 +1017,7 @@ function telaAcertos() {
                       carregar();
                     }),
                 },
-                'Pix recebido'
+                'Pagamento recebido'
               );
               return h('article', { class: 'item' }, h('div', { class: 'cab' }, h('span', {}, h('b', {}, `Corrida #${r.id} · ${r.passenger_name}`), h('br'), h('span', { class: 'muted' }, `${r.driver_name || '—'} · ${dateTime(r.completed_at)}`)), h('strong', {}, brl(r.price))), h('div', { class: 'acoes-linha' }, valor, botao));
             })

@@ -95,7 +95,7 @@ module.exports = function adminRoutes({ db, rides, dispatch, drivers, geo, docs,
     res.json({ driver });
   });
 
-  // Ficha completa do motoqueiro: dados, conta, documentos e comissão em aberto.
+  // Ficha completa do motoqueiro: dados, conta, documentos e saldo na carteira.
   router.get('/drivers/:id', (req, res) => {
     const driver = drivers.get(req.params.id);
     if (!driver) throw new AppError(404, 'Motoqueiro não encontrado');

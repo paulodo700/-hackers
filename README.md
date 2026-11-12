@@ -145,8 +145,7 @@ central faria a transferência à mão. Ver `docs/PAGAMENTOS-AUTOMATICOS.md`.
   valor exato e a chave do motoqueiro. O dinheiro não passa pela central.
 - **Cadastro do motoqueiro com documentos:** foto da CNH, do documento da moto e selfie segurando a CNH, mais a
   conta para receber (titular, CPF/CNPJ e chave Pix). A central confere tudo na **ficha do motoqueiro** antes de aprovar.
-- **Acertos de comissão:** o app guarda a comissão de cada corrida, mostra quanto cada motoqueiro deve, gera para
-  ele o Pix para a conta da central e a central confirma o recebimento.
+- **Carteira:** o app guarda a comissão de cada corrida e mostra o saldo de cada motorista (veja a versão 5 abaixo).
 - **Conta da central:** cadastrada em Configurações → *Minha conta para receber*.
 - **Segurança:** mudar conta bancária exige a senha; fotos de documentos só abrem com o login da central;
   registro de atividades com tudo que mexe em dinheiro, senha e cadastro.
