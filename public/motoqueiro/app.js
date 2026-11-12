@@ -6,6 +6,7 @@ import {
 } from '/shared/ui.js';
 import { criarMenu, abrirPerfil, abrirAjuda, abrirPix, formularioBanco, reduzirFoto, janela } from '/shared/menu.js';
 import { ativarAvisos } from '/shared/avisos.js';
+import { instalar, jaInstalado } from '/shared/instalar.js';
 import { criarMapa, criarCamada, criarRota, enquadrar, distanciaKm, minutosAte } from '/shared/mapa.js';
 
 const client = createClient('motoqueiro');
@@ -90,6 +91,7 @@ async function montarEstrutura() {
       st.cfg.d_earnings && { icone: 'carteira', rotulo: 'Ganhos', atual: st.aba === 'ganhos', acao: () => trocarAba('ganhos') },
       { icone: 'documento', rotulo: 'Documentos e conta', atual: st.aba === 'cadastro', acao: () => trocarAba('cadastro') },
       { icone: 'ajuda', rotulo: 'Ativar avisos', acao: () => run(null, () => ativarAvisos(client)) },
+      !jaInstalado() && { icone: 'mais', rotulo: 'Instalar aplicativo', acao: () => instalar('Mototáxi Motoqueiro') },
       { icone: 'usuario', rotulo: 'Meu perfil', acao: () => abrirPerfil(client, () => (titulo.textContent = client.user.name)) },
       st.cfg.d_support && st.central && { icone: 'ajuda', rotulo: 'Falar com a central', acao: () => abrirAjuda(st.central, 'Olá! Sou motoqueiro e preciso de ajuda.') },
       st.cfg.d_terms && { icone: 'documento', rotulo: 'Termos e privacidade', href: '/termos.html' },

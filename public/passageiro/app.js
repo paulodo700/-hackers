@@ -6,6 +6,7 @@ import {
 } from '/shared/ui.js';
 import { criarMenu, abrirPerfil, abrirAjuda, abrirPix } from '/shared/menu.js';
 import { ativarAvisos } from '/shared/avisos.js';
+import { instalar, jaInstalado } from '/shared/instalar.js';
 import { criarMapa, criarCamada, criarRota, enquadrar, ondeEstou, campoEndereco, minutosAte, enderecoDoPonto } from '/shared/mapa.js';
 
 const client = createClient('passageiro');
@@ -74,6 +75,7 @@ async function montarEstrutura() {
       { icone: 'local', rotulo: 'Pedir corrida', atual: st.aba === 'pedir', acao: () => trocarAba('pedir') },
       st.cfg.p_history && { icone: 'relogio', rotulo: 'Histórico', atual: st.aba === 'historico', acao: () => trocarAba('historico') },
       { icone: 'ajuda', rotulo: 'Ativar avisos', acao: () => run(null, () => ativarAvisos(client)) },
+      !jaInstalado() && { icone: 'mais', rotulo: 'Instalar aplicativo', acao: () => instalar('Mototáxi') },
       { icone: 'usuario', rotulo: 'Meu perfil', acao: () => abrirPerfil(client, () => (titulo.textContent = `Olá, ${client.user.name.split(' ')[0]}`)) },
       st.cfg.p_support && st.central && { icone: 'ajuda', rotulo: 'Falar com a central', acao: () => abrirAjuda(st.central, 'Olá! Sou passageiro e preciso de ajuda.') },
       st.cfg.p_terms && { icone: 'documento', rotulo: 'Termos e privacidade', href: '/termos.html' },

@@ -6,6 +6,7 @@ import {
 } from '/shared/ui.js';
 import { criarMapa, criarCamada, criarRota, enquadrar, campoEndereco, ondeEstou, removerMapa, enderecoDoPonto } from '/shared/mapa.js';
 import { janela, formularioBanco } from '/shared/menu.js';
+import { instalar, jaInstalado } from '/shared/instalar.js';
 
 const client = createClient('central');
 const root = document.getElementById('root');
@@ -116,7 +117,7 @@ function desenharMenu() {
         id === 'motoqueiros' && pendentes > 0 && h('span', { class: 'badge', 'aria-label': `${pendentes} aguardando aprovação` }, pendentes)
       )
     ),
-    h('div', { class: 'fim' }, botaoTema({ comTexto: true, classe: '' }), h('button', { onclick: () => client.logout() }, icone('sair'), 'Sair'))
+    h('div', { class: 'fim' }, !jaInstalado() && h('button', { onclick: () => instalar('Mototáxi Central') }, icone('mais'), 'Instalar aplicativo'), botaoTema({ comTexto: true, classe: '' }), h('button', { onclick: () => client.logout() }, icone('sair'), 'Sair'))
   );
 }
 
