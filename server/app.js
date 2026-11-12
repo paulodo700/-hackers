@@ -3,6 +3,7 @@ const express = require('express');
 const { AppError } = require('./errors');
 const { getSettings, publicSettings } = require('./db');
 const config = require('./config');
+const auth = require('./auth');
 
 // Monta o servidor HTTP: API + as três telas (arquivos estáticos).
 function createApp(deps) {
@@ -47,6 +48,17 @@ function createApp(deps) {
     const body = req.body || {};
     if (body.status !== 'paid') return res.json({ ok: true, ignored: true });
     deps.wallet.markPaid(body.ride_id, { amount: body.amount, provider: 'gateway', ref: String(body.provider_ref || '').slice(0, 60) });
+    res.json({ ok: true });
+  });
+
+  // Notificações: chave pública e cadastro do aparelho (só para quem entrou).
+  app.get('/api/push/key', (req, res) => res.json({ key: deps.push.publicKey() }));
+  app.post('/api/push/subscribe', auth.requireAuth(db), (req, res) => {
+    deps.push.subscribe(req.user.id, req.body);
+    res.status(201).json({ ok: true });
+  });
+  app.post('/api/push/unsubscribe', auth.requireAuth(db), (req, res) => {
+    deps.push.unsubscribe(req.user.id, req.body && req.body.endpoint);
     res.json({ ok: true });
   });
 

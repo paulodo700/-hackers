@@ -11,7 +11,7 @@ function createDriverService({ db, bus, now = Date.now }) {
   function get(id) {
     const row = db
       .prepare(
-        `SELECT u.id, u.name, u.phone, u.created_at, d.plate, d.moto_model, d.status, d.online, d.lat, d.lng, d.last_seen
+        `SELECT u.id, u.name, u.phone, u.created_at, d.plate, d.moto_model, d.status, d.online, d.lat, d.lng, d.last_seen, d.cnh_expires
            FROM users u JOIN drivers d ON d.user_id = u.id WHERE u.id = ?`
       )
       .get(Number(id));
@@ -33,7 +33,7 @@ function createDriverService({ db, bus, now = Date.now }) {
   function list() {
     return db
       .prepare(
-        `SELECT u.id, u.name, u.phone, u.created_at, d.plate, d.moto_model, d.status, d.online, d.lat, d.lng, d.last_seen
+        `SELECT u.id, u.name, u.phone, u.created_at, d.plate, d.moto_model, d.status, d.online, d.lat, d.lng, d.last_seen, d.cnh_expires
            FROM users u JOIN drivers d ON d.user_id = u.id ORDER BY d.status = 'pending' DESC, u.name`
       )
       .all()

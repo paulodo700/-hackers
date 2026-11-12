@@ -124,6 +124,14 @@ CREATE TABLE IF NOT EXISTS withdrawals (
   admin_id INTEGER,
   note TEXT NOT NULL DEFAULT ''
 );
+CREATE TABLE IF NOT EXISTS push_subs (
+  endpoint TEXT PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  p256dh TEXT NOT NULL,
+  auth TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS push_user ON push_subs(user_id);
 CREATE TABLE IF NOT EXISTS places (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL,
@@ -229,11 +237,15 @@ function openDb(file) {
   if (!rideCols.has('duration_min')) db.exec('ALTER TABLE rides ADD COLUMN duration_min REAL');
   if (!rideCols.has('route')) db.exec('ALTER TABLE rides ADD COLUMN route TEXT');
   const userCols = new Set(db.prepare('PRAGMA table_info(users)').all().map((c) => c.name));
+  for (const col of ['email', 'emergency_name', 'emergency_phone']) {
+    if (!userCols.has(col)) db.exec(`ALTER TABLE users ADD COLUMN ${col} TEXT NOT NULL DEFAULT ''`);
+  }
   if (!userCols.has('blocked')) db.exec('ALTER TABLE users ADD COLUMN blocked INTEGER NOT NULL DEFAULT 0');
   for (const [col, type] of [['commission', 'REAL'], ['settled_at', 'TEXT'], ['settlement_id', 'INTEGER'], ['origin_precise', 'INTEGER'], ['dest_precise', 'INTEGER'], ['payment_status', "TEXT NOT NULL DEFAULT 'pending'"], ['paid_at', 'TEXT'], ['payment_ref', 'TEXT'], ['wallet_at', 'TEXT']]) {
     if (!rideCols.has(col)) db.exec(`ALTER TABLE rides ADD COLUMN ${col} ${type}`);
   }
   const driverCols = new Set(db.prepare('PRAGMA table_info(drivers)').all().map((c) => c.name));
+  if (!driverCols.has('cnh_expires')) db.exec("ALTER TABLE drivers ADD COLUMN cnh_expires TEXT NOT NULL DEFAULT ''");
   if (!driverCols.has('pay_notice_at')) db.exec('ALTER TABLE drivers ADD COLUMN pay_notice_at TEXT');
   const insert = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');
   for (const [key, value] of Object.entries(DEFAULTS)) insert.run(key, String(value));

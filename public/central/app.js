@@ -15,6 +15,7 @@ const ABAS = [
   ['nova', 'mais', 'Nova corrida'],
   ['motoqueiros', 'moto', 'Motoqueiros'],
   ['passageiros', 'pessoas', 'Passageiros'],
+  ['locais', 'local', 'Locais'],
   ['corridas', 'lista', 'Corridas'],
   ['acertos', 'carteira', 'Carteira'],
   ['relatorios', 'grafico', 'Relatórios'],
@@ -897,6 +898,15 @@ function telaPersonalizar() {
 
 const TIPO_PIX = { telefone: 'Telefone', cpf: 'CPF', cnpj: 'CNPJ', email: 'E-mail', aleatoria: 'Chave aleatória' };
 
+// Aviso de CNH vencida ou perto de vencer (30 dias).
+function cnhTexto(data) {
+  if (!data) return 'Não informada';
+  const dias = Math.round((Date.parse(data) - Date.now()) / 86400000);
+  if (dias < 0) return `${data} · VENCIDA`;
+  if (dias <= 30) return `${data} · vence em ${dias} dia${dias === 1 ? '' : 's'}`;
+  return data;
+}
+
 async function abrirFicha(id) {
   const corpo = h('div', {}, esqueleto(2));
   const j = janela('Ficha do motoqueiro', corpo);
@@ -947,7 +957,7 @@ async function abrirFicha(id) {
     h(
       'div',
       { class: 'ficha-grade' },
-      h('dl', {}, item('Nome', d.name), item('Telefone', phoneMask(d.phone)), item('Moto', `${d.moto_model} · ${d.plate}`), item('Cadastro', dateTime(d.created_at)), item('Situação', SITUACAO[d.status][0])),
+      h('dl', {}, item('Nome', d.name), item('Telefone', phoneMask(d.phone)), item('Moto', `${d.moto_model} · ${d.plate}`), item('Validade da CNH', cnhTexto(d.cnh_expires)), item('Cadastro', dateTime(d.created_at)), item('Situação', SITUACAO[d.status][0])),
       h(
         'dl',
         {},
@@ -1158,7 +1168,108 @@ function cartaoRegistro() {
   );
 }
 
+/* ---------- Locais da cidade ---------- */
+
+// Pontos que a busca de endereço conhece com exatidão (rodoviária, hospital, praça...).
+function telaLocais() {
+  let pos = null;
+  const nome = h('input', { maxlength: 120, placeholder: 'Ex.: Rodoviária, Hospital Regional, Praça da Matriz', 'aria-label': 'Nome do local' });
+  const busca = h('input', { type: 'search', placeholder: 'Buscar local', 'aria-label': 'Buscar local' });
+  const contagem = h('p', { class: 'muted', style: 'margin:-4px 0 12px' });
+  const lista = h('div', { class: 'lista' }, esqueleto(2));
+  const dica = h('p', { class: 'dica-mapa' }, 'Clique no mapa exatamente no lugar. Depois, dê um nome e salve.');
+  const salvar = h('button', { class: 'btn primary block', type: 'button', disabled: true }, 'Salvar local');
+  const mapaEl = h('div', { class: 'mapa' });
+  const marcar = () => (salvar.disabled = !pos || nome.value.trim().length < 3);
+  nome.addEventListener('input', marcar);
+
+  mount(
+    conteudo,
+    h('h2', {}, 'Locais da cidade'),
+    h('p', { class: 'muted', style: 'margin:-8px 0 16px' }, 'Pontos conhecidos com a posição exata. Quando um passageiro digitar o nome, o app acha o lugar certo na hora.'),
+    h(
+      'div',
+      { class: 'novo' },
+      h(
+        'form',
+        {
+          class: 'card pilha',
+          onsubmit: (e) => {
+            e.preventDefault();
+            run(salvar, async () => {
+              await client.api('/admin/places', { body: { name: nome.value, lat: pos.lat, lng: pos.lng } });
+              toast('Local salvo.', 'ok');
+              nome.value = '';
+              pos = null;
+              marcar();
+              mapa.setView([st.centro.lat, st.centro.lng], 14);
+              carregar();
+            });
+          },
+        },
+        h('label', { class: 'field' }, h('span', {}, 'Nome do local'), nome),
+        dica,
+        salvar
+      ),
+      mapaEl
+    ),
+    h('h3', { class: 'bloco-titulo' }, 'Cadastrados'),
+    h('div', { class: 'filtros' }, h('label', { class: 'field', style: 'flex:1;max-width:360px' }, busca)),
+    contagem,
+    lista
+  );
+
+  const mapa = criarMapa(mapaEl, st.centro, 14, { animado: false });
+  const camada = criarCamada(mapa);
+  mapa.on('click', (e) => {
+    pos = { lat: e.latlng.lat, lng: e.latlng.lng };
+    camada.set('local', 'destino', pos, 'Novo local');
+    marcar();
+  });
+
+  let timer;
+  busca.addEventListener('input', () => {
+    clearTimeout(timer);
+    timer = setTimeout(carregar, 300);
+  });
+
+  async function carregar() {
+    let v;
+    try {
+      v = await client.api(`/admin/places?${new URLSearchParams({ q: busca.value.trim() })}`);
+    } catch (err) {
+      return mount(lista, h('p', { class: 'vazio-lista' }, err.message));
+    }
+    contagem.textContent = `${v.total} local${v.total === 1 ? '' : 'is'} cadastrado${v.total === 1 ? '' : 's'}.`;
+    if (!v.places.length) return mount(lista, h('p', { class: 'vazio-lista' }, busca.value ? 'Nenhum local com esse nome.' : 'Nenhum local cadastrado ainda.'));
+    mount(
+      lista,
+      v.places.map((p) => {
+        const apagar = h(
+          'button',
+          {
+            class: 'btn small',
+            onclick: async () => {
+              if (!(await confirmBox(`Apagar "${p.name}"?`, 'Apagar'))) return;
+              await run(apagar, () => client.api(`/admin/places/${p.id}`, { method: 'DELETE' }));
+              carregar();
+            },
+          },
+          'Apagar'
+        );
+        return h(
+          'article',
+          { class: 'item' },
+          h('div', { class: 'cab' }, h('span', {}, h('b', {}, p.name), h('br'), h('span', { class: 'muted' }, p.source === 'central' ? 'Cadastrado pela central' : `Aprendido com corridas · usado ${p.uses}×`)), apagar)
+        );
+      })
+    );
+  }
+  carregar();
+  return { sair: () => removerMapa(mapa) };
+}
+
 const TELAS = {
-  vivo: telaVivo, nova: telaNova, motoqueiros: telaMotoqueiros, passageiros: telaPassageiros, corridas: telaCorridas, acertos: telaAcertos,
+  vivo: telaVivo, nova: telaNova, motoqueiros: telaMotoqueiros, passageiros: telaPassageiros, locais: telaLocais, corridas: telaCorridas, acertos: telaAcertos,
   relatorios: telaRelatorios, personalizar: telaPersonalizar, config: telaConfig,
 };

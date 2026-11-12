@@ -7,6 +7,10 @@ const { validCoord } = require('./geo');
 const ACTIVE = ['searching', 'accepted', 'arrived', 'in_progress'];
 const WITH_DRIVER = ['accepted', 'arrived', 'in_progress'];
 const MAX_KM = 80;
+// Passageiro pode cancelar sem custo nos 3 minutos depois do pedido, enquanto busca ou o motorista vem.
+const FREE_CANCEL_MS = 3 * 60 * 1000;
+// Para terminar a corrida, o motorista precisa estar a até 300 m do destino (ou a central confirma).
+const ARRIVE_RADIUS_KM = 0.3;
 
 const now = () => new Date().toISOString();
 const text = (value, max) => String(value ?? '').trim().slice(0, max);
@@ -191,9 +195,12 @@ function createRideService({ db, bus, places = null, wallet = null }) {
       return ride;
     }
 
-    const allowed = isAdmin ? [...ACTIVE, 'no_drivers'] : ['searching', 'accepted', 'arrived'];
+    const allowed = isAdmin ? [...ACTIVE, 'no_drivers'] : ['searching', 'accepted'];
     if (!allowed.includes(row.status)) {
       throw new AppError(409, 'Não é possível cancelar a corrida agora');
+    }
+    if (isOwner && Date.now() - Date.parse(row.created_at) > FREE_CANCEL_MS) {
+      throw new AppError(409, 'O prazo para cancelar pelo aplicativo acabou. Fale com a central.');
     }
     const info = db
       .prepare(
@@ -213,6 +220,16 @@ function createRideService({ db, bus, places = null, wallet = null }) {
     if (action === 'arrive') return step(row, 'accepted', 'arrived', 'arrived_at');
     if (action === 'start') return step(row, 'arrived', 'in_progress', 'started_at');
     if (action === 'complete') {
+      // Só termina perto do destino: a central pode encerrar à mão (ex.: GPS do motorista falhou).
+      if (actor.role !== 'admin') {
+        const pos = db.prepare('SELECT lat, lng FROM drivers WHERE user_id = ?').get(actor.id);
+        if (!pos || pos.lat === null) throw new AppError(409, 'Ative o GPS para finalizar a corrida');
+        const { haversineKm } = require('./geo');
+        const far = haversineKm({ lat: pos.lat, lng: pos.lng }, { lat: row.dest_lat, lng: row.dest_lng });
+        if (far > ARRIVE_RADIUS_KM) {
+          throw new AppError(409, `Você ainda está a ${Math.round(far * 1000)} m do destino. Finalize ao chegar.`);
+        }
+      }
       const done = step(row, 'in_progress', 'completed', 'completed_at');
       // A comissão fica gravada na corrida: mudar a taxa depois não altera o que já foi feito.
       // Se o pagamento já caiu, a carteira divide agora. Senão, divide quando o pagamento for confirmado.

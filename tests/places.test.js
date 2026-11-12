@@ -128,6 +128,7 @@ test('fluxo completo: endereço confirmado numa corrida passa a ser achado com e
   await s.call(`/api/driver/offers/${offer.offerId}/accept`, { token: d.token, body: {} });
   for (const a of ['arrive', 'start']) await s.call(`/api/driver/rides/${ride.id}/${a}`, { token: d.token, body: {} });
   assert.equal((await search('13 de maio 500')).some((r) => r.known), false); // ainda não concluiu
+  await s.call('/api/driver/location', { token: d.token, body: { lat: exact.lat, lng: exact.lng } }); // chegou ao destino exato
   await s.call(`/api/driver/rides/${ride.id}/complete`, { token: d.token, body: {} });
 
   // Depois: o endereço aprendido vem primeiro, exato, e o repetido do mapa some.

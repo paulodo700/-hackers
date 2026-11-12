@@ -138,6 +138,11 @@ test('corrida completa pelo app do passageiro', async (t) => {
   assert.equal((await s.call(`/api/driver/rides/${rideId}/arrive`, { token: d.token, body: {} })).body.ride.status, 'arrived');
   assert.equal((await s.call(`/api/driver/rides/${rideId}/start`, { token: d.token, body: {} })).body.ride.status, 'in_progress');
   assert.equal((await s.call(`/api/rides/${rideId}/cancel`, { token: p.token, body: {} })).status, 409);
+  // Ainda longe do destino: não termina. Depois de chegar, termina.
+  const far = await s.call(`/api/driver/rides/${rideId}/complete`, { token: d.token, body: {} });
+  assert.equal(far.status, 409);
+  assert.match(far.body.error, /ainda está a \d+ m do destino/);
+  await s.call('/api/driver/location', { token: d.token, body: { lat: -10.02, lng: -48.02 } });
   const done = await s.call(`/api/driver/rides/${rideId}/complete`, { token: d.token, body: {} });
   assert.equal(done.body.ride, null);
   assert.equal(done.body.last.status, 'completed');
@@ -195,6 +200,7 @@ test('central: lançar corrida, escolher motoqueiro, relatório e configuraçõe
 
   for (const [d, id] of [[near, auto.body.ride.id], [far, manual.body.ride.id]]) {
     for (const action of ['arrive', 'start', 'complete']) {
+      if (action === 'complete') await s.call('/api/driver/location', { token: d.token, body: { lat: -10.02, lng: -48.02 } });
       const r = await s.call(`/api/driver/rides/${id}/${action}`, { token: d.token, body: {} });
       assert.equal(r.status, 200, `${action} ${JSON.stringify(r.body)}`);
     }

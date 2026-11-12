@@ -54,6 +54,16 @@ async function open(name, url, options) {
   await page.goto(BASE + url);
   return page;
 }
+// Leva a posição do motorista até o destino da corrida atual (ele precisa estar lá para finalizar).
+async function motoristaNoDestino(page) {
+  await page.evaluate(async () => {
+    const sessao = JSON.parse(localStorage.getItem('mototaxi:motoqueiro') || 'null');
+    const h = { Authorization: `Bearer ${sessao.token}`, 'Content-Type': 'application/json' };
+    const estado = await (await fetch('/api/driver/state', { headers: h })).json();
+    if (!estado.ride) return;
+    await fetch('/api/driver/location', { method: 'POST', headers: h, body: JSON.stringify({ lat: estado.ride.dest.lat, lng: estado.ride.dest.lng }) });
+  });
+}
 const phone = { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, permissions: ['geolocation'] };
 const shot = (page, name) => page.screenshot({ path: path.join(shots, `${name}.png`) });
 // Espera o texto aparecer NA TELA (ignora cópias escondidas do mesmo texto).
@@ -205,6 +215,7 @@ try {
   await shot(pass, '10a-passageiro-pix');
   await tap(pass, 'Fechar');
   await shot(moto, '10-motoqueiro-em-viagem');
+  await motoristaNoDestino(moto);
   await tap(moto, 'Finalizar corrida');
   await tap(moto, 'Finalizar');
   await see(moto, 'Receba do passageiro');
@@ -232,8 +243,8 @@ try {
   await tap(pass, 'Abrir menu');
   await pass.getByRole('button', { name: 'Meu perfil' }).click();
   await pass.getByLabel('Seu nome').fill('Maria Souza');
-  await tap(pass, 'Salvar nome');
-  await see(pass, 'Nome atualizado');
+  await tap(pass, 'Salvar meus dados');
+  await see(pass, 'Dados salvos.');
   await shot(pass, '13b-passageiro-perfil');
   await tap(pass, 'Fechar');
   await see(pass, 'Olá, Maria');
@@ -255,6 +266,7 @@ try {
   await central.locator('.item .tag', { hasText: 'Motoqueiro a caminho' }).waitFor();
   await tap(moto, 'Cheguei ao local');
   await tap(moto, 'Iniciar corrida');
+  await motoristaNoDestino(moto);
   await tap(moto, 'Finalizar corrida');
   await tap(moto, 'Finalizar');
   await tap(moto, 'Pronto');

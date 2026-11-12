@@ -11,6 +11,7 @@ const { createAudit } = require('./audit');
 const { createDocs } = require('./docs');
 const { createFinance } = require('./finance');
 const { createPlaces } = require('./places');
+const { createPush } = require('./push');
 const { createWallet } = require('./wallet');
 const { createApp } = require('./app');
 const { attachRealtime } = require('./realtime');
@@ -23,11 +24,16 @@ function buildServer({ dbPath = config.dbPath, geoImpl = geo, docsDir = config.d
   const finance = createFinance({ db, audit });
   const wallet = createWallet({ db, audit, finance });
   const places = createPlaces({ db });
+  const push = createPush({ db, config });
   const rides = createRideService({ db, bus, places, wallet });
   const drivers = createDriverService({ db, bus });
   const dispatch = createDispatcher({ db, bus, rides });
   const docs = createDocs({ db, dir: docsDir });
-  const deps = { db, bus, rides, drivers, dispatch, audit, docs, finance, wallet, places, geo: geo.withSearchCache(geo.withRouteCache(geoImpl)) };
+  // Toda mudança de status da corrida pode virar um aviso para o passageiro, mesmo com o app fechado.
+  bus.on('ride:update', (ride) => {
+    if (ride && ride.passenger_id) push.rideChanged(ride);
+  });
+  const deps = { db, bus, rides, drivers, dispatch, audit, docs, finance, wallet, push, places, geo: geo.withSearchCache(geo.withRouteCache(geoImpl)) };
   const app = createApp(deps);
   const server = http.createServer(app);
   const io = attachRealtime(server, deps);

@@ -3,6 +3,7 @@ const { AppError } = require('../errors');
 const auth = require('../auth');
 
 const { createLimiter } = require('../limit');
+const { normalizePhone } = require('../auth');
 
 function publicUser(u) {
   return { id: u.id, role: u.role, name: u.name, phone: u.phone };
@@ -85,18 +86,41 @@ module.exports = function authRoutes({ db }) {
   });
 
   // Corrigir o próprio nome.
+  // Dados do próprio perfil: nome, e-mail, contato de emergência e, para o motorista, moto e CNH.
   router.put('/profile', auth.requireAuth(db), (req, res) => {
-    const name = String((req.body && req.body.name) || '').replace(/\s+/g, ' ').trim().slice(0, 60);
+    const body = req.body || {};
+    const name = String(body.name ?? req.user.name).replace(/\s+/g, ' ').trim().slice(0, 60);
     if (name.length < 2) throw new AppError(400, 'Informe seu nome');
-    db.prepare('UPDATE users SET name = ? WHERE id = ?').run(name, req.user.id);
-    res.json({ user: { ...req.user, name } });
+    const email = String(body.email ?? '').trim().toLowerCase().slice(0, 80);
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new AppError(400, 'E-mail inválido');
+    const emergencyName = String(body.emergency_name ?? '').replace(/\s+/g, ' ').trim().slice(0, 60);
+    const emergencyPhone = String(body.emergency_phone ?? '').trim();
+    let emergencyDigits = '';
+    if (emergencyPhone) {
+      emergencyDigits = normalizePhone(emergencyPhone) || '';
+      if (!emergencyDigits) throw new AppError(400, 'Telefone de emergência inválido (use DDD + número)');
+    }
+    if (!emergencyName !== !emergencyDigits) throw new AppError(400, 'Preencha o nome e o telefone do contato de emergência');
+    db.transaction(() => {
+      db.prepare('UPDATE users SET name = ?, email = ?, emergency_name = ?, emergency_phone = ? WHERE id = ?').run(name, email, emergencyName, emergencyDigits, req.user.id);
+      if (req.user.role === 'driver') {
+        const plate = String(body.plate ?? '').trim().toUpperCase().slice(0, 10);
+        const model = String(body.moto_model ?? '').trim().slice(0, 40);
+        const cnh = String(body.cnh_expires ?? '').trim();
+        if (cnh && !/^\d{4}-\d{2}-\d{2}$/.test(cnh)) throw new AppError(400, 'Validade da CNH inválida');
+        if (plate && model) db.prepare('UPDATE drivers SET plate = ?, moto_model = ?, cnh_expires = ? WHERE user_id = ?').run(plate, model, cnh, req.user.id);
+        else if (cnh !== undefined) db.prepare('UPDATE drivers SET cnh_expires = ? WHERE user_id = ?').run(cnh, req.user.id);
+      }
+    })();
+    res.json({ user: { ...req.user, name, email, emergency_name: emergencyName, emergency_phone: emergencyDigits } });
   });
 
   router.get('/me', auth.requireAuth(db), (req, res) => {
-    const out = { user: req.user };
+    const full = db.prepare('SELECT email, emergency_name, emergency_phone FROM users WHERE id = ?').get(req.user.id);
+    const out = { user: { ...req.user, ...full } };
     if (req.user.role === 'driver') {
       out.driver = db
-        .prepare('SELECT plate, moto_model, status, online FROM drivers WHERE user_id = ?')
+        .prepare('SELECT plate, moto_model, status, online, cnh_expires FROM drivers WHERE user_id = ?')
         .get(req.user.id);
     }
     res.json(out);

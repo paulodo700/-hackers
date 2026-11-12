@@ -5,6 +5,7 @@ import {
   icone, carregarMarca, nomeDaMarca, sloganDaMarca, esqueleto, contatoCentral,
 } from '/shared/ui.js';
 import { criarMenu, abrirPerfil, abrirAjuda, abrirPix } from '/shared/menu.js';
+import { ativarAvisos } from '/shared/avisos.js';
 import { criarMapa, criarCamada, criarRota, enquadrar, ondeEstou, campoEndereco, minutosAte, enderecoDoPonto } from '/shared/mapa.js';
 
 const client = createClient('passageiro');
@@ -72,6 +73,7 @@ async function montarEstrutura() {
     itens: () => [
       { icone: 'local', rotulo: 'Pedir corrida', atual: st.aba === 'pedir', acao: () => trocarAba('pedir') },
       st.cfg.p_history && { icone: 'relogio', rotulo: 'Histórico', atual: st.aba === 'historico', acao: () => trocarAba('historico') },
+      { icone: 'ajuda', rotulo: 'Ativar avisos', acao: () => run(null, () => ativarAvisos(client)) },
       { icone: 'usuario', rotulo: 'Meu perfil', acao: () => abrirPerfil(client, () => (titulo.textContent = `Olá, ${client.user.name.split(' ')[0]}`)) },
       st.cfg.p_support && st.central && { icone: 'ajuda', rotulo: 'Falar com a central', acao: () => abrirAjuda(st.central, 'Olá! Sou passageiro e preciso de ajuda.') },
       st.cfg.p_terms && { icone: 'documento', rotulo: 'Termos e privacidade', href: '/termos.html' },
@@ -381,18 +383,26 @@ const trajeto = (r) =>
 const valor = (r) =>
   h('div', { class: 'preco' }, h('div', {}, h('b', {}, 'Valor'), h('br'), h('span', { class: 'muted' }, `${PAYMENT_PT[r.payment]} · ${km(r.distance_km)}${r.duration_min ? ` · ${r.duration_min} min` : ''}`)), h('strong', {}, brl(r.price)));
 
+// Cancelar pelo app: grátis nos 3 minutos depois do pedido, enquanto o motorista não chegou.
+const PRAZO_CANCELAR_MS = 3 * 60 * 1000;
 function botaoCancelar(r) {
+  const restante = PRAZO_CANCELAR_MS - (Date.now() - Date.parse(r.created_at));
+  if (r.status === 'arrived' || restante <= 0) {
+    return h('p', { class: 'muted', style: 'text-align:center' }, r.status === 'arrived' ? 'Seu motorista já chegou: não é possível cancelar pelo app.' : 'O prazo para cancelar pelo app acabou. Fale com a central.');
+  }
   const b = h(
     'button',
     {
       class: 'btn ghost block',
       onclick: async () => {
-        if (!(await confirmBox('Cancelar esta corrida?', 'Cancelar corrida'))) return;
+        if (!(await confirmBox('Cancelar esta corrida? Sem custo dentro do prazo.', 'Cancelar corrida'))) return;
         run(b, async () => definirCorrida((await client.api(`/rides/${r.id}/cancel`, { body: {} })).ride));
       },
     },
-    'Cancelar corrida'
+    `Cancelar corrida (grátis por ${Math.ceil(restante / 60000)} min)`
   );
+  // Quando o prazo acaba com a tela aberta, o botão vira aviso.
+  setTimeout(() => b.isConnected && b.replaceWith(h('p', { class: 'muted', style: 'text-align:center' }, 'O prazo para cancelar pelo app acabou. Fale com a central.')), restante);
   return b;
 }
 

@@ -16,7 +16,7 @@ function setup() {
 }
 
 test('caminho feliz: procura → aceita → chegou → em viagem → concluída → avaliada', () => {
-  const { rides, passenger, driver } = setup();
+  const { rides, passenger, driver, db } = setup();
   let ride = rides.createRide(rideInput({ passengerId: passenger.id, distanceKm: 2.6 }));
   assert.equal(ride.status, 'searching');
   assert.equal(ride.price, 8.5);
@@ -30,6 +30,7 @@ test('caminho feliz: procura → aceita → chegou → em viagem → concluída 
   assert.equal(ride.status, 'arrived');
   ride = rides.act(ride.id, 'start', driver);
   assert.equal(ride.status, 'in_progress');
+  db.prepare('UPDATE drivers SET lat = ?, lng = ? WHERE user_id = ?').run(-10.02, -48.02, driver.id); // chegou ao destino
   ride = rides.act(ride.id, 'complete', driver);
   assert.equal(ride.status, 'completed');
   for (const k of ['created_at', 'accepted_at', 'arrived_at', 'started_at', 'completed_at']) assert.ok(ride[k], k);

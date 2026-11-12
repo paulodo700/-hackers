@@ -30,3 +30,37 @@ self.addEventListener('fetch', (event) => {
       .catch(() => caches.match(req).then((hit) => hit || Response.error()))
   );
 });
+
+// Aviso recebido do servidor (ex.: "Seu motorista chegou"), mesmo com o app fechado.
+self.addEventListener('push', (event) => {
+  let dados = { title: 'Mototáxi', body: '', url: '/' };
+  try {
+    if (event.data) dados = { ...dados, ...event.data.json() };
+  } catch (e) {
+    /* mensagem sem formato: mostra o padrão */
+  }
+  event.waitUntil(
+    self.registration.showNotification(dados.title, {
+      body: dados.body,
+      icon: '/icon-passageiro-192.png',
+      badge: '/icon-passageiro-192.png',
+      tag: 'corrida',
+      renotify: true,
+      data: { url: dados.url || '/' },
+    })
+  );
+});
+
+// Tocar no aviso abre (ou traz para frente) o aplicativo.
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const url = (event.notification.data && event.notification.data.url) || '/';
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((lista) => {
+      for (const c of lista) {
+        if ('focus' in c) return c.focus();
+      }
+      return self.clients.openWindow(url);
+    })
+  );
+});

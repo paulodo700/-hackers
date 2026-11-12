@@ -71,30 +71,67 @@ export function criarMenu({ client, papel, itens, aoSair }) {
   return { botao, gaveta, fundo, abrir, fechar };
 }
 
-// Meu perfil: corrigir o nome e trocar a senha.
-export function abrirPerfil(client, aoMudar = () => {}) {
-  const nome = h('input', { maxlength: 60, required: true, value: client.user.name, autocomplete: 'name' });
-  const salvar = h('button', { class: 'btn primary block', type: 'submit' }, 'Salvar nome');
+// Meu perfil: dados pessoais, contato de emergência, moto e CNH (motorista), e troca de senha.
+export async function abrirPerfil(client, aoMudar = () => {}) {
+  const corpo = h('div', {}, h('div', { class: 'linha-status' }, h('div', { class: 'girando' }), 'Carregando seus dados…'));
+  const j = janela('Meu perfil', corpo);
+  let eu;
+  try {
+    eu = await client.api('/auth/me');
+  } catch (err) {
+    return mount(corpo, h('p', {}, err.message));
+  }
+  const u = eu.user;
+  const d = eu.driver || null;
+  const campo = (rotulo, el) => h('label', { class: 'field' }, h('span', {}, rotulo), el);
+  const inp = (valor, attrs = {}) => h('input', { value: valor || '', ...attrs });
+
+  const nome = inp(u.name, { maxlength: 60, required: true, autocomplete: 'name' });
+  const email = inp(u.email, { type: 'email', maxlength: 80, autocomplete: 'email', placeholder: 'seu@email.com' });
+  const contatoNome = inp(u.emergency_name, { maxlength: 60, placeholder: 'Ex.: Mãe, esposa, irmão' });
+  const contatoFone = inp(u.emergency_phone ? phoneMask(u.emergency_phone) : '', { type: 'tel', placeholder: '(00) 00000-0000' });
+  const placa = d ? inp(d.plate, { maxlength: 10, autocapitalize: 'characters' }) : null;
+  const modelo = d ? inp(d.moto_model, { maxlength: 40 }) : null;
+  const cnh = d ? inp(d.cnh_expires, { type: 'date', 'aria-label': 'Validade da CNH' }) : null;
+  const salvar = h('button', { class: 'btn primary block', type: 'submit' }, 'Salvar meus dados');
+
   const atual = h('input', { type: 'password', required: true, autocomplete: 'current-password' });
   const nova = h('input', { type: 'password', minlength: 6, maxlength: 72, required: true, autocomplete: 'new-password' });
   const trocar = h('button', { class: 'btn dark block', type: 'submit' }, 'Trocar senha');
-  janela(
-    'Meu perfil',
-    h('p', { class: 'muted', style: 'margin-bottom:14px' }, `Telefone: ${phoneMask(client.user.phone)}`),
+
+  mount(
+    corpo,
     h(
       'form',
       {
         onsubmit: (e) => {
           e.preventDefault();
           run(salvar, async () => {
-            const { user } = await client.api('/auth/profile', { method: 'PUT', body: { name: nome.value } });
+            const body = {
+              name: nome.value,
+              email: email.value,
+              emergency_name: contatoNome.value,
+              emergency_phone: contatoFone.value,
+            };
+            if (d) Object.assign(body, { plate: placa.value, moto_model: modelo.value, cnh_expires: cnh.value });
+            const { user } = await client.api('/auth/profile', { method: 'PUT', body });
             client.rename(user.name);
-            toast('Nome atualizado.', 'ok');
+            toast('Dados salvos.', 'ok');
             aoMudar();
           });
         },
       },
-      h('label', { class: 'field' }, h('span', {}, 'Seu nome'), nome),
+      h('p', { class: 'muted', style: 'margin-bottom:12px' }, `Telefone: ${phoneMask(u.phone)} (para trocar, fale com a central)`),
+      h('h3', { class: 'bloco-titulo', style: 'margin-top:0' }, 'Dados pessoais'),
+      campo('Seu nome', nome),
+      campo('E-mail (para avisos e recibos)', email),
+      h('h3', { class: 'bloco-titulo' }, 'Contato de emergência'),
+      h('p', { class: 'muted', style: 'margin-bottom:8px' }, 'Quem a central avisa se algo acontecer durante uma corrida.'),
+      h('div', { class: 'duas' }, campo('Nome', contatoNome), campo('Telefone', contatoFone)),
+      d && h('h3', { class: 'bloco-titulo' }, 'Moto e habilitação'),
+      d && h('div', { class: 'duas' }, campo('Placa', placa), campo('Modelo da moto', modelo)),
+      d && campo('Validade da CNH', cnh),
+      d && h('p', { class: 'muted' }, 'A central é avisada quando a CNH estiver perto de vencer.'),
       salvar
     ),
     h(
@@ -112,11 +149,13 @@ export function abrirPerfil(client, aoMudar = () => {}) {
           });
         },
       },
-      h('label', { class: 'field' }, h('span', {}, 'Senha atual'), atual),
-      h('label', { class: 'field' }, h('span', {}, 'Nova senha (mínimo 6)'), nova),
+      h('h3', { class: 'bloco-titulo', style: 'margin-top:0' }, 'Trocar senha'),
+      campo('Senha atual', atual),
+      campo('Nova senha (mínimo 6)', nova),
       trocar
     )
   );
+  return j;
 }
 
 // Falar com a central.

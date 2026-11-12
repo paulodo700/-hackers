@@ -14,7 +14,9 @@ async function fullRide(s, passenger, driver, payment = 'pix') {
   const ride = (await s.call('/api/rides', { token: passenger.token, body: { origin: O, dest: D, payment } })).body.ride;
   const offer = (await s.call('/api/driver/state', { token: driver.token })).body.offer;
   await s.call(`/api/driver/offers/${offer.offerId}/accept`, { token: driver.token, body: {} });
-  for (const a of ['arrive', 'start', 'complete']) await s.call(`/api/driver/rides/${ride.id}/${a}`, { token: driver.token, body: {} });
+  for (const a of ['arrive', 'start']) await s.call(`/api/driver/rides/${ride.id}/${a}`, { token: driver.token, body: {} });
+  await s.call('/api/driver/location', { token: driver.token, body: { lat: -10.02, lng: -48.02 } }); // chegou ao destino
+  await s.call(`/api/driver/rides/${ride.id}/complete`, { token: driver.token, body: {} });
   return ride.id;
 }
 
@@ -112,6 +114,8 @@ test('Pix da corrida vai para a conta do motoqueiro', async (t) => {
   assert.equal((await s.call(`/api/rides/${ride.id}/pix`, { token: other.token })).status, 404);
 
   // Corrida em dinheiro não tem Pix.
+  await s.call('/api/driver/location', { token: d.token, body: { lat: -10.02, lng: -48.02 } });
+  await s.call('/api/driver/location', { token: d.token, body: { lat: -10.02, lng: -48.02 } });
   await s.call(`/api/driver/rides/${ride.id}/complete`, { token: d.token, body: {} });
   const cashId = await fullRide(s, p, d, 'cash');
   assert.equal((await s.call(`/api/rides/${cashId}/pix`, { token: p.token })).status, 409);

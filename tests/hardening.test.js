@@ -229,7 +229,9 @@ test('central: lista passageiros, bloqueia e vê os números dos motoqueiros', a
   const ride = (await s.call('/api/rides', { token: maria.token, body: { origin: O, dest: D, payment: 'cash' } })).body.ride;
   const offer = (await s.call('/api/driver/state', { token: d.token })).body.offer;
   await s.call(`/api/driver/offers/${offer.offerId}/accept`, { token: d.token, body: {} });
-  for (const a of ['arrive', 'start', 'complete']) await s.call(`/api/driver/rides/${ride.id}/${a}`, { token: d.token, body: {} });
+  for (const a of ['arrive', 'start']) await s.call(`/api/driver/rides/${ride.id}/${a}`, { token: d.token, body: {} });
+  await s.call('/api/driver/location', { token: d.token, body: { lat: -10.02, lng: -48.02 } });
+  await s.call(`/api/driver/rides/${ride.id}/complete`, { token: d.token, body: {} });
   await s.call(`/api/rides/${ride.id}/rate`, { token: maria.token, body: { rating: 4 } });
 
   const list = await s.call('/api/admin/passengers', { token: adm });
@@ -252,4 +254,44 @@ test('central: lista passageiros, bloqueia e vê os números dos motoqueiros', a
   assert.match(denied.body.error, /bloqueada/);
   await s.call(`/api/admin/passengers/${maria.user.id}/block`, { token: adm, body: { blocked: false } });
   assert.equal((await s.call('/api/rides', { token: maria.token, body: { origin: O, dest: D, payment: 'cash' } })).status, 201);
+});
+
+test('cancelamento pelo passageiro: grátis só nos 3 minutos depois do pedido, nunca depois de embarcar', async (t) => {
+  const s = await startServer();
+  t.after(() => s.close());
+  const p = await s.register('passenger', 'Maria', '11988887777');
+  const d = await s.approvedDriver('João', '11955554444');
+  const O = { lat: -10, lng: -48 };
+  const D = { lat: -10.02, lng: -48.02 };
+  const ride = (await s.call('/api/rides', { token: p.token, body: { origin: O, dest: D, payment: 'cash' } })).body.ride;
+  // Dentro dos 3 minutos: cancela normalmente (procurando).
+  const c1 = await s.call(`/api/rides/${ride.id}/cancel`, { token: p.token, body: { reason: 'mudei de ideia' } });
+  assert.equal(c1.status, 200);
+  assert.equal(c1.body.ride.status, 'cancelled');
+
+  // Motorista chegou e a corrida já começou: passageiro não cancela pelo app.
+  const r2 = (await s.call('/api/rides', { token: p.token, body: { origin: O, dest: D, payment: 'cash' } })).body.ride;
+  const offer = (await s.call('/api/driver/state', { token: d.token })).body.offer;
+  await s.call(`/api/driver/offers/${offer.offerId}/accept`, { token: d.token, body: {} });
+  await s.call(`/api/driver/rides/${r2.id}/arrive`, { token: d.token, body: {} });
+  assert.equal((await s.call(`/api/rides/${r2.id}/cancel`, { token: p.token, body: {} })).status, 409);
+});
+
+test('avisos push: assinatura validada, aparelho guardado e corrida nunca quebra se o envio falhar', async (t) => {
+  const s = await startServer();
+  t.after(() => s.close());
+  const p = await s.register('passenger', 'Maria', '11988887777');
+  const key = await (await fetch(`${s.base}/api/push/key`)).json();
+  assert.ok(key.key.length > 40);
+  const sub = { endpoint: 'https://fcm.googleapis.com/fcm/send/abc123', keys: { p256dh: 'BPk4', auth: 'auth1' } };
+  assert.equal((await s.call('/api/push/subscribe', { body: sub })).status, 401); // precisa estar logado
+  assert.equal((await s.call('/api/push/subscribe', { token: p.token, body: { endpoint: 'http://x', keys: {} } })).status, 400);
+  assert.equal((await s.call('/api/push/subscribe', { token: p.token, body: sub })).status, 201);
+  const guardado = s.db.prepare('SELECT COUNT(*) AS n FROM push_subs WHERE user_id = ?').get(p.user.id).n;
+  assert.equal(guardado, 1);
+  assert.equal((await s.call('/api/push/unsubscribe', { token: p.token, body: { endpoint: sub.endpoint } })).status, 200);
+  assert.equal(s.db.prepare('SELECT COUNT(*) AS n FROM push_subs').get().n, 0);
+  // Sem aparelho cadastrado, o aviso não faz nada e a corrida segue normalmente.
+  assert.equal(await s.push.notifyUser(p.user.id, { title: 'x', body: 'y' }), 0);
+  assert.equal(await s.push.rideChanged({ status: 'arrived', passenger_id: p.user.id }), 0);
 });

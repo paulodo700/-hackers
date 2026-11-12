@@ -5,6 +5,7 @@ import {
   icone, carregarMarca, nomeDaMarca, esqueleto, contatoCentral,
 } from '/shared/ui.js';
 import { criarMenu, abrirPerfil, abrirAjuda, abrirPix, formularioBanco, reduzirFoto, janela } from '/shared/menu.js';
+import { ativarAvisos } from '/shared/avisos.js';
 import { criarMapa, criarCamada, criarRota, enquadrar, distanciaKm, minutosAte } from '/shared/mapa.js';
 
 const client = createClient('motoqueiro');
@@ -12,7 +13,9 @@ const root = document.getElementById('root');
 
 let map, camada, rota, painel, pagina, mapaEl;
 let tempoEl = null; // texto do tempo estimado na corrida
-let desenhado = null; // resumo do que está na tela, para não redesenhar (e reanimar) sem mudança
+let desenhado = null;
+let faixaEl = null; // faixa de ganhos no topo
+let faixaTimer = null; // resumo do que está na tela, para não redesenhar (e reanimar) sem mudança
 const st = {
   aba: 'inicio',
   driver: null,
@@ -75,6 +78,9 @@ async function montarEstrutura() {
   desenhado = null;
   const titulo = h('h1', {}, client.user.name);
   const avisoEl = h('div', { class: 'aviso', role: 'status', hidden: true });
+  // Faixa no topo com o total de hoje (como nos apps de corrida). Toque: desce com os detalhes e volta sozinha.
+  const faixa = h('section', { class: 'faixa', 'aria-live': 'polite' });
+  faixaEl = faixa;
   const menu = criarMenu({
     client,
     papel: 'motoqueiro',
@@ -83,6 +89,7 @@ async function montarEstrutura() {
       { icone: 'moto', rotulo: 'Início', atual: st.aba === 'inicio', acao: () => trocarAba('inicio') },
       st.cfg.d_earnings && { icone: 'carteira', rotulo: 'Ganhos', atual: st.aba === 'ganhos', acao: () => trocarAba('ganhos') },
       { icone: 'documento', rotulo: 'Documentos e conta', atual: st.aba === 'cadastro', acao: () => trocarAba('cadastro') },
+      { icone: 'ajuda', rotulo: 'Ativar avisos', acao: () => run(null, () => ativarAvisos(client)) },
       { icone: 'usuario', rotulo: 'Meu perfil', acao: () => abrirPerfil(client, () => (titulo.textContent = client.user.name)) },
       st.cfg.d_support && st.central && { icone: 'ajuda', rotulo: 'Falar com a central', acao: () => abrirAjuda(st.central, 'Olá! Sou motoqueiro e preciso de ajuda.') },
       st.cfg.d_terms && { icone: 'documento', rotulo: 'Termos e privacidade', href: '/termos.html' },
@@ -93,6 +100,7 @@ async function montarEstrutura() {
     h(
       'div',
       { class: 'app' },
+      faixa,
       h('header', { class: 'topo' }, menu.botao, titulo),
       avisoEl,
       mapaEl,
@@ -205,11 +213,58 @@ function aplicar(estado) {
 
 async function carregarResumo() {
   try {
-    st.resumo = await client.api('/driver/summary');
+    const [resumo, carteira] = await Promise.all([client.api('/driver/summary'), client.api('/driver/wallet')]);
+    st.resumo = resumo;
+    st.saldo = carteira.balance;
+    pintarFaixa();
     if (st.aba === 'inicio' && !st.ride) desenhar();
   } catch {
     /* mantém o último */
   }
+}
+
+// Faixa de ganhos: resumo do dia sempre visível. Ao tocar, desce com os detalhes e volta depois de alguns segundos.
+function pintarFaixa() {
+  if (!faixaEl || !st.resumo) return;
+  const r = st.resumo;
+  const aberta = faixaEl.classList.contains('aberta');
+  mount(
+    faixaEl,
+    h(
+      'button',
+      {
+        class: 'faixa-topo',
+        type: 'button',
+        'aria-expanded': String(aberta),
+        onclick: () => (faixaEl.classList.contains('aberta') ? fecharFaixa() : abrirFaixa()),
+      },
+      h('span', { class: 'faixa-valor num' }, brl(r.today.total)),
+      h('span', { class: 'faixa-rotulo' }, `hoje · ${r.today.rides} corrida${r.today.rides === 1 ? '' : 's'}`),
+      h('span', { class: 'faixa-seta', 'aria-hidden': 'true' }, icone('lista'))
+    ),
+    h(
+      'div',
+      { class: 'faixa-detalhe' },
+      h('div', {}, h('small', {}, 'Esta semana'), h('strong', {}, brl(r.week.total))),
+      h('div', {}, h('small', {}, 'Saldo para sacar'), h('strong', {}, brl(st.saldo || 0))),
+      h('div', {}, h('small', {}, `Comissão da central (${r.commission_percent}%)`), h('strong', {}, brl(r.today.commission))),
+      h('small', { class: 'muted' }, 'Fecha sozinho em alguns segundos.')
+    )
+  );
+}
+
+function abrirFaixa() {
+  if (!faixaEl) return;
+  faixaEl.classList.add('aberta');
+  pintarFaixa();
+  clearTimeout(faixaTimer);
+  faixaTimer = setTimeout(fecharFaixa, 8000);
+}
+
+function fecharFaixa() {
+  clearTimeout(faixaTimer);
+  if (faixaEl) faixaEl.classList.remove('aberta');
+  pintarFaixa();
 }
 
 function trocarAba(aba) {

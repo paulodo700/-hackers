@@ -452,6 +452,20 @@ textarea[readonly] { font-family: ui-monospace, Menlo, Consolas, monospace; font
 .texto p, .texto li { color: var(--tinta); margin-bottom: 8px; }
 .texto ul { padding-left: 20px; margin: 0 0 8px; }
 
+/* Faixa de ganhos (motorista) */
+.faixa { position: sticky; top: 0; z-index: 1150; background: var(--preto); color: #fff; }
+.faixa-topo { width: 100%; display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 8px 14px; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.faixa-valor { font-size: 1.15rem; font-weight: 800; letter-spacing: -0.01em; }
+.faixa-rotulo { color: #c9c8c2; font-size: 0.85rem; }
+.faixa-seta { margin-left: auto; color: var(--marca); transition: transform 0.25s ease; }
+.faixa-seta .ico svg { width: 18px; height: 18px; }
+.faixa.aberta .faixa-seta { transform: rotate(90deg); }
+.faixa-detalhe { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; max-height: 0; overflow: hidden; padding: 0 14px; transition: max-height 0.3s ease, padding 0.3s ease; }
+.faixa.aberta .faixa-detalhe { max-height: 220px; padding: 4px 14px 14px; }
+.faixa-detalhe small { display: block; color: #c9c8c2; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; }
+.faixa-detalhe strong { font-size: 1rem; font-variant-numeric: tabular-nums; }
+.faixa-detalhe .muted { grid-column: 1 / -1; color: #9a9993; }
+
 /* Quem pede menos movimento no aparelho não recebe animações. */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
