@@ -50,3 +50,7 @@
   aproximada marca `approx`; posição só vira "exata" (`precise`) por toque no mapa, GPS, endereço exato ou local
   conhecido. Locais aprendem com corridas concluídas. Serviço de mapa liberado no ambiente "mototaxi" (hosts
   nominatim/OSRM/photon). Falta: tela de locais na central.
+- Versão 5 (12/11/2026): carteira interna (`server/wallet.js`): divisão automática da corrida paga (motorista + comissão
+  da central), saques com senha e confirmação da central, webhook de pagamento com segredo (`/api/payments/webhook`).
+  O sistema NÃO movimenta dinheiro sozinho: divisão real exige gateway licenciado (ver `docs/PAGAMENTOS-AUTOMATICOS.md`).
+  Os acertos antigos de comissão foram removidos; a aba da central agora é **Carteira**.

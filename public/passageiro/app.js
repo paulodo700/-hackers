@@ -452,6 +452,7 @@ function telaConcluida(r) {
     { class: 'pilha' },
     h('div', {}, h('h2', {}, 'Você chegou!'), h('p', { class: 'sub' }, `Pague ${brl(r.price)} em ${PAYMENT_PT[r.payment].toLowerCase()} ao motoqueiro.`)),
     botaoPix(r),
+    r.payment_status === 'paid' ? h('p', { class: 'passo-ok' }, 'Pagamento confirmado. Obrigado!') : h('p', { class: 'muted' }, 'Pagamento sendo confirmado.'),
     h('p', {}, `Como foi a corrida com ${r.driver ? r.driver.name : 'o motoqueiro'}?`),
     estrelas,
     enviar,

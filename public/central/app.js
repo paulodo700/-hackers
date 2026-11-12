@@ -16,7 +16,7 @@ const ABAS = [
   ['motoqueiros', 'moto', 'Motoqueiros'],
   ['passageiros', 'pessoas', 'Passageiros'],
   ['corridas', 'lista', 'Corridas'],
-  ['acertos', 'carteira', 'Acertos'],
+  ['acertos', 'carteira', 'Carteira'],
   ['relatorios', 'grafico', 'Relatórios'],
   ['personalizar', 'pincel', 'Personalizar'],
   ['config', 'ajustes', 'Configurações'],
@@ -954,7 +954,7 @@ async function abrirFicha(id) {
         f.bank
           ? [item('Titular da conta', f.bank.holder_name), item('CPF/CNPJ do titular', f.bank.holder_doc), item('Banco', f.bank.bank_name), item('Chave Pix', `${TIPO_PIX[f.bank.pix_type]}: ${f.bank.pix_key}`)]
           : item('Conta para receber', 'Não cadastrada'),
-        item('Comissão em aberto', `${brl(f.owed.amount)} (${f.owed.rides} corrida${f.owed.rides === 1 ? '' : 's'})`)
+        item('Saldo na carteira', brl(f.balance))
       )
     ),
     h('h3', { class: 'bloco-titulo' }, 'Documentos'),
@@ -968,77 +968,137 @@ async function abrirFicha(id) {
 
 function telaAcertos() {
   const corpo = h('div', {}, esqueleto(3));
-  mount(conteudo, h('h2', {}, 'Acertos de comissão'), h('p', { class: 'muted', style: 'margin:-8px 0 16px' }, 'As corridas são pagas direto ao motoqueiro. Aqui você vê quanto cada um deve de comissão e confirma quando o Pix cair na sua conta.'), corpo);
+  mount(
+    conteudo,
+    h('h2', {}, 'Carteira'),
+    h('p', { class: 'muted', style: 'margin:-8px 0 16px' }, 'As corridas pagas são divididas sozinhas: a parte de cada motorista vai para a carteira dele e a sua comissão para a sua. Aqui você confirma os pagamentos recebidos e paga os saques.'),
+    corpo
+  );
 
   async function carregar() {
     let v;
     try {
-      v = await client.api('/admin/settlements');
+      v = await client.api('/admin/wallet');
     } catch (err) {
       return mount(corpo, h('p', { class: 'vazio-lista' }, err.message));
     }
     const card = (rotulo, valor) => h('div', { class: 'indicador' }, h('b', {}, rotulo), h('strong', {}, valor));
+    const pendentes = v.withdrawals.filter((w) => w.status === 'pending');
     mount(
       corpo,
-      !v.central_ready && h('p', { class: 'alerta' }, 'Você ainda não cadastrou sua conta para receber. Vá em Configurações → Minha conta para receber. Sem ela os motoqueiros não conseguem gerar o Pix da comissão.'),
-      h('div', { class: 'indicadores' }, card('Total a receber', brl(v.total)), card('Motoqueiros devendo', v.drivers.length), card('Avisaram que pagaram', v.drivers.filter((d) => d.notice_at).length), card('Acertos confirmados', v.history.length)),
-      h('h3', { class: 'bloco-titulo' }, 'Em aberto'),
-      v.drivers.length
+      !v.central_ready && h('p', { class: 'alerta' }, 'Cadastre sua conta para receber em Configurações → Minha conta para receber. Sem ela, não dá para sacar sua comissão.'),
+      h('div', { class: 'indicadores' }, card('Sua comissão disponível', brl(v.balance)), card('Pagamentos a confirmar', v.awaiting.length), card('Saques aguardando Pix', pendentes.length)),
+      h('h3', { class: 'bloco-titulo' }, 'Pagamentos a confirmar'),
+      v.awaiting.length
+        ? h(
+            'div',
+            { class: 'lista' },
+            v.awaiting.map((r) => {
+              const valor = h('input', { type: 'number', step: '0.01', value: r.price.toFixed(2), 'aria-label': 'Valor recebido', style: 'max-width:140px' });
+              const botao = h(
+                'button',
+                {
+                  class: 'btn small go',
+                  onclick: () =>
+                    run(botao, async () => {
+                      await client.api(`/admin/wallet/rides/${r.id}/paid`, { body: { amount: Number(valor.value), ref: `corrida-${r.id}` } });
+                      toast(`Corrida #${r.id} confirmada. Divisão feita.`, 'ok');
+                      carregar();
+                    }),
+                },
+                'Pix recebido'
+              );
+              return h('article', { class: 'item' }, h('div', { class: 'cab' }, h('span', {}, h('b', {}, `Corrida #${r.id} · ${r.passenger_name}`), h('br'), h('span', { class: 'muted' }, `${r.driver_name || '—'} · ${dateTime(r.completed_at)}`)), h('strong', {}, brl(r.price))), h('div', { class: 'acoes-linha' }, valor, botao));
+            })
+          )
+        : h('p', { class: 'vazio-lista' }, 'Nenhum pagamento esperando confirmação.'),
+      h('h3', { class: 'bloco-titulo' }, 'Saques para pagar'),
+      pendentes.length
         ? h(
             'div',
             { class: 'tabela-caixa' },
             h(
               'table',
               {},
-              h('thead', {}, h('tr', {}, h('th', {}, 'Motoqueiro'), h('th', {}, 'Telefone'), h('th', { class: 'n' }, 'Corridas'), h('th', { class: 'n' }, 'Deve'), h('th', {}, 'Aviso'), h('th', {}, ''))),
+              h('thead', {}, h('tr', {}, ['Quando', 'Quem', 'Chave Pix', 'Valor', ''].map((t) => h('th', {}, t)))),
               h(
                 'tbody',
                 {},
-                v.drivers.map((d) => {
-                  const botao = h(
-                    'button',
-                    {
-                      class: 'btn small go',
-                      onclick: async () => {
-                        if (!(await confirmBox(`Confirmar que recebeu ${brl(d.amount)} de ${d.name}? Confira antes no extrato do seu banco.`, 'Recebi'))) return;
-                        const ok = await run(botao, () => client.api('/admin/settlements', { body: { driver_id: d.id } }));
-                        if (ok) {
-                          toast('Acerto confirmado.', 'ok');
-                          carregar();
-                        }
-                      },
-                    },
-                    'Confirmar recebimento'
-                  );
-                  return h(
-                    'tr',
-                    {},
-                    h('td', {}, h('b', {}, d.name)),
-                    h('td', {}, h('a', { href: `tel:${d.phone}` }, phoneMask(d.phone))),
-                    h('td', { class: 'n' }, d.rides),
-                    h('td', { class: 'n' }, h('b', {}, brl(d.amount))),
-                    h('td', {}, d.notice_at ? h('span', { class: 'tag ok' }, `Avisou que pagou em ${dateTime(d.notice_at)}`) : h('span', { class: 'tag' }, 'Sem aviso')),
-                    h('td', {}, botao)
-                  );
+                pendentes.map((w) => {
+                  const pagar = h('button', { class: 'btn small go', onclick: () => decidir(w, 'paid', 'Pix enviado') }, 'Paguei');
+                  const recusar = h('button', { class: 'btn small', onclick: () => decidir(w, 'rejected', 'Recusado') }, 'Recusar');
+                  return h('tr', {}, h('td', {}, dateTime(w.requested_at)), h('td', {}, h('b', {}, w.holder_name), h('div', { class: 'muted' }, w.holder_doc)), h('td', {}, `${TIPO_PIX[w.pix_type]}: ${w.pix_key}`), h('td', { class: 'n' }, h('b', {}, brl(w.amount))), h('td', {}, h('div', { class: 'acoes-linha', style: 'margin:0' }, pagar, recusar)));
                 })
               )
             )
           )
-        : h('p', { class: 'vazio-lista' }, 'Ninguém deve comissão no momento.'),
-      v.history.length > 0 && h('h3', { class: 'bloco-titulo' }, 'Últimos acertos confirmados'),
-      v.history.length > 0 &&
-        h(
-          'div',
-          { class: 'tabela-caixa' },
-          h(
-            'table',
-            {},
-            h('thead', {}, h('tr', {}, h('th', {}, 'Quando'), h('th', {}, 'Motoqueiro'), h('th', { class: 'n' }, 'Corridas'), h('th', { class: 'n' }, 'Valor'))),
-            h('tbody', {}, v.history.map((x) => h('tr', {}, h('td', {}, dateTime(x.paid_at)), h('td', {}, x.driver_name), h('td', { class: 'n' }, x.rides), h('td', { class: 'n' }, brl(x.amount)))))
-          )
-        )
+        : h('p', { class: 'vazio-lista' }, 'Nenhum saque pendente.'),
+      h('h3', { class: 'bloco-titulo' }, 'Sacar sua comissão'),
+      v.balance >= 10 && v.central_ready
+        ? h('button', { class: 'btn dark', onclick: () => sacarCentral(v.balance, carregar) }, `Sacar ${brl(v.balance)} para minha conta`)
+        : h('p', { class: 'muted' }, 'Disponível a partir de R$ 10,00.'),
+      h('h3', { class: 'bloco-titulo' }, 'Motoristas: saldos'),
+      v.drivers.length
+        ? h('div', { class: 'tabela-caixa' }, h('table', {}, h('thead', {}, h('tr', {}, h('th', {}, 'Motorista'), h('th', { class: 'n' }, 'Saldo'))), h('tbody', {}, v.drivers.map((d) => h('tr', {}, h('td', {}, d.name), h('td', { class: 'n' }, brl(d.balance)))))))
+        : h('p', { class: 'vazio-lista' }, 'Nenhum motorista cadastrado.'),
+      h('h3', { class: 'bloco-titulo' }, 'Extrato da sua carteira'),
+      v.statement.length
+        ? h('div', { class: 'registro' }, v.statement.slice(0, 30).map((x) => h('div', {}, h('time', {}, dateTime(x.created_at)), h('br'), `${x.note || x.kind} · `, h('b', { class: x.amount >= 0 ? 'passo-ok' : '' }, `${x.amount >= 0 ? '+' : ''}${brl(x.amount)}`))))
+        : h('p', { class: 'vazio-lista' }, 'Ainda sem movimento.')
     );
   }
+
+  // Pagar ou recusar um saque exige a senha da central.
+  function decidir(w, decisao, texto) {
+    const senha = h('input', { type: 'password', required: true, autocomplete: 'current-password', 'aria-label': 'Sua senha' });
+    const botao = h('button', { class: 'btn primary block', type: 'submit' }, decisao === 'paid' ? 'Confirmar: Pix enviado' : 'Confirmar recusa');
+    const j = janela(
+      decisao === 'paid' ? `Pagar ${brl(w.amount)} para ${w.holder_name}` : `Recusar saque de ${w.holder_name}`,
+      h('p', { class: 'muted', style: 'margin-bottom:12px' }, decisao === 'paid' ? `Envie o Pix de ${brl(w.amount)} para ${TIPO_PIX[w.pix_type]} ${w.pix_key} e só depois confirme aqui. Ao recusar, o valor volta para o saldo do motorista.` : 'O valor volta para o saldo do motorista.'),
+      h(
+        'form',
+        {
+          onsubmit: (e) => {
+            e.preventDefault();
+            run(botao, async () => {
+              await client.api(`/admin/wallet/withdrawals/${w.id}/${decisao}`, { body: { password: senha.value } });
+              toast(`${texto}.`, 'ok');
+              j.fechar();
+              carregar();
+            });
+          },
+        },
+        h('label', { class: 'field' }, h('span', {}, 'Sua senha'), senha),
+        botao
+      )
+    );
+  }
+
+  function sacarCentral(saldo, depois) {
+    const senha = h('input', { type: 'password', required: true, autocomplete: 'current-password', 'aria-label': 'Sua senha' });
+    const botao = h('button', { class: 'btn primary block', type: 'submit' }, 'Confirmar saque');
+    const j = janela(
+      'Sacar minha comissão',
+      h('p', { class: 'muted', style: 'margin-bottom:12px' }, `Saldo: ${brl(saldo)}. Vai para a conta cadastrada em Configurações.`),
+      h(
+        'form',
+        {
+          onsubmit: (e) => {
+            e.preventDefault();
+            run(botao, async () => {
+              await client.api('/admin/wallet/withdraw', { body: { amount: saldo, password: senha.value } });
+              toast('Saque pedido. Quando o Pix cair, a gente marca como pago.', 'ok');
+              j.fechar();
+              depois();
+            });
+          },
+        },
+        h('label', { class: 'field' }, h('span', {}, 'Sua senha'), senha),
+        botao
+      )
+    );
+  }
+
   carregar();
   return {};
 }

@@ -9,7 +9,7 @@ const { ACTIVE } = require('../rides');
 const { localDay, dayRange, isDay, shiftDay } = require('../time');
 
 // Rotas da central.
-module.exports = function adminRoutes({ db, rides, dispatch, drivers, geo, docs, finance, audit, places }) {
+module.exports = function adminRoutes({ db, rides, dispatch, drivers, geo, docs, finance, audit, places, wallet }) {
   const router = express.Router();
   router.use(requireAuth(db, 'admin'));
 
@@ -104,7 +104,7 @@ module.exports = function adminRoutes({ db, rides, dispatch, drivers, geo, docs,
       bank: finance.driverBank(driver.id),
       docs: docs.status(driver.id),
       labels: KINDS,
-      owed: finance.owed(driver.id),
+      balance: wallet.balance(wallet.driverAccount(driver.id)),
     });
   });
 
@@ -115,13 +115,45 @@ module.exports = function adminRoutes({ db, rides, dispatch, drivers, geo, docs,
     res.type(file.mime).send(file.data);
   });
 
-  /* ----- Comissão e conta da central ----- */
+  /* ----- Carteira da central ----- */
 
-  router.get('/settlements', (req, res) => res.json({ ...finance.overview(), central_ready: !!finance.centralBank() }));
+  router.get('/wallet', (req, res) => {
+    res.json({
+      balance: wallet.balance(wallet.CENTRAL),
+      statement: wallet.statement(wallet.CENTRAL),
+      withdrawals: wallet.withdrawals(null, null, 150),
+      awaiting: wallet.awaitingPayment(),
+      drivers: db
+        .prepare(
+          `SELECT u.id, u.name, u.phone FROM users u JOIN drivers d ON d.user_id = u.id ORDER BY u.name`
+        )
+        .all()
+        .map((d) => ({ ...d, balance: wallet.balance(wallet.driverAccount(d.id)) })),
+      central_ready: !!finance.centralBank(),
+    });
+  });
 
-  router.post('/settlements', (req, res) => {
+  // A central confirma que o Pix de uma corrida caiu na conta dela (enquanto não há gateway).
+  router.post('/wallet/rides/:id/paid', (req, res) => {
     const body = req.body || {};
-    res.status(201).json({ settlement: finance.settle(req.user, body.driver_id, body.note) });
+    const ride = db.prepare('SELECT price FROM rides WHERE id = ?').get(Number(req.params.id));
+    if (!ride) throw new AppError(404, 'Corrida não encontrada');
+    res.json(wallet.markPaid(req.params.id, { amount: body.amount, provider: 'central', ref: body.ref || '', by: req.user }));
+  });
+
+  router.post('/wallet/withdrawals/:id/:decision', (req, res) => {
+    const body = req.body || {};
+    const row = db.prepare('SELECT password_hash FROM users WHERE id = ?').get(req.user.id);
+    if (!verifyPassword(body.password, row.password_hash)) throw new AppError(401, 'Senha incorreta');
+    res.json(wallet.decideWithdrawal(req.user, req.params.id, req.params.decision, body.note));
+  });
+
+  router.post('/wallet/withdraw', (req, res) => {
+    const body = req.body || {};
+    const row = db.prepare('SELECT password_hash FROM users WHERE id = ?').get(req.user.id);
+    if (!verifyPassword(body.password, row.password_hash)) throw new AppError(401, 'Senha incorreta');
+    const id = wallet.requestWithdrawal(req.user, wallet.CENTRAL, body.amount);
+    res.status(201).json({ id, balance: wallet.balance(wallet.CENTRAL) });
   });
 
   router.get('/bank', (req, res) => res.json({ bank: finance.centralBank() }));

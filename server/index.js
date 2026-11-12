@@ -11,6 +11,7 @@ const { createAudit } = require('./audit');
 const { createDocs } = require('./docs');
 const { createFinance } = require('./finance');
 const { createPlaces } = require('./places');
+const { createWallet } = require('./wallet');
 const { createApp } = require('./app');
 const { attachRealtime } = require('./realtime');
 
@@ -18,14 +19,15 @@ const { attachRealtime } = require('./realtime');
 function buildServer({ dbPath = config.dbPath, geoImpl = geo, docsDir = config.docsDir } = {}) {
   const db = openDb(dbPath);
   const bus = new EventEmitter();
+  const audit = createAudit({ db });
+  const finance = createFinance({ db, audit });
+  const wallet = createWallet({ db, audit, finance });
   const places = createPlaces({ db });
-  const rides = createRideService({ db, bus, places });
+  const rides = createRideService({ db, bus, places, wallet });
   const drivers = createDriverService({ db, bus });
   const dispatch = createDispatcher({ db, bus, rides });
-  const audit = createAudit({ db });
   const docs = createDocs({ db, dir: docsDir });
-  const finance = createFinance({ db, audit });
-  const deps = { db, bus, rides, drivers, dispatch, audit, docs, finance, places, geo: geo.withSearchCache(geo.withRouteCache(geoImpl)) };
+  const deps = { db, bus, rides, drivers, dispatch, audit, docs, finance, wallet, places, geo: geo.withSearchCache(geo.withRouteCache(geoImpl)) };
   const app = createApp(deps);
   const server = http.createServer(app);
   const io = attachRealtime(server, deps);

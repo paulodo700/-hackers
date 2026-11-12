@@ -108,6 +108,20 @@ docs/superpowers/                    especificação e plano da versão 1
 - **Proteções:** limite de tentativas e de pedidos por endereço, preço confirmado igual ao estimado, contagem da oferta
   correta mesmo com o relógio do celular errado, página de Termos e Privacidade.
 
+## Carteira e divisão automática (versão 5)
+
+- **Divisão sozinha:** quando a corrida termina e o pagamento está confirmado, o valor é dividido na hora: a parte do
+  motorista vai para a carteira dele e a comissão para a carteira da central. Ninguém paga comissão à mão.
+- **Saque:** o motorista saca o saldo para a conta dele (senha + valor, mínimo R$ 10). A central confirma o Pix enviado
+  na aba **Carteira**. Recusar devolve o valor.
+- **Confirmação do pagamento:** pelo gateway (webhook `POST /api/payments/webhook`, com o segredo `PAYMENT_WEBHOOK_TOKEN`)
+  ou, enquanto não houver gateway, pela central em "Pix recebido".
+- Corridas concluídas antes da versão 5 entram como pagas, sem divisão de novo.
+
+**Importante:** para o dinheiro sair do passageiro e cair nas contas certas *automaticamente*, o pagamento precisa passar
+por um gateway licenciado com divisão (split) ou carteiras por usuário. Sem isso, o dinheiro chega numa conta só e a
+central faria a transferência à mão. Ver `docs/PAGAMENTOS-AUTOMATICOS.md`.
+
 ## Endereços com número (versão 4)
 
 - A busca entende **rua + número** (ex.: "rua 13 de maio 500") e mostra "Número aproximado: ajuste o pino" quando o

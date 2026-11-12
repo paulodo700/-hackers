@@ -8,7 +8,7 @@ const { requireAuth } = require('../auth');
 const { localDay, dayRange, shiftDay } = require('../time');
 
 // Rotas do motoqueiro.
-module.exports = function driverRoutes({ db, rides, dispatch, drivers, docs, finance }) {
+module.exports = function driverRoutes({ db, rides, dispatch, drivers, docs, finance, wallet }) {
   const router = express.Router();
   router.use(requireAuth(db, 'driver'));
 
@@ -89,21 +89,26 @@ module.exports = function driverRoutes({ db, rides, dispatch, drivers, docs, fin
     res.json(await finance.rideCharge(ride));
   });
 
-  router.get('/settlement', (req, res) => {
-    const d = db.prepare('SELECT pay_notice_at FROM drivers WHERE user_id = ?').get(req.user.id);
+  /* ----- Carteira: ganhos automáticos e saque para a conta do motorista ----- */
+
+  router.get('/wallet', (req, res) => {
+    const account = wallet.driverAccount(req.user.id);
     res.json({
-      owed: finance.owed(req.user.id),
-      central_ready: !!finance.centralBank(),
-      notice_at: d ? d.pay_notice_at : null,
-      history: finance.history(req.user.id),
+      balance: wallet.balance(account),
+      statement: wallet.statement(account),
+      withdrawals: wallet.withdrawals(account, null, 20),
+      bank: finance.present(finance.driverBank(req.user.id)),
+      min_withdraw: wallet.MIN_WITHDRAW,
     });
   });
 
-  router.get('/settlement/pix', async (req, res) => res.json(await finance.settlementCharge(req.user.id)));
-
-  router.post('/settlement/notify', (req, res) => {
-    finance.notifyPaid(req.user);
-    res.json({ ok: true });
+  router.post('/wallet/withdraw', (req, res) => {
+    const body = req.body || {};
+    // Saque exige a senha, como trocar a conta.
+    const row = db.prepare('SELECT password_hash FROM users WHERE id = ?').get(req.user.id);
+    if (!auth.verifyPassword(body.password, row.password_hash)) throw new AppError(401, 'Senha incorreta');
+    const id = wallet.requestWithdrawal(req.user, wallet.driverAccount(req.user.id), body.amount);
+    res.status(201).json({ id, balance: wallet.balance(wallet.driverAccount(req.user.id)) });
   });
 
   router.get('/history', (req, res) =>

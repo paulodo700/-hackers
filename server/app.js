@@ -36,6 +36,20 @@ function createApp(deps) {
     res.json({ ok: true });
   });
 
+  // Confirmação de pagamento vinda do gateway: o gateway cobra o passageiro e a carteira divide sozinha.
+  app.post('/api/payments/webhook', (req, res, next) => {
+    const expected = config.paymentWebhookToken;
+    if (!expected) return next(new AppError(503, 'Pagamentos automáticos ainda não estão ligados'));
+    const got = String(req.get('x-payment-token') || '');
+    const crypto = require('node:crypto');
+    const ok = got.length === expected.length && crypto.timingSafeEqual(Buffer.from(got), Buffer.from(expected));
+    if (!ok) return next(new AppError(401, 'Não autorizado'));
+    const body = req.body || {};
+    if (body.status !== 'paid') return res.json({ ok: true, ignored: true });
+    deps.wallet.markPaid(body.ride_id, { amount: body.amount, provider: 'gateway', ref: String(body.provider_ref || '').slice(0, 60) });
+    res.json({ ok: true });
+  });
+
   app.get('/api/public/config', (req, res) => {
     res.json({ ...publicSettings(db), demo: config.demo });
   });

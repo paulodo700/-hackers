@@ -98,6 +98,32 @@ CREATE TABLE IF NOT EXISTS audit_log (
   action TEXT NOT NULL,
   detail TEXT NOT NULL DEFAULT ''
 );
+CREATE TABLE IF NOT EXISTS ledger (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  account TEXT NOT NULL,
+  amount REAL NOT NULL,
+  kind TEXT NOT NULL,
+  ride_id INTEGER,
+  withdrawal_id INTEGER,
+  note TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS ledger_once_per_ride ON ledger(kind, ride_id, account) WHERE ride_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS ledger_account ON ledger(account);
+CREATE TABLE IF NOT EXISTS withdrawals (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  account TEXT NOT NULL,
+  amount REAL NOT NULL,
+  holder_name TEXT NOT NULL,
+  holder_doc TEXT NOT NULL,
+  pix_type TEXT NOT NULL,
+  pix_key TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('pending','paid','rejected')),
+  requested_at TEXT NOT NULL,
+  paid_at TEXT,
+  admin_id INTEGER,
+  note TEXT NOT NULL DEFAULT ''
+);
 CREATE TABLE IF NOT EXISTS places (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL,
@@ -204,7 +230,7 @@ function openDb(file) {
   if (!rideCols.has('route')) db.exec('ALTER TABLE rides ADD COLUMN route TEXT');
   const userCols = new Set(db.prepare('PRAGMA table_info(users)').all().map((c) => c.name));
   if (!userCols.has('blocked')) db.exec('ALTER TABLE users ADD COLUMN blocked INTEGER NOT NULL DEFAULT 0');
-  for (const [col, type] of [['commission', 'REAL'], ['settled_at', 'TEXT'], ['settlement_id', 'INTEGER'], ['origin_precise', 'INTEGER'], ['dest_precise', 'INTEGER']]) {
+  for (const [col, type] of [['commission', 'REAL'], ['settled_at', 'TEXT'], ['settlement_id', 'INTEGER'], ['origin_precise', 'INTEGER'], ['dest_precise', 'INTEGER'], ['payment_status', "TEXT NOT NULL DEFAULT 'pending'"], ['paid_at', 'TEXT'], ['payment_ref', 'TEXT'], ['wallet_at', 'TEXT']]) {
     if (!rideCols.has(col)) db.exec(`ALTER TABLE rides ADD COLUMN ${col} ${type}`);
   }
   const driverCols = new Set(db.prepare('PRAGMA table_info(drivers)').all().map((c) => c.name));
@@ -212,6 +238,12 @@ function openDb(file) {
   const insert = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');
   for (const [key, value] of Object.entries(DEFAULTS)) insert.run(key, String(value));
   // Corridas concluídas antes de existir o controle de comissão recebem o valor pela taxa atual.
+  // Uma vez só: corridas concluídas antes da carteira já foram pagas no sistema antigo, então entram como pagas.
+  const migrated = db.prepare("SELECT value FROM settings WHERE key = 'wallet_migrated'").get();
+  if (!migrated) {
+    db.prepare("UPDATE rides SET payment_status = 'paid', paid_at = COALESCE(completed_at, created_at) WHERE status = 'completed'").run();
+    db.prepare("INSERT INTO settings (key, value) VALUES ('wallet_migrated', '1')").run();
+  }
   const pct = Number(db.prepare("SELECT value FROM settings WHERE key = 'commission_percent'").get().value);
   db.prepare("UPDATE rides SET commission = ROUND(price * ? / 100, 2) WHERE status = 'completed' AND commission IS NULL").run(pct);
   return db;

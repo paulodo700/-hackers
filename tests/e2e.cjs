@@ -263,25 +263,40 @@ try {
   await moto.getByRole('button', { name: 'Ganhos' }).click();
   await moto.locator('.pagina').getByText('2 corridas').first().waitFor();
   await shot(moto, '15-motoqueiro-ganhos');
-  // Comissão: o motoqueiro gera o Pix para a central e avisa que pagou.
-  await see(moto, 'Comissão em aberto');
-  await tap(moto, 'Pagar comissão por Pix');
-  await moto.locator('img.qr').waitFor();
-  if (!(await moto.getByLabel('Código Pix copia e cola').inputValue()).includes('11222333000181')) throw new Error('Pix da comissão não usa a chave da central');
-  await shot(moto, '15b-motoqueiro-comissao');
-  await tap(moto, 'Já paguei, avisar a central');
-  await see(moto, 'Você avisou o pagamento');
+  // Carteira: a central confirma os pagamentos recebidos, e a divisão acontece sozinha.
+  await central.getByRole('button', { name: /Carteira/ }).click();
+  await see(central, 'Pagamentos a confirmar');
+  await shot(central, '15c-central-carteira');
+  for (let i = 0; i < 5; i++) {
+    const botao = central.getByRole('button', { name: 'Pix recebido' }).first();
+    if (!(await botao.count())) break;
+    await botao.click();
+    await see(central, 'Divisão feita.');
+    await central.waitForTimeout(400);
+  }
+  await see(central, 'Nenhum pagamento esperando confirmação.');
 
-  await central.getByRole('button', { name: /Acertos/ }).click();
-  await see(central, 'Avisou que pagou');
-  await shot(central, '15c-central-acertos');
-  await tap(central, 'Confirmar recebimento');
-  await tap(central, 'Recebi');
-  await see(central, 'Acerto confirmado');
-  await see(central, 'Ninguém deve comissão no momento.');
+  // Motorista: o saldo já tem a parte dele, e ele saca para a conta.
+  await tap(moto, 'Abrir menu');
+  await moto.getByRole('button', { name: 'Ganhos' }).click();
+  await see(moto, 'Saldo disponível');
+  await shot(moto, '15b-motoqueiro-carteira');
+  await tap(moto, 'Sacar para minha conta');
+  await moto.getByLabel('Sua senha').fill('123456');
+  await tap(moto, 'Confirmar saque');
+  await see(moto, 'Saque pedido.');
+
+  // Central paga o saque (Pix enviado) com a senha dela.
+  await central.getByRole('button', { name: /Carteira/ }).click();
+  await see(central, 'Saques para pagar');
+  await tap(central, 'Paguei');
+  await central.getByLabel('Sua senha').fill('central123');
+  await tap(central, 'Confirmar: Pix enviado');
+  await see(central, 'Pix enviado.');
+  await see(central, 'Nenhum saque pendente.');
 
   await central.getByRole('button', { name: /Relatórios/ }).click();
-  await see(central, 'Comissão a pagar');
+  await see(central, 'Comissão');
   await central.locator('.indicador', { hasText: 'Corridas concluídas' }).getByText('2', { exact: true }).waitFor();
   await shot(central, '16-central-relatorios');
   await central.getByRole('button', { name: /Corridas/ }).click();

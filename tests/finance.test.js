@@ -117,72 +117,119 @@ test('Pix da corrida vai para a conta do motoqueiro', async (t) => {
   assert.equal((await s.call(`/api/rides/${cashId}/pix`, { token: p.token })).status, 409);
 });
 
-test('comissão: o motoqueiro deve, paga por Pix à central e a central confirma', async (t) => {
+test('carteira: a corrida paga é dividida sozinha, sem ninguém pagar comissão', async (t) => {
   const s = await startServer();
   t.after(() => s.close());
   const adm = s.admin.token;
   const p = await s.register('passenger', 'Maria', '11988887777');
   const d = await s.approvedDriver('João', '11955554444');
+  const central = () => s.call('/api/admin/wallet', { token: adm }).then((r) => r.body);
+  const mine = () => s.call('/api/driver/wallet', { token: d.token }).then((r) => r.body);
 
-  await fullRide(s, p, d, 'pix');
-  await fullRide(s, p, d, 'cash');
-  let st = (await s.call('/api/driver/settlement', { token: d.token })).body;
-  assert.deepEqual(st.owed, { rides: 2, amount: 1.4 }); // 10% de R$ 7 + R$ 7
-  assert.equal(st.central_ready, false);
-  assert.equal((await s.call('/api/driver/settlement/pix', { token: d.token })).status, 409); // central sem conta
+  // Corrida concluída sem pagamento confirmado: não divide ainda.
+  const rideId = await fullRide(s, p, d, 'pix');
+  assert.equal((await mine()).balance, 0);
+  assert.equal((await central()).balance, 0);
+  assert.equal((await central()).awaiting.length, 1);
 
-  // A central cadastra a conta dela: exige a senha, valida os dados.
-  const setBank = (body, token = adm) => s.call('/api/admin/bank', { token, method: 'PUT', body });
-  assert.equal((await setBank({ ...CENTRAL_BANK })).status, 401);
-  assert.equal((await setBank({ password: 'central123', ...CENTRAL_BANK, pix_key: '00.000.000/0000-00' })).status, 400);
-  assert.equal((await setBank({ password: '123456', ...CENTRAL_BANK }, d.token)).status, 403);
-  const saved = await setBank({ password: 'central123', ...CENTRAL_BANK });
-  assert.equal(saved.body.bank.pix_key, '11222333000181');
-  assert.equal((await s.call('/api/public/config')).body.pix_key, undefined);
+  // Pagamento confere com o valor: divide sozinho (R$ 7: 10% para a central, R$ 6,30 para o motorista).
+  assert.equal((await s.call(`/api/admin/wallet/rides/${rideId}/paid`, { token: adm, body: { amount: 6.5 } })).status, 409);
+  assert.equal((await s.call(`/api/admin/wallet/rides/${rideId}/paid`, { token: d.token, body: { amount: 7 } })).status, 403);
+  const paid = await s.call(`/api/admin/wallet/rides/${rideId}/paid`, { token: adm, body: { amount: 7, ref: 'extrato-1' } });
+  assert.equal(paid.status, 200);
+  assert.equal((await s.call(`/api/admin/wallet/rides/${rideId}/paid`, { token: adm, body: { amount: 7 } })).status, 409); // não paga duas vezes
+  assert.equal((await mine()).balance, 6.3);
+  assert.equal((await central()).balance, 0.7);
+  assert.equal((await central()).awaiting.length, 0);
+  assert.equal((await mine()).statement[0].kind, 'ride_share');
 
-  const pix = await s.call('/api/driver/settlement/pix', { token: d.token });
-  assert.equal(pix.body.amount, 1.4);
-  assert.equal(pix.body.to, 'central');
-  assert.ok(pix.body.code.includes('011411222333000181'));
-  assert.ok(pix.body.code.includes('54041.40'));
+  // Dinheiro (ou qualquer pagamento) chegando depois de concluir também divide, uma vez só.
+  const late = await fullRide(s, p, d, 'cash');
+  assert.equal((await mine()).balance, 6.3);
+  await s.call(`/api/admin/wallet/rides/${late}/paid`, { token: adm, body: { amount: 7 } });
+  assert.equal((await mine()).balance, 12.6);
+  assert.equal((await central()).balance, 1.4);
 
-  // Mudar a taxa depois não muda o que já foi rodado.
-  await s.call('/api/admin/settings', { token: adm, method: 'PUT', body: { commission_percent: 50 } });
-  assert.equal((await s.call('/api/driver/settlement', { token: d.token })).body.owed.amount, 1.4);
-
-  assert.equal((await s.call('/api/driver/settlement/notify', { token: d.token, body: {} })).status, 200);
-  const ov = (await s.call('/api/admin/settlements', { token: adm })).body;
-  assert.equal(ov.total, 1.4);
-  assert.equal(ov.drivers.length, 1);
-  assert.ok(ov.drivers[0].notice_at);
-  assert.equal((await s.call('/api/admin/settlements', { token: d.token })).status, 403);
-
-  const paid = await s.call('/api/admin/settlements', { token: adm, body: { driver_id: d.user.id, note: 'Pix recebido' } });
-  assert.equal(paid.status, 201);
-  assert.deepEqual({ amount: paid.body.settlement.amount, rides: paid.body.settlement.rides }, { amount: 1.4, rides: 2 });
-  assert.equal((await s.call('/api/admin/settlements', { token: adm, body: { driver_id: d.user.id } })).status, 409); // nada em aberto
-  assert.equal((await s.call('/api/admin/settlements', { token: adm, body: { driver_id: 9999 } })).status, 404);
-
-  st = (await s.call('/api/driver/settlement', { token: d.token })).body;
-  assert.deepEqual(st.owed, { rides: 0, amount: 0 });
-  assert.equal(st.notice_at, null);
-  assert.equal(st.history.length, 1);
-  assert.equal(st.history[0].amount, 1.4);
-  assert.equal((await s.call('/api/driver/settlement/notify', { token: d.token, body: {} })).status, 409);
-
-  // Corrida nova entra num acerto novo, já com a taxa nova.
-  await fullRide(s, p, d, 'cash');
-  assert.deepEqual((await s.call('/api/driver/settlement', { token: d.token })).body.owed, { rides: 1, amount: 3.5 });
-
-  // Relatório soma a comissão gravada em cada corrida.
+  // Relatório continua batendo com a comissão gravada.
   const rep = (await s.call('/api/admin/reports', { token: adm })).body;
-  assert.equal(rep.totals.revenue, 21);
-  assert.equal(rep.totals.commission, 4.9);
+  assert.equal(rep.totals.commission, 1.4);
+});
 
-  // Tudo que mexe com dinheiro e acesso fica registrado.
+test('carteira: webhook do gateway confirma o pagamento com token e valor certos', async (t) => {
+  const config = require('../server/config');
+  const antes = config.paymentWebhookToken;
+  t.after(() => { config.paymentWebhookToken = antes; });
+  const s = await startServer();
+  t.after(() => s.close());
+  const p = await s.register('passenger', 'Maria', '11988887777');
+  const d = await s.approvedDriver('João', '11955554444');
+  const rideId = await fullRide(s, p, d, 'pix');
+  const hook = (body, token) =>
+    fetch(`${s.base}/api/payments/webhook`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(token !== undefined ? { 'x-payment-token': token } : {}) },
+      body: JSON.stringify(body),
+    });
+  const body = { ride_id: rideId, status: 'paid', amount: 7, provider_ref: 'pix-123' };
+
+  // Sem token configurado, o webhook fica desligado.
+  config.paymentWebhookToken = '';
+  assert.equal((await hook(body, 'qualquer')).status, 503);
+
+  config.paymentWebhookToken = 'segredo-do-gateway-123';
+  assert.equal((await hook(body)).status, 401); // sem token
+  assert.equal((await hook(body, 'chute')).status, 401); // token errado
+  assert.equal((await hook({ ...body, amount: 99 }, 'segredo-do-gateway-123')).status, 409); // valor diferente
+  assert.equal((await hook({ ...body, status: 'pending' }, 'segredo-do-gateway-123')).status, 200); // ignorado
+  assert.equal((await s.call('/api/driver/wallet', { token: d.token })).body.balance, 0);
+
+  assert.equal((await hook(body, 'segredo-do-gateway-123')).status, 200);
+  assert.equal((await s.call('/api/driver/wallet', { token: d.token })).body.balance, 6.3); // dividiu sozinho
+  assert.equal((await hook(body, 'segredo-do-gateway-123')).status, 409); // mesma confirmação não conta duas vezes
+  assert.equal((await s.call('/api/driver/wallet', { token: d.token })).body.balance, 6.3);
+});
+
+test('carteira: saque — mínimo, saldo, senha, devolução e pagamento', async (t) => {
+  const s = await startServer();
+  t.after(() => s.close());
+  const adm = s.admin.token;
+  const p = await s.register('passenger', 'Maria', '11988887777');
+  const d = await s.approvedDriver('João', '11955554444');
+  const rides = [];
+  for (let i = 0; i < 3; i++) rides.push(await fullRide(s, p, d, 'pix'));
+  for (const id of rides) await s.call(`/api/admin/wallet/rides/${id}/paid`, { token: adm, body: { amount: 7 } });
+  // Saldo do motorista: 3 × R$ 6,30 = R$ 18,90
+  const withdraw = (body, token = d.token) => s.call('/api/driver/wallet/withdraw', { token, body });
+  assert.equal((await withdraw({ password: '123456', amount: 5 })).status, 400); // mínimo R$ 10
+  assert.equal((await withdraw({ password: 'errada', amount: 10 })).status, 401);
+  assert.equal((await withdraw({ password: '123456', amount: 50 })).status, 409); // mais que o saldo
+  const ok = await withdraw({ password: '123456', amount: 12 });
+  assert.equal(ok.status, 201);
+  assert.equal(ok.body.balance, 6.9); // desconta já: não dá para sacar o mesmo dinheiro de novo
+  assert.equal((await withdraw({ password: '123456', amount: 10 })).status, 409);
+
+  // Central vê o pedido; recusar devolve o valor.
+  const list = (await s.call('/api/admin/wallet', { token: adm })).body.withdrawals;
+  const id = list[0].id;
+  assert.equal(list[0].status, 'pending');
+  assert.equal((await s.call(`/api/admin/wallet/withdrawals/${id}/rejected`, { token: adm, body: { password: 'central123', note: 'dados errados' } })).status, 200);
+  assert.equal((await s.call('/api/driver/wallet', { token: d.token })).body.balance, 18.9);
+
+  // Pago: confirma com a senha da central e não pode ser tratado de novo.
+  const again = await withdraw({ password: '123456', amount: 12 });
+  const id2 = again.body.id;
+  assert.equal((await s.call(`/api/admin/wallet/withdrawals/${id2}/paid`, { token: adm, body: { password: 'errada' } })).status, 401);
+  assert.equal((await s.call(`/api/admin/wallet/withdrawals/${id2}/paid`, { token: adm, body: { password: 'central123' } })).status, 200);
+  assert.equal((await s.call(`/api/admin/wallet/withdrawals/${id2}/paid`, { token: adm, body: { password: 'central123' } })).status, 409);
+  const dw = (await s.call('/api/driver/wallet', { token: d.token })).body;
+  assert.equal(dw.balance, 6.9);
+  assert.equal(dw.withdrawals[0].status, 'paid');
+
+  // Central também saca (a comissão), e tudo fica no registro de atividades.
+  // Comissão de R$ 2,10 ainda não chega ao mínimo de saque: a central recebe a mensagem certa.
+  const cw = await s.call('/api/admin/wallet/withdraw', { token: adm, body: { password: 'central123', amount: 2.1 } });
+  assert.equal(cw.status, 400);
+  assert.match(cw.body.error, /mínimo/);
   const log = (await s.call('/api/admin/audit', { token: adm })).body.entries.map((e) => e.action);
-  for (const action of ['Dados bancários do motoqueiro alterados', 'Motoqueiro aprovado', 'Dados bancários da central alterados', 'Acerto de comissão confirmado', 'Configurações alteradas']) {
-    assert.ok(log.includes(action), action);
-  }
-  assert.equal((await s.call('/api/admin/audit', { token: d.token })).status, 403);
+  for (const a of ['Saque solicitado', 'Saque recusado', 'Saque pago (Pix enviado)', 'Pagamento de corrida confirmado']) assert.ok(log.includes(a), a);
 });

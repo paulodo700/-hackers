@@ -4,7 +4,7 @@ import {
   h, mount, brl, km, toast, run, confirmBox, authScreen, registerSW, dateTime, phoneMask, PAYMENT_PT, beep, unlockSound,
   icone, carregarMarca, nomeDaMarca, esqueleto, contatoCentral,
 } from '/shared/ui.js';
-import { criarMenu, abrirPerfil, abrirAjuda, abrirPix, formularioBanco, reduzirFoto } from '/shared/menu.js';
+import { criarMenu, abrirPerfil, abrirAjuda, abrirPix, formularioBanco, reduzirFoto, janela } from '/shared/menu.js';
 import { criarMapa, criarCamada, criarRota, enquadrar, distanciaKm, minutosAte } from '/shared/mapa.js';
 
 const client = createClient('motoqueiro');
@@ -561,7 +561,7 @@ async function desenharGanhos() {
   mount(pagina, cabeca(), esqueleto(3));
   let s, rides, acerto;
   try {
-    [s, { rides }, acerto] = await Promise.all([client.api('/driver/summary'), client.api('/driver/history'), client.api('/driver/settlement')]);
+    [s, { rides }, acerto] = await Promise.all([client.api('/driver/summary'), client.api('/driver/history'), client.api('/driver/wallet')]);
   } catch (err) {
     return mount(pagina, cabeca(), h('p', { class: 'vazio-lista' }, err.message));
   }
@@ -572,7 +572,7 @@ async function desenharGanhos() {
     cabeca(),
     h('div', { class: 'ganhos' }, bloco('Hoje', s.today), bloco('7 dias', s.week)),
     h('p', { class: 'muted', style: 'margin:10px 0 18px' }, `Comissão da central: ${s.commission_percent}% do valor das corridas.`),
-    blocoComissao(acerto),
+    blocoCarteira(acerto),
     h('h2', {}, 'Últimas corridas'),
     rides.length
       ? h(
@@ -594,49 +594,57 @@ async function desenharGanhos() {
 
 /* ---------- Comissão da central ---------- */
 
-function blocoComissao(a) {
-  const devendo = a.owed.amount > 0;
-  const pagar = h(
-    'button',
-    {
-      class: 'btn primary block',
-      onclick: () =>
-        abrirPix(client, '/driver/settlement/pix', 'Pagar comissão', (j) =>
-          h(
-            'button',
-            {
-              class: 'btn dark block',
-              type: 'button',
-              onclick: (e) =>
-                run(e.currentTarget, async () => {
-                  await client.api('/driver/settlement/notify', { body: {} });
-                  toast('Central avisada. Ela confirma quando o Pix cair.', 'ok');
-                  j.fechar();
-                  desenharGanhos();
-                }),
-            },
-            icone('certo'),
-            'Já paguei, avisar a central'
-          )
-        ),
-    },
-    'Pagar comissão por Pix'
-  );
+function blocoCarteira(w) {
+  const pedir = h('button', { class: 'btn primary block', type: 'button', onclick: () => sacar(w) }, 'Sacar para minha conta');
   return h(
     'section',
     { class: 'card', style: 'margin-bottom:18px' },
-    h('div', { class: 'preco' }, h('div', {}, h('b', {}, 'Comissão em aberto'), h('br'), h('span', { class: 'muted' }, `${a.owed.rides} corrida${a.owed.rides === 1 ? '' : 's'}`)), h('strong', {}, brl(a.owed.amount))),
-    !devendo && h('p', { class: 'passo-ok', style: 'margin-top:10px' }, 'Você está em dia com a central.'),
-    devendo && a.notice_at && h('p', { class: 'tag ok', style: 'margin-top:10px' }, `Você avisou o pagamento em ${dateTime(a.notice_at)}. Aguardando a central confirmar.`),
-    devendo && !a.central_ready && h('p', { class: 'muted', style: 'margin-top:10px' }, 'A central ainda não cadastrou a conta para receber. Combine o pagamento com ela.'),
-    devendo && a.central_ready && h('div', { style: 'margin-top:12px' }, pagar),
-    a.history.length > 0 &&
+    h('div', { class: 'preco' }, h('div', {}, h('b', {}, 'Saldo disponível'), h('br'), h('span', { class: 'muted' }, 'Sua parte das corridas pagas, já descontada a comissão')), h('strong', {}, brl(w.balance))),
+    h('p', { class: 'muted', style: 'margin:10px 0' }, w.bank ? `Saque para: ${w.bank.holder_name} · chave ${w.bank.pix_key}` : 'Cadastre sua conta para receber em "Documentos e conta".'),
+    pedir,
+    w.statement.length > 0 &&
       h(
         'div',
         { style: 'margin-top:14px' },
-        h('b', { class: 'muted' }, 'Acertos confirmados'),
-        a.history.slice(0, 5).map((x) => h('p', {}, `${dateTime(x.paid_at)} · ${brl(x.amount)} · ${x.rides} corrida${x.rides === 1 ? '' : 's'}`))
+        h('b', { class: 'muted' }, 'Extrato'),
+        w.statement.slice(0, 8).map((x) => h('p', { class: x.amount >= 0 ? 'passo-ok' : 'muted', style: 'margin:4px 0' }, `${x.note || x.kind} · ${x.amount >= 0 ? '+' : ''}${brl(x.amount)}`))
+      ),
+    w.withdrawals.length > 0 &&
+      h(
+        'div',
+        { style: 'margin-top:12px' },
+        h('b', { class: 'muted' }, 'Saques'),
+        w.withdrawals.slice(0, 5).map((x) => h('p', { style: 'margin:4px 0' }, `${dateTime(x.requested_at)} · ${brl(x.amount)} · `, h('span', { class: `tag ${x.status === 'paid' ? 'ok' : x.status === 'rejected' ? 'bad' : 'warn'}` }, { pending: 'Aguardando', paid: 'Pago', rejected: 'Recusado' }[x.status])))
       )
+  );
+}
+
+// Pede o saque: valor e senha (para confirmar que é você).
+function sacar(w) {
+  if (!w.bank) return toast('Cadastre sua conta para receber antes de sacar.', 'error');
+  const valor = h('input', { type: 'number', min: w.min_withdraw, step: '0.01', required: true, inputmode: 'decimal', value: w.balance.toFixed(2), 'aria-label': 'Valor do saque' });
+  const senha = h('input', { type: 'password', required: true, autocomplete: 'current-password', 'aria-label': 'Sua senha' });
+  const botao = h('button', { class: 'btn primary block', type: 'submit' }, 'Confirmar saque');
+  const j = janela(
+    'Sacar',
+    h('p', { class: 'muted', style: 'margin-bottom:12px' }, `Saldo: ${brl(w.balance)} · mínimo ${brl(w.min_withdraw)}. O valor vai para ${w.bank.holder_name} (${w.bank.pix_key}).`),
+    h(
+      'form',
+      {
+        onsubmit: (e) => {
+          e.preventDefault();
+          run(botao, async () => {
+            await client.api('/driver/wallet/withdraw', { body: { amount: Number(valor.value), password: senha.value } });
+            toast('Saque pedido. A central confirma o Pix em seguida.', 'ok');
+            j.fechar();
+            desenharGanhos();
+          });
+        },
+      },
+      h('label', { class: 'field' }, h('span', {}, 'Quanto quer sacar (R$)'), valor),
+      h('label', { class: 'field' }, h('span', {}, 'Sua senha'), senha),
+      botao
+    )
   );
 }
 

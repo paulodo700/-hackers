@@ -11,7 +11,7 @@ const MAX_KM = 80;
 const now = () => new Date().toISOString();
 const text = (value, max) => String(value ?? '').trim().slice(0, max);
 
-function createRideService({ db, bus, places = null }) {
+function createRideService({ db, bus, places = null, wallet = null }) {
   const driverInfo = db.prepare(
     `SELECT u.id, u.name, u.phone, d.plate, d.moto_model, d.lat, d.lng
        FROM users u JOIN drivers d ON d.user_id = u.id WHERE u.id = ?`
@@ -43,6 +43,7 @@ function createRideService({ db, bus, places = null }) {
       route,
       price: row.price,
       payment: row.payment,
+      payment_status: row.payment_status || 'pending',
       notes: row.notes,
       rating: row.rating,
       created_at: row.created_at,
@@ -214,8 +215,8 @@ function createRideService({ db, bus, places = null }) {
     if (action === 'complete') {
       const done = step(row, 'in_progress', 'completed', 'completed_at');
       // A comissão fica gravada na corrida: mudar a taxa depois não altera o que já foi feito.
-      const pct = getSettings(db).commission_percent;
-      db.prepare('UPDATE rides SET commission = ROUND(price * ? / 100, 2) WHERE id = ?').run(pct, row.id);
+      // Se o pagamento já caiu, a carteira divide agora. Senão, divide quando o pagamento for confirmado.
+      if (wallet) wallet.onCompleted(row.id);
       // A corrida aconteceu de verdade: os endereços com número e posição confirmada viram locais conhecidos.
       if (places) {
         if (row.origin_precise) places.learn(row.origin_text, { lat: row.origin_lat, lng: row.origin_lng });
