@@ -66,7 +66,7 @@ test('busca de endereço devolve rótulo curto e coordenadas', async () => {
     { lat: 'abc', lon: '1', display_name: 'ruim' },
   ];
   const r = await geo.searchAddress('rua das flores', { lat: -10, lng: -48 }, okJson(body));
-  assert.deepEqual(r, [{ label: 'Rua das Flores, 12 - Centro', lat: -10.1, lng: -48.3 }]);
+  assert.deepEqual(r, [{ label: 'Rua das Flores, 12 - Centro', lat: -10.1, lng: -48.3, approx: false }]);
   assert.deepEqual(await geo.searchAddress('ab', { lat: 0, lng: 0 }, okJson(body)), []);
   const rejects = async () => { throw new Error('x'); };
   assert.deepEqual(await geo.searchAddress('rua tal', { lat: 0, lng: 0 }, rejects), []);

@@ -62,6 +62,7 @@ async function montarEstrutura() {
   if (cfg) {
     st.centro = { lat: cfg.city_lat, lng: cfg.city_lng };
     st.cidade = cfg.city_name;
+    st.tz = cfg.tz_offset_hours || 0;
   }
 
   client.connect({ onReconnect: carregarVisao });
@@ -341,7 +342,7 @@ function telaNova() {
   const map = criarMapa(mapaEl, st.centro, 14, { animado: false });
   const camada = criarCamada(map);
   const rota = criarRota(map);
-  map.on('click', (e) => definir(f.alvo, { lat: e.latlng.lat, lng: e.latlng.lng, text: '' }));
+  map.on('click', (e) => definir(f.alvo, { lat: e.latlng.lat, lng: e.latlng.lng, text: '', precise: true }));
 
   function pintar() {
     cOrigem.ativo(f.alvo === 'origem');
@@ -478,8 +479,10 @@ function telaMotoqueiros() {
 
 /* ---------- Corridas ---------- */
 
-const hoje = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
-const diasAtras = (n) => new Date(Date.now() - n * 86400000 - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+// Datas contadas no fuso da cidade (o mesmo do servidor), e não no relógio do navegador.
+const dataLocal = (ms) => new Date(ms + (st.tz || 0) * 3600 * 1000).toISOString().slice(0, 10);
+const hoje = () => dataLocal(Date.now());
+const diasAtras = (n) => dataLocal(Date.now() - n * 86400000);
 
 function telaCorridas() {
   const de = h('input', { type: 'date', value: hoje() });

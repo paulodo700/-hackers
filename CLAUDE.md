@@ -46,3 +46,7 @@
 - O código Pix foi validado por testes de estrutura e CRC, mas **não foi lido por um app de banco real**:
   ele precisa fazer um Pix de teste de R$ 0,01.
 - A versão 3 acrescentou a dependência `qrcode`: ao atualizar no Windows é preciso rodar `1-instalar.bat` de novo.
+- Versão 4 (12/11/2026): endereços com número (`server/places.js`, `searchAddress` em `server/geo.js`). Busca
+  aproximada marca `approx`; posição só vira "exata" (`precise`) por toque no mapa, GPS, endereço exato ou local
+  conhecido. Locais aprendem com corridas concluídas. Serviço de mapa liberado no ambiente "mototaxi" (hosts
+  nominatim/OSRM/photon). Falta: tela de locais na central.

@@ -103,36 +103,85 @@ async function routeDistanceKm(a, b, fetchImpl = fetch, timeoutMs = 4000) {
   return completeRoute({ km: round2(haversineKm(a, b) * 1.3), source: 'estimate' }, a, b);
 }
 
-// Monta um rótulo curto: "Rua X, 123 - Bairro".
-function shortLabel(item) {
+// O serviço gratuito de endereços pede no máximo um pedido por segundo: os pedidos entram em fila.
+let nominatimQueue = Promise.resolve();
+let nominatimLast = 0;
+function nominatim(url, fetchImpl, timeoutMs, gapMs = 1100) {
+  const run = async () => {
+    const wait = nominatimLast + gapMs - Date.now();
+    if (fetchImpl === fetch && wait > 0) await new Promise((r) => setTimeout(r, wait));
+    nominatimLast = Date.now();
+    return fetchJson(url, fetchImpl, timeoutMs);
+  };
+  const job = nominatimQueue.then(run, run);
+  nominatimQueue = job.catch(() => null);
+  return job;
+}
+
+const streetOf = (a) => a.road || a.pedestrian || a.footway || a.path || a.residential || '';
+const areaOf = (a) => a.suburb || a.neighbourhood || a.quarter || a.village || a.town || a.city || '';
+
+// Monta um rótulo curto: "Rua X, 123 - Bairro". `number` é o número digitado pela pessoa.
+function shortLabel(item, number) {
   const a = item.address || {};
-  const street = a.road || a.pedestrian || a.footway || a.path || '';
-  const name = item.name && item.name !== street ? item.name : '';
-  const first = [name, [street, a.house_number].filter(Boolean).join(', ')].filter(Boolean).join(' - ');
-  const area = a.suburb || a.neighbourhood || a.quarter || a.village || a.town || a.city || '';
-  const label = [first, area].filter(Boolean).join(' - ');
+  const street = streetOf(a);
+  const isStreet = item.category === 'highway' || item.class === 'highway' || !item.name || item.name === street;
+  const name = isStreet ? '' : item.name;
+  const num = a.house_number || (isStreet ? number : '') || '';
+  const first = [name, [street, num].filter(Boolean).join(', ')].filter(Boolean).join(' - ');
+  const label = [first, areaOf(a)].filter(Boolean).join(' - ');
   return label || String(item.display_name || '').split(',').slice(0, 3).join(',').trim();
 }
 
+// Separa o número da casa do resto: "rua 13 de maio 500" → { street: "rua 13 de maio", number: "500" }.
+// O número é o último bloco de dígitos, desde que sobre um nome de rua antes dele.
+function splitNumber(q) {
+  const m = String(q).trim().match(/^(.*\D)[\s,]+(?:n[ºo°.]?\s*)?(\d{1,5}[a-zA-Z]?)\s*$/);
+  if (!m) return { street: String(q).trim(), number: '' };
+  // Tira do fim da rua a vírgula e o "nº" que vinham antes do número.
+  const street = m[1].replace(/[\s,]+(?:n[ºo°]\.?|n\.?)?[\s,]*$/i, '').trim();
+  // Nome de rua com menos de 4 letras ("rua") não conta: o número faz parte do nome.
+  return street.length >= 4 ? { street, number: m[2] } : { street: String(q).trim(), number: '' };
+}
+
 // Busca de endereço (Nominatim), limitada à região em volta de `near`.
+// Cada resultado traz `approx: true` quando a pessoa digitou um número que o mapa não conhece:
+// a posição é a da rua, e a tela pede para ajustar o pino.
 async function searchAddress(q, near, fetchImpl = fetch, timeoutMs = 5000) {
   const query = String(q || '').trim().slice(0, 120);
   if (query.length < 3) return [];
+  const { number } = splitNumber(query);
   const d = 0.25;
   const params = new URLSearchParams({
     q: query,
     format: 'jsonv2',
     addressdetails: '1',
-    limit: '5',
+    limit: '10',
     countrycodes: 'br',
     viewbox: `${near.lng - d},${near.lat + d},${near.lng + d},${near.lat - d}`,
     bounded: '1',
   });
-  const data = await fetchJson(`${config.nominatimUrl}/search?${params}`, fetchImpl, timeoutMs);
+  const data = await nominatim(`${config.nominatimUrl}/search?${params}`, fetchImpl, timeoutMs);
   if (!Array.isArray(data)) return [];
-  return data
-    .map((item) => ({ label: shortLabel(item), lat: Number(item.lat), lng: Number(item.lon) }))
-    .filter((r) => validCoord(r));
+
+  // Uma rua comprida aparece em vários pedaços: fica só o pedaço mais perto de quem busca.
+  const best = new Map();
+  for (const item of data) {
+    const pos = { lat: Number(item.lat), lng: Number(item.lon) };
+    if (!validCoord(pos)) continue;
+    const a = item.address || {};
+    const exact = !number || (!!a.house_number && String(a.house_number).toLowerCase() === number.toLowerCase());
+    const isStreet = item.category === 'highway' || item.class === 'highway';
+    const result = { label: shortLabel(item, number), lat: pos.lat, lng: pos.lng, approx: !!number && !exact && isStreet };
+    const key = result.label.toLowerCase();
+    const dist = haversineKm(near, pos);
+    const seen = best.get(key);
+    if (!seen || dist < seen.dist) best.set(key, { result, dist, exact: !!number && exact });
+  }
+  return [...best.values()]
+    .sort((x, y) => Number(y.exact) - Number(x.exact) || x.dist - y.dist)
+    .slice(0, 5)
+    .map((x) => x.result);
 }
 
 async function reverseAddress(lat, lng, fetchImpl = fetch, timeoutMs = 5000) {
@@ -143,7 +192,7 @@ async function reverseAddress(lat, lng, fetchImpl = fetch, timeoutMs = 5000) {
     addressdetails: '1',
     zoom: '18',
   });
-  const data = await fetchJson(`${config.nominatimUrl}/reverse?${params}`, fetchImpl, timeoutMs);
+  const data = await nominatim(`${config.nominatimUrl}/reverse?${params}`, fetchImpl, timeoutMs);
   if (!data || data.error) return null;
   return shortLabel(data) || null;
 }
@@ -169,4 +218,24 @@ function withRouteCache(geoImpl, { ttlMs = 10 * 60 * 1000, max = 500, now = Date
   };
 }
 
-module.exports = { validCoord, haversineKm, routeDistanceKm, completeRoute, withRouteCache, searchAddress, reverseAddress };
+// Guarda as buscas de endereço por um dia: resposta na hora para quem repete e menos pedidos ao serviço.
+function withSearchCache(geoImpl, { ttlMs = 24 * 60 * 60 * 1000, max = 2000, now = Date.now } = {}) {
+  const cache = new Map();
+  return {
+    ...geoImpl,
+    async searchAddress(q, near) {
+      const key = `${String(q || '').trim().toLowerCase()}|${near.lat.toFixed(2)},${near.lng.toFixed(2)}`;
+      const hit = cache.get(key);
+      if (hit && hit.until > now()) return hit.results;
+      const results = await geoImpl.searchAddress(q, near);
+      if (results.length) {
+        cache.delete(key);
+        cache.set(key, { results, until: now() + ttlMs });
+        if (cache.size > max) cache.delete(cache.keys().next().value);
+      }
+      return results;
+    },
+  };
+}
+
+module.exports = { validCoord, haversineKm, routeDistanceKm, completeRoute, withRouteCache, withSearchCache, splitNumber, searchAddress, reverseAddress };

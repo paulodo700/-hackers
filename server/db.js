@@ -98,6 +98,17 @@ CREATE TABLE IF NOT EXISTS audit_log (
   action TEXT NOT NULL,
   detail TEXT NOT NULL DEFAULT ''
 );
+CREATE TABLE IF NOT EXISTS places (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  norm TEXT NOT NULL,
+  lat REAL NOT NULL,
+  lng REAL NOT NULL,
+  source TEXT NOT NULL CHECK (source IN ('central','corrida')),
+  uses INTEGER NOT NULL DEFAULT 1,
+  updated_at TEXT NOT NULL,
+  UNIQUE (norm, source)
+);
 CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
@@ -164,7 +175,7 @@ const TEXTS = {
 };
 // O que as telas de passageiro e motoqueiro podem saber (preços e comissão ficam de fora).
 const PUBLIC_KEYS = [
-  'city_name', 'city_lat', 'city_lng', 'brand_name', 'brand_color', 'support_phone', 'slogan',
+  'city_name', 'city_lat', 'city_lng', 'tz_offset_hours', 'brand_name', 'brand_color', 'support_phone', 'slogan',
   'notice_passenger', 'notice_driver', 'default_theme', ...FLAGS.filter((k) => k !== 'require_docs'),
 ];
 
@@ -193,7 +204,7 @@ function openDb(file) {
   if (!rideCols.has('route')) db.exec('ALTER TABLE rides ADD COLUMN route TEXT');
   const userCols = new Set(db.prepare('PRAGMA table_info(users)').all().map((c) => c.name));
   if (!userCols.has('blocked')) db.exec('ALTER TABLE users ADD COLUMN blocked INTEGER NOT NULL DEFAULT 0');
-  for (const [col, type] of [['commission', 'REAL'], ['settled_at', 'TEXT'], ['settlement_id', 'INTEGER']]) {
+  for (const [col, type] of [['commission', 'REAL'], ['settled_at', 'TEXT'], ['settlement_id', 'INTEGER'], ['origin_precise', 'INTEGER'], ['dest_precise', 'INTEGER']]) {
     if (!rideCols.has(col)) db.exec(`ALTER TABLE rides ADD COLUMN ${col} ${type}`);
   }
   const driverCols = new Set(db.prepare('PRAGMA table_info(drivers)').all().map((c) => c.name));

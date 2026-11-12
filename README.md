@@ -71,7 +71,7 @@ atendem bem; se o movimento crescer muito, troque por um serviço pago ou própr
 ## Testes
 
 ```bash
-npm test                 # 61 testes: preço, corrida, distribuição, login, segurança, Pix, comissão, API e tempo real
+npm test                 # 72 testes: preço, corrida, distribuição, login, segurança, Pix, comissão, API e tempo real
 node tests/e2e.cjs       # navegador de verdade com passageiro, motoqueiro e central (precisa do Playwright)
 ```
 
@@ -107,6 +107,16 @@ docs/superpowers/                    especificação e plano da versão 1
 - **Senhas:** cada pessoa troca a sua; a central redefine a de quem esqueceu. Trocar a senha derruba os logins antigos.
 - **Proteções:** limite de tentativas e de pedidos por endereço, preço confirmado igual ao estimado, contagem da oferta
   correta mesmo com o relógio do celular errado, página de Termos e Privacidade.
+
+## Endereços com número (versão 4)
+
+- A busca entende **rua + número** (ex.: "rua 13 de maio 500") e mostra "Número aproximado: ajuste o pino" quando o
+  mapa só conhece a rua. Nesse caso, a pessoa ajusta o pino tocando no lugar certo.
+- **Locais conhecidos:** endereços com número cuja posição foi confirmada numa corrida que aconteceu passam a ser
+  encontrados com exatidão nas próximas vezes. A central também pode cadastrar locais (API `/api/admin/places`;
+  a tela para isso ainda não existe).
+- Cache de buscas por 24 horas e fila de pedidos ao serviço de mapa (respeita o limite de 1 pedido por segundo).
+- A aba **Corridas** e os relatórios contam "hoje" no fuso da cidade, não no relógio do navegador.
 
 ## O que a versão 3 trouxe (dinheiro e cadastro seguro)
 

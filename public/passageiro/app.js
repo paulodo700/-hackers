@@ -174,7 +174,7 @@ async function usarMinhaPosicao(silencioso) {
   try {
     const pos = await ondeEstou();
     if (st.ride) return;
-    await definirPonto('origem', { ...pos, text: '' }, true);
+    await definirPonto('origem', { ...pos, text: '', precise: true }, true);
     map.setView([pos.lat, pos.lng], 16);
   } catch (err) {
     if (!silencioso) toast(err.message, 'error');
@@ -183,7 +183,7 @@ async function usarMinhaPosicao(silencioso) {
 
 async function marcarNoMapa(pos) {
   if (st.ride || st.aba !== 'pedir') return;
-  await definirPonto(st.alvo, { ...pos, text: '' }, true);
+  await definirPonto(st.alvo, { ...pos, text: '', precise: true }, true);
 }
 
 // Define partida ou destino. Se não veio texto, descobre o endereço pela posição.

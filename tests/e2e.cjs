@@ -56,7 +56,8 @@ async function open(name, url, options) {
 }
 const phone = { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, permissions: ['geolocation'] };
 const shot = (page, name) => page.screenshot({ path: path.join(shots, `${name}.png`) });
-const see = (page, text) => page.getByText(text, { exact: false }).first().waitFor({ timeout: 15000 });
+// Espera o texto aparecer NA TELA (ignora cópias escondidas do mesmo texto).
+const see = (page, text) => page.getByText(text, { exact: false }).locator('visible=true').first().waitFor({ timeout: 15000 });
 const tap = (page, name) => page.getByRole('button', { name, exact: true }).click();
 async function clickMap(page, dx, dy) {
   const box = await page.locator('.mapa').boundingBox();
@@ -246,7 +247,7 @@ try {
   await central.locator('.preco strong', { hasText: 'R$' }).waitFor({ timeout: 15000 });
   await shot(central, '14-central-nova-corrida');
   await tap(central, 'Lançar corrida');
-  await see(central, 'Dona Ana');
+  await central.locator('.item', { hasText: 'Dona Ana' }).waitFor({ timeout: 15000 });
 
   await see(moto, 'Aceitar corrida');
   await tap(moto, 'Aceitar corrida');

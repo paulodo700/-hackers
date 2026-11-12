@@ -9,7 +9,7 @@ const { ACTIVE } = require('../rides');
 const { localDay, dayRange, isDay, shiftDay } = require('../time');
 
 // Rotas da central.
-module.exports = function adminRoutes({ db, rides, dispatch, drivers, geo, docs, finance, audit }) {
+module.exports = function adminRoutes({ db, rides, dispatch, drivers, geo, docs, finance, audit, places }) {
   const router = express.Router();
   router.use(requireAuth(db, 'admin'));
 
@@ -131,6 +131,22 @@ module.exports = function adminRoutes({ db, rides, dispatch, drivers, geo, docs,
     const row = db.prepare('SELECT password_hash FROM users WHERE id = ?').get(req.user.id);
     if (!verifyPassword(body.password, row.password_hash)) throw new AppError(401, 'Senha incorreta');
     res.json({ bank: finance.setCentral(req.user, body) });
+  });
+
+  /* ----- Locais conhecidos da cidade ----- */
+
+  router.get('/places', (req, res) => res.json(places.list(String(req.query.q || '').trim().slice(0, 60))));
+
+  router.post('/places', (req, res) => {
+    const body = req.body || {};
+    const place = places.add(body.name, { lat: body.lat, lng: body.lng });
+    audit.log(req.user, 'Local cadastrado', place.name);
+    res.status(201).json({ place });
+  });
+
+  router.delete('/places/:id', (req, res) => {
+    places.remove(req.params.id);
+    res.json({ ok: true });
   });
 
   router.get('/audit', (req, res) => res.json({ entries: audit.list(150) }));

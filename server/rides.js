@@ -11,7 +11,7 @@ const MAX_KM = 80;
 const now = () => new Date().toISOString();
 const text = (value, max) => String(value ?? '').trim().slice(0, max);
 
-function createRideService({ db, bus }) {
+function createRideService({ db, bus, places = null }) {
   const driverInfo = db.prepare(
     `SELECT u.id, u.name, u.phone, d.plate, d.moto_model, d.lat, d.lng
        FROM users u JOIN drivers d ON d.user_id = u.id WHERE u.id = ?`
@@ -73,7 +73,8 @@ function createRideService({ db, bus }) {
   }
 
   function point(p, label) {
-    const out = { text: text(p && p.text, 160), lat: p && p.lat, lng: p && p.lng };
+    // `precise`: a posição foi confirmada por uma pessoa (GPS, toque no mapa ou pino ajustado).
+    const out = { text: text(p && p.text, 160), lat: p && p.lat, lng: p && p.lng, precise: !!(p && p.precise) };
     if (!validCoord(out)) throw new AppError(400, `Informe ${label} no mapa`);
     return out;
   }
@@ -116,8 +117,8 @@ function createRideService({ db, bus }) {
       .prepare(
         `INSERT INTO rides (passenger_id, passenger_name, passenger_phone, origin_text, origin_lat, origin_lng,
            dest_text, dest_lat, dest_lng, distance_km, price, payment, status, source, notes, created_at,
-           duration_min, route)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'searching', ?, ?, ?, ?, ?)`
+           duration_min, route, origin_precise, dest_precise)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'searching', ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         input.passengerId || null,
@@ -136,7 +137,9 @@ function createRideService({ db, bus }) {
         text(input.notes, 200),
         now(),
         minutes,
-        routeJson
+        routeJson,
+        origin.precise ? 1 : 0,
+        dest.precise ? 1 : 0
       );
     const id = Number(info.lastInsertRowid);
     publish(id);
@@ -213,6 +216,11 @@ function createRideService({ db, bus }) {
       // A comissão fica gravada na corrida: mudar a taxa depois não altera o que já foi feito.
       const pct = getSettings(db).commission_percent;
       db.prepare('UPDATE rides SET commission = ROUND(price * ? / 100, 2) WHERE id = ?').run(pct, row.id);
+      // A corrida aconteceu de verdade: os endereços com número e posição confirmada viram locais conhecidos.
+      if (places) {
+        if (row.origin_precise) places.learn(row.origin_text, { lat: row.origin_lat, lng: row.origin_lng });
+        if (row.dest_precise) places.learn(row.dest_text, { lat: row.dest_lat, lng: row.dest_lng });
+      }
       return done;
     }
     throw new AppError(400, 'Ação desconhecida');

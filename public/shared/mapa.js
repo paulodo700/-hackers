@@ -185,7 +185,7 @@ export function campoEndereco({ client, h, label, placeholder, near, onPick, onF
         list.replaceChildren(
           ...(results.length
             ? results.map((r) =>
-                h('li', { role: 'option', tabindex: 0, onclick: () => choose(r), onkeydown: (e) => e.key === 'Enter' && choose(r) }, r.label)
+                h('li', { role: 'option', tabindex: 0, onclick: () => choose(r), onkeydown: (e) => e.key === 'Enter' && choose(r) }, r.label, r.known ? h('small', { class: 'tag ok' }, 'Local conhecido') : r.approx ? h('small', { class: 'tag warn' }, 'Número aproximado: ajuste o pino') : null)
               )
             : [h('li', { class: 'vazio' }, 'Nada encontrado. Toque no mapa para marcar o lugar.')])
         );
@@ -195,7 +195,8 @@ export function campoEndereco({ client, h, label, placeholder, near, onPick, onF
   function choose(r) {
     input.value = r.label;
     list.replaceChildren();
-    onPick({ text: r.label, lat: r.lat, lng: r.lng });
+    // Exato só quando o mapa conhece o número ou a cidade já confirmou o lugar. Aproximado pede ajuste no mapa.
+    onPick({ text: r.label, lat: r.lat, lng: r.lng, precise: !!r.known || (!r.approx && !!r.label.match(/\d/)) });
   }
   const box = h('div', { class: 'endereco' }, h('span', { class: 'rotulo' }, label), input, list);
   return {

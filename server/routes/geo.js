@@ -5,7 +5,7 @@ const { requireAuth } = require('../auth');
 const { validCoord } = require('../geo');
 const { createLimiter } = require('../limit');
 
-module.exports = function geoRoutes({ db, geo }) {
+module.exports = function geoRoutes({ db, geo, places }) {
   const router = express.Router();
   router.use(requireAuth(db));
   router.use(createLimiter({ windowMs: 60 * 1000, max: 60 }));
@@ -16,7 +16,11 @@ module.exports = function geoRoutes({ db, geo }) {
     const center = validCoord(near) && req.query.lat !== undefined
       ? near
       : { lat: settings.city_lat, lng: settings.city_lng };
-    res.json({ results: await geo.searchAddress(req.query.q, center) });
+    // Primeiro os locais que a cidade já conhece (exatos), depois o mapa.
+    const known = places.search(req.query.q, 4).map((p) => ({ label: p.name, lat: p.lat, lng: p.lng, approx: false, known: true }));
+    const fromMap = await geo.searchAddress(req.query.q, center);
+    const seen = new Set(known.map((k) => k.label.toLowerCase()));
+    res.json({ results: [...known, ...fromMap.filter((r) => !seen.has(r.label.toLowerCase()))].slice(0, 7) });
   });
 
   router.get('/reverse', async (req, res) => {

@@ -69,6 +69,18 @@ module.exports = function rideRoutes({ db, rides, geo, finance }) {
 
   router.get('/active', (req, res) => res.json({ ride: rides.activeRideFor(req.user) }));
 
+  // Últimos destinos da pessoa, para pedir de novo com um toque.
+  router.get('/recent-places', (req, res) => {
+    const rows = db
+      .prepare(
+        `SELECT dest_text AS label, dest_lat AS lat, dest_lng AS lng, MAX(id) AS last FROM rides
+          WHERE passenger_id = ? AND status = 'completed' AND dest_text NOT IN ('', 'Local marcado no mapa')
+          GROUP BY dest_text ORDER BY last DESC LIMIT 5`
+      )
+      .all(req.user.id);
+    res.json({ places: rows.map((r) => ({ label: r.label, lat: r.lat, lng: r.lng })) });
+  });
+
   router.get('/history', (req, res) => res.json({ rides: rides.list({ passengerId: req.user.id, limit: 30 }) }));
 
   router.get('/:id', (req, res) => res.json({ ride: ownRide(req) }));
