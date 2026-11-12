@@ -4,7 +4,7 @@ import {
   h, mount, brl, km, toast, run, confirmBox, authScreen, registerSW, dateTime, phoneMask, STATUS_PT, PAYMENT_PT,
   icone, botaoTema, carregarMarca, aplicarMarca, nomeDaMarca, esqueleto,
 } from '/shared/ui.js';
-import { criarMapa, criarCamada, criarRota, enquadrar, campoEndereco, ondeEstou, removerMapa } from '/shared/mapa.js';
+import { criarMapa, criarCamada, criarRota, enquadrar, campoEndereco, ondeEstou, removerMapa, enderecoDoPonto } from '/shared/mapa.js';
 import { janela, formularioBanco } from '/shared/menu.js';
 
 const client = createClient('central');
@@ -363,12 +363,7 @@ function telaNova() {
     pintar();
     cotar();
     if (!ponto.text) {
-      let label = null;
-      try {
-        label = (await client.api(`/geo/reverse?lat=${ponto.lat}&lng=${ponto.lng}`)).label;
-      } catch {
-        label = null;
-      }
+      const label = await enderecoDoPonto(client, ponto.lat, ponto.lng);
       if (f[qual] === ponto) {
         ponto.text = label || 'Local marcado no mapa';
         (qual === 'origem' ? cOrigem : cDestino).set(ponto.text);

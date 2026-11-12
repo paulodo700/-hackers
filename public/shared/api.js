@@ -27,10 +27,11 @@ export function createClient(app) {
     }
   }
 
-  async function api(path, { method, body } = {}) {
+  async function api(path, { method, body, signal } = {}) {
     let res;
     try {
       res = await fetch(`/api${path}`, {
+        signal,
         method: method || (body ? 'POST' : 'GET'),
         headers: {
           'Content-Type': 'application/json',

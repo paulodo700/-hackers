@@ -5,7 +5,7 @@ import {
   icone, carregarMarca, nomeDaMarca, sloganDaMarca, esqueleto, contatoCentral,
 } from '/shared/ui.js';
 import { criarMenu, abrirPerfil, abrirAjuda, abrirPix } from '/shared/menu.js';
-import { criarMapa, criarCamada, criarRota, enquadrar, ondeEstou, campoEndereco, minutosAte } from '/shared/mapa.js';
+import { criarMapa, criarCamada, criarRota, enquadrar, ondeEstou, campoEndereco, minutosAte, enderecoDoPonto } from '/shared/mapa.js';
 
 const client = createClient('passageiro');
 const root = document.getElementById('root');
@@ -194,12 +194,7 @@ async function definirPonto(qual, ponto, buscarTexto) {
   atualizarFormulario();
   cotar();
   if (buscarTexto && !ponto.text) {
-    let label = null;
-    try {
-      label = (await client.api(`/geo/reverse?lat=${ponto.lat}&lng=${ponto.lng}`)).label;
-    } catch {
-      label = null;
-    }
+    const label = await enderecoDoPonto(client, ponto.lat, ponto.lng);
     if (st[qual] === ponto) {
       ponto.text = label || 'Local marcado no mapa';
       atualizarFormulario();

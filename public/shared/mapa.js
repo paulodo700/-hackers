@@ -211,3 +211,17 @@ export function campoEndereco({ client, h, label, placeholder, near, onPick, onF
     },
   };
 }
+
+// Endereço de um ponto no mapa, com tempo limite: nunca deixa o campo "Buscando…" para sempre.
+export async function enderecoDoPonto(client, lat, lng, ms = 8000) {
+  const controle = new AbortController();
+  const limite = setTimeout(() => controle.abort(), ms);
+  try {
+    const r = await client.api(`/geo/reverse?lat=${lat}&lng=${lng}`, { signal: controle.signal });
+    return (r && r.label) || null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(limite);
+  }
+}
