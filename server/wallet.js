@@ -28,9 +28,11 @@ function createWallet({ db, audit, finance }) {
 
   // Marca a corrida como paga (confirmação do gateway, ou da central quando o Pix cai na conta dela).
   function markPaid(rideId, { amount, provider = 'manual', ref = '', by = null }) {
-    const ride = db.prepare('SELECT id, price, status, payment_status FROM rides WHERE id = ?').get(Number(rideId));
+    const ride = db.prepare('SELECT id, price, status, payment_status, asaas_payment_id FROM rides WHERE id = ?').get(Number(rideId));
     if (!ride) throw new AppError(404, 'Corrida não encontrada');
     if (ride.payment_status === 'paid') throw new AppError(409, 'Esta corrida já foi paga');
+    // Com cobrança no Asaas, a confirmação é automática: confirmar à mão pagaria o motorista duas vezes.
+    if (provider !== 'asaas' && ride.asaas_payment_id) throw new AppError(409, 'Esta corrida tem cobrança no Asaas: ela é confirmada automaticamente');
     if (cents(amount) !== cents(ride.price)) throw new AppError(409, `O valor recebido não confere com a corrida (R$ ${cents(ride.price).toFixed(2)})`);
     db.transaction(() => {
       db.prepare("UPDATE rides SET payment_status = 'paid', paid_at = ?, payment_ref = ? WHERE id = ?").run(new Date().toISOString(), `${provider}:${ref}`.slice(0, 80), ride.id);
@@ -42,18 +44,22 @@ function createWallet({ db, audit, finance }) {
 
   // Divide a corrida: comissão para a central, o resto para o motorista. Só uma vez por corrida.
   function split(rideId) {
-    const r = db.prepare("SELECT id, driver_id, price, payment_status, status, wallet_at FROM rides WHERE id = ?").get(Number(rideId));
+    const r = db.prepare("SELECT id, driver_id, price, payment_status, status, wallet_at, payment_ref FROM rides WHERE id = ?").get(Number(rideId));
     if (!r || r.status !== 'completed' || r.payment_status !== 'paid' || !r.driver_id || r.wallet_at) return false;
     const pct = getSettings(db).commission_percent;
     const fee = cents((r.price * pct) / 100);
     const share = cents(r.price - fee);
     const now = new Date().toISOString();
+    // Corrida paga pelo Asaas: o motorista já recebeu na subconta dele (divisão feita pelo Asaas).
+    // Não creditamos de novo; a linha de R$ 0,00 só mostra o registro no extrato.
+    const viaAsaas = String(r.payment_ref || '').startsWith('asaas:');
     db.transaction(() => {
-      insertEntry.run(driverAccount(r.driver_id), share, 'ride_share', r.id, null, `Corrida #${r.id}`, now);
+      if (viaAsaas) insertEntry.run(driverAccount(r.driver_id), 0, 'asaas_share', r.id, null, `Corrida #${r.id}: paga na sua conta Asaas`, now);
+      else insertEntry.run(driverAccount(r.driver_id), share, 'ride_share', r.id, null, `Corrida #${r.id}`, now);
       if (fee > 0) insertEntry.run(CENTRAL, fee, 'ride_fee', r.id, null, `Comissão da corrida #${r.id}`, now);
       db.prepare('UPDATE rides SET wallet_at = ?, commission = ? WHERE id = ?').run(now, fee, r.id);
     })();
-    return { share, fee };
+    return { share: viaAsaas ? 0 : share, fee, viaAsaas };
   }
 
   // Chamado quando a corrida termina.

@@ -62,12 +62,17 @@ function createAsaas({ db, fetchImpl = globalThis.fetch }) {
     return data;
   }
 
-  // Cliente único que representa os passageiros nas cobranças (o Asaas exige um cliente em cada cobrança).
+  // Cliente das cobranças. O Asaas exige cpfCnpj no cliente, e o app não coleta CPF do passageiro.
+  // Por isso o cliente é a própria central (CPF/CNPJ já cadastrado em Configurações). Um cliente por documento.
   async function customerId() {
-    const row = db.prepare("SELECT v FROM asaas_config WHERE k = 'customer_id'").get();
+    const s = getSettings(db);
+    const doc = digits(s.central_doc);
+    if (!doc || !s.central_holder) throw new AppError(409, 'Cadastre a conta da central (CPF/CNPJ) em Configurações antes do Pix automático');
+    const key = `customer:${doc}`;
+    const row = db.prepare('SELECT v FROM asaas_config WHERE k = ?').get(key);
     if (row) return row.v;
-    const c = await call('POST', '/v3/customers', { name: 'Passageiros do Mototáxi', externalReference: 'mototaxi-passageiros' });
-    db.prepare("INSERT OR REPLACE INTO asaas_config (k, v) VALUES ('customer_id', ?)").run(c.id);
+    const c = await call('POST', '/v3/customers', { name: String(s.central_holder).slice(0, 100), cpfCnpj: doc, externalReference: 'mototaxi-central' });
+    db.prepare('INSERT OR REPLACE INTO asaas_config (k, v) VALUES (?, ?)').run(key, c.id);
     return c.id;
   }
 

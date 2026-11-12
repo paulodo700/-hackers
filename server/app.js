@@ -56,6 +56,10 @@ function createApp(deps) {
   app.post('/api/payments/asaas/webhook', (req, res, next) => {
     const expected = config.asaasWebhookToken;
     if (!expected) return next(new AppError(503, 'Pix automático ainda não está ligado'));
+    // Regras do Asaas para o token: 32 a 255 caracteres, sem espaços, e nunca a própria chave da API.
+    if (expected.length < 32 || expected.length > 255 || /\s/.test(expected) || expected === config.asaasApiKey) {
+      return next(new AppError(503, 'Token do webhook do Asaas inválido: use 32 a 255 caracteres, sem espaços, diferente da chave da API'));
+    }
     const got = String(req.get('asaas-access-token') || '');
     const crypto = require('node:crypto');
     const ok = got.length === expected.length && crypto.timingSafeEqual(Buffer.from(got), Buffer.from(expected));

@@ -1051,6 +1051,19 @@ function telaAcertos() {
       v.drivers.length
         ? h('div', { class: 'tabela-caixa' }, h('table', {}, h('thead', {}, h('tr', {}, h('th', {}, 'Motorista'), h('th', { class: 'n' }, 'Saldo'))), h('tbody', {}, v.drivers.map((d) => h('tr', {}, h('td', {}, d.name), h('td', { class: 'n' }, brl(d.balance)))))))
         : h('p', { class: 'vazio-lista' }, 'Nenhum motorista cadastrado.'),
+      h('h3', { class: 'bloco-titulo' }, 'Pix automático (Asaas): subcontas'),
+      !v.asaas_enabled
+        ? h('p', { class: 'muted' }, 'O Asaas ainda não está ligado no servidor. Enquanto isso, o Pix é combinado direto com o motorista.')
+        : v.drivers.length
+          ? h(
+              'div',
+              { class: 'tabela-caixa' },
+              h('table', {}, h('thead', {}, h('tr', {}, h('th', {}, 'Motorista'), h('th', {}, 'Situação'), h('th', {}, ''))), h('tbody', {}, v.drivers.map((d) => {
+                const abrir = h('button', { class: 'btn small go', disabled: !d.has_bank, onclick: () => abrirSubconta(d, carregar) }, 'Abrir subconta');
+                return h('tr', {}, h('td', {}, d.name), h('td', {}, d.has_subaccount ? 'Subconta criada' : d.has_bank ? 'Falta abrir a subconta' : 'Motorista ainda sem conta bancária'), h('td', {}, d.has_subaccount ? '' : abrir));
+              })))
+            )
+          : h('p', { class: 'vazio-lista' }, 'Nenhum motorista cadastrado.'),
       h('h3', { class: 'bloco-titulo' }, 'Extrato da sua carteira'),
       v.statement.length
         ? h('div', { class: 'registro' }, v.statement.slice(0, 30).map((x) => h('div', {}, h('time', {}, dateTime(x.created_at)), h('br'), `${x.note || x.kind} · `, h('b', { class: x.amount >= 0 ? 'passo-ok' : '' }, `${x.amount >= 0 ? '+' : ''}${brl(x.amount)}`))))
@@ -1079,6 +1092,47 @@ function telaAcertos() {
           },
         },
         h('label', { class: 'field' }, h('span', {}, 'Sua senha'), senha),
+        botao
+      )
+    );
+  }
+
+  // Abre a subconta Asaas do motorista. Os dados ficam no Asaas; o app guarda só o identificador da subconta.
+  function abrirSubconta(d, depois) {
+    const campo = (rotulo, el) => h('label', { class: 'field' }, h('span', {}, rotulo), el);
+    const email = h('input', { type: 'email', required: true, value: d.email || '', autocomplete: 'off' });
+    const celular = h('input', { required: true, inputmode: 'tel', value: d.phone || '', autocomplete: 'off' });
+    const renda = h('input', { type: 'number', step: '0.01', min: '0.01', required: true, placeholder: 'Ex.: 3000' });
+    const endereco = h('input', { required: true, autocomplete: 'off' });
+    const numero = h('input', { required: true, autocomplete: 'off' });
+    const bairro = h('input', { required: true, autocomplete: 'off' });
+    const cep = h('input', { required: true, inputmode: 'numeric', placeholder: '00000-000', autocomplete: 'off' });
+    const botao = h('button', { class: 'btn primary block', type: 'submit' }, 'Abrir subconta');
+    const j = janela(
+      `Subconta de ${d.name}`,
+      h('p', { class: 'muted', style: 'margin-bottom:12px' }, 'Abre a conta no Asaas para a parte do motorista cair direto nela. Confira os dados com ele antes de enviar.'),
+      h(
+        'form',
+        {
+          onsubmit: (e) => {
+            e.preventDefault();
+            run(botao, async () => {
+              await client.api(`/admin/wallet/drivers/${d.id}/subaccount`, {
+                body: { email: email.value, mobilePhone: celular.value, incomeValue: Number(renda.value), address: endereco.value, addressNumber: numero.value, province: bairro.value, postalCode: cep.value },
+              });
+              toast('Subconta criada no Asaas.', 'ok');
+              j.fechar();
+              depois();
+            });
+          },
+        },
+        campo('E-mail', email),
+        campo('Celular com DDD', celular),
+        campo('Renda mensal estimada (R$)', renda),
+        campo('Endereço', endereco),
+        campo('Número', numero),
+        campo('Bairro', bairro),
+        campo('CEP', cep),
         botao
       )
     );

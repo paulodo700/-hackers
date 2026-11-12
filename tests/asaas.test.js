@@ -5,6 +5,13 @@ const { startServer } = require('./helpers');
 const O = { lat: -10, lng: -48 };
 const D = { lat: -10.02, lng: -48.02 };
 const SUB = { email: 'joao@exemplo.com', mobilePhone: '11955554444', incomeValue: 3000, address: 'Rua das Flores', addressNumber: '10', province: 'Centro', postalCode: '01001000' };
+const CENTRAL_BANK = { holder_name: 'Central Mototáxi LTDA', holder_doc: '11.222.333/0001-81', bank_name: 'Banco Central', pix_type: 'cnpj', pix_key: '11.222.333/0001-81' };
+
+// A central precisa ter conta cadastrada: é ela o cliente das cobranças.
+async function ligarCentral(s) {
+  const r = await s.call('/api/admin/bank', { token: s.admin.token, method: 'PUT', body: { password: 'central123', ...CENTRAL_BANK } });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+}
 const PAYLOAD = '00020126580014br.gov.bcb.pix0136teste-chave5204000053039865802BR5913TESTE6008BRASIL62070503***6304ABCD';
 
 // Simula a API do Asaas. Tudo que não é do Asaas passa para o fetch real (o próprio servidor de teste).
@@ -91,11 +98,14 @@ test('asaas: corrida Pix vira cobrança com divisão para a subconta; QR Code ve
   const p = await s.register('passenger', 'Maria', '11988887777');
   const d = await s.approvedDriver('João', '11955554444');
   const adm = s.admin.token;
+  await ligarCentral(s);
   await s.call(`/api/admin/wallet/drivers/${d.user.id}/subaccount`, { token: adm, body: SUB });
 
   const rideId = await completedPixRide(s, p, d);
   const pix = await s.call(`/api/rides/${rideId}/pix`, { token: p.token });
   assert.equal(pix.status, 200, JSON.stringify(pix.body));
+  const cliente = calls.find((c) => c.url.endsWith('/v3/customers'));
+  assert.equal(cliente.body.cpfCnpj, '11222333000181'); // a central é o cliente das cobranças
   assert.equal(pix.body.provider, 'asaas');
   assert.equal(pix.body.code, PAYLOAD);
   assert.match(pix.body.qr, /<svg/);
@@ -134,13 +144,14 @@ test('asaas: webhook confirma o Pix com token próprio, uma vez só, e divide so
   const antes = { key: config.asaasApiKey, hook: config.asaasWebhookToken };
   t.after(() => { config.asaasApiKey = antes.key; config.asaasWebhookToken = antes.hook; });
   config.asaasApiKey = 'chave-de-teste';
-  config.asaasWebhookToken = 'token-webhook-asaas-123';
+  config.asaasWebhookToken = 'Tq7mZ2xK9pLwR4vB8nHc3sYd6fGj1eUa';
   fakeAsaas(t);
   const s = await startServer();
   t.after(() => s.close());
   const p = await s.register('passenger', 'Maria', '11988887777');
   const d = await s.approvedDriver('João', '11955554444');
   const adm = s.admin.token;
+  await ligarCentral(s);
   await s.call(`/api/admin/wallet/drivers/${d.user.id}/subaccount`, { token: adm, body: SUB });
   const rideId = await completedPixRide(s, p, d);
   const pix = await s.call(`/api/rides/${rideId}/pix`, { token: p.token });
@@ -154,14 +165,22 @@ test('asaas: webhook confirma o Pix com token próprio, uma vez só, e divide so
     });
   const evento = { event: 'PAYMENT_RECEIVED', payment: { id: 'pay_1', value: valor, externalReference: String(rideId) } };
 
+  config.asaasWebhookToken = 'curto-demais';
+  assert.equal((await hook(evento, 'curto-demais')).status, 503); // token fora das regras do Asaas
+  config.asaasWebhookToken = 'Tq7mZ2xK9pLwR4vB8nHc3sYd6fGj1eUa';
   assert.equal((await hook(evento)).status, 401);
   assert.equal((await hook(evento, 'chute')).status, 401);
-  assert.equal((await hook({ ...evento, payment: { ...evento.payment, value: 999 } }, 'token-webhook-asaas-123')).status, 409);
-  assert.equal((await hook({ event: 'PAYMENT_CREATED', payment: evento.payment }, 'token-webhook-asaas-123')).status, 200); // ignorado
+  assert.equal((await hook({ ...evento, payment: { ...evento.payment, value: 999 } }, 'Tq7mZ2xK9pLwR4vB8nHc3sYd6fGj1eUa')).status, 409);
+  assert.equal((await hook({ event: 'PAYMENT_CREATED', payment: evento.payment }, 'Tq7mZ2xK9pLwR4vB8nHc3sYd6fGj1eUa')).status, 200); // ignorado
   assert.equal((await s.call('/api/driver/wallet', { token: d.token })).body.balance, 0);
 
-  assert.equal((await hook(evento, 'token-webhook-asaas-123')).status, 200);
-  assert.equal((await (await hook({ ...evento, event: 'PAYMENT_CONFIRMED' }, 'token-webhook-asaas-123')).json()).duplicate, true);
-  const saldo = (await s.call('/api/driver/wallet', { token: d.token })).body.balance;
-  assert.equal(saldo, Math.round((valor * 0.9) * 100) / 100);
+  assert.equal((await hook(evento, 'Tq7mZ2xK9pLwR4vB8nHc3sYd6fGj1eUa')).status, 200);
+  assert.equal((await (await hook({ ...evento, event: 'PAYMENT_CONFIRMED' }, 'Tq7mZ2xK9pLwR4vB8nHc3sYd6fGj1eUa')).json()).duplicate, true);
+  // A parte do motorista já está na subconta dele: o saldo interno não credita de novo.
+  assert.equal((await s.call('/api/driver/wallet', { token: d.token })).body.balance, 0);
+  // A comissão fica na central.
+  assert.equal((await s.call('/api/admin/wallet', { token: adm })).body.balance, Math.round((valor * 0.1) * 100) / 100);
+  // A confirmação manual não pode pagar de novo uma corrida que já tem cobrança no Asaas.
+  const manual = await s.call(`/api/admin/wallet/rides/${rideId}/paid`, { token: adm, body: { amount: valor } });
+  assert.equal(manual.status, 409);
 });

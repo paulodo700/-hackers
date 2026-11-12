@@ -125,11 +125,13 @@ module.exports = function adminRoutes({ db, rides, dispatch, drivers, geo, docs,
       awaiting: wallet.awaitingPayment(),
       drivers: db
         .prepare(
-          `SELECT u.id, u.name, u.phone FROM users u JOIN drivers d ON d.user_id = u.id ORDER BY u.name`
+          `SELECT u.id, u.name, u.phone, u.email, b.asaas_wallet_id AS wallet_id
+             FROM users u JOIN drivers d ON d.user_id = u.id LEFT JOIN driver_bank b ON b.user_id = u.id ORDER BY u.name`
         )
         .all()
-        .map((d) => ({ ...d, balance: wallet.balance(wallet.driverAccount(d.id)) })),
+        .map(({ wallet_id, ...d }) => ({ ...d, balance: wallet.balance(wallet.driverAccount(d.id)), has_subaccount: !!wallet_id, has_bank: !!finance.driverBank(d.id) })),
       central_ready: !!finance.centralBank(),
+      asaas_enabled: asaas.enabled(),
     });
   });
 

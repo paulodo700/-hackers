@@ -54,3 +54,7 @@
   da central), saques com senha e confirmação da central, webhook de pagamento com segredo (`/api/payments/webhook`).
   O sistema NÃO movimenta dinheiro sozinho: divisão real exige gateway licenciado (ver `docs/PAGAMENTOS-AUTOMATICOS.md`).
   Os acertos antigos de comissão foram removidos; a aba da central agora é **Carteira**.
+- Versão 6 (12/11/2026): integração Asaas (`server/asaas.js`): subconta por motorista (central, aba Carteira), Pix da corrida
+  com divisão, confirmação por webhook (`/api/payments/asaas/webhook`, token `asaas-access-token`). Corrida paga pelo Asaas
+  não credita o motorista de novo no saldo interno. Validação no sandbox pendente: a chave salva é recusada pelo Asaas.
+  Cliente das cobranças = CNPJ/CPF da central (o Asaas exige documento). Ver `docs/PAGAMENTOS-AUTOMATICOS.md`.

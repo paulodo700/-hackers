@@ -33,8 +33,9 @@ Gateway escolhido: **Asaas**. O código está em `server/asaas.js` e já é usad
 - **Cobrança Pix por corrida:** `POST /v3/payments` com `billingType: PIX`, `externalReference` = número da corrida e
   `split` com o `walletId` do motoqueiro e `fixedValue` = valor menos a comissão. A central fica com a comissão.
 - **QR Code:** `GET /v3/payments/{id}/pixQrCode`. A corrida guarda o id da cobrança (não cria outra ao reabrir).
-- **Confirmação:** `POST /api/payments/asaas/webhook`, com o token no cabeçalho `asaas-access-token`. Eventos
+- **Confirmação:** `POST /api/payments/asaas/webhook`, com o token no cabeçalho `asaas-access-token` (confirmado na documentação). Eventos
   `PAYMENT_RECEIVED` e `PAYMENT_CONFIRMED` chamam `markPaid`. Aviso repetido não conta duas vezes.
+- **Central:** na aba Carteira, a seção "Pix automático (Asaas)" lista os motoristas e abre a subconta por formulário.
 - **Sem subconta, sem Pix:** com o Asaas ligado, o app não cobra Pix direto na chave do motoqueiro (isso fugiria da comissão).
 
 Configuração (no `.env` do servidor):
@@ -45,10 +46,18 @@ Configuração (no `.env` do servidor):
 | `ASAAS_ENV` | em branco = sandbox. `production` só com confirmação do dono |
 | `ASAAS_WEBHOOK_TOKEN` | o mesmo texto que for colocado no webhook do painel Asaas |
 
+Regras confirmadas na documentação do Asaas:
+
+- **Cliente da cobrança:** o cadastro de cliente exige `cpfCnpj`. Como o app não coleta CPF do passageiro, o cliente das
+  cobranças é a própria central (CPF/CNPJ em Configurações). Se quiser cobrar o passageiro em nome dele, é preciso
+  coletar o CPF no cadastro dele (decisão de privacidade do dono).
+- **Token do webhook:** 32 a 255 caracteres, sem espaços, e diferente da chave da API. O servidor recusa token fora dessas regras.
+- **Dupla contagem resolvida:** em corrida paga pelo Asaas, a parte do motoqueiro não entra no saldo interno (ela já está
+  na subconta dele). A carteira só registra a comissão da central. A confirmação manual fica bloqueada para essas corridas.
+
 Pendências antes de cobrar de verdade:
 
-1. **Saldo interno duplicado:** a divisão do Asaas já manda o dinheiro ao motoqueiro, mas a carteira interna também
-   credita a parte dele, e o saque manual pagaria de novo. Decidir como tratar (ex.: não permitir saque de corridas
-   pagas pelo Asaas) antes de ligar em produção.
-2. Validar no sandbox: se o cadastro de cliente exige CPF, o cabeçalho do webhook, e o formato exato de `dueDate`.
-3. Teste com R$ 0,01 no sandbox antes de qualquer cobrança real.
+1. Validar no **sandbox** (ainda não feito: a chave salva é recusada pelo Asaas com `invalid_access_token`):
+   o cadastro de cliente com o CNPJ da central, a criação da subconta, a cobrança com split e o recebimento do webhook.
+2. Teste com R$ 0,01 no sandbox antes de qualquer cobrança real.
+3. Só então, com confirmação do dono, `ASAAS_ENV=production`.
