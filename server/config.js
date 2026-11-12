@@ -48,6 +48,11 @@ const config = {
   docsDir: process.env.DOCS_DIR || path.join(path.dirname(dbPath), 'docs'),
   // Segredo que o gateway de pagamento envia para confirmar um Pix. Sem ele, o webhook fica desligado.
   paymentWebhookToken: process.env.PAYMENT_WEBHOOK_TOKEN || '',
+  // Asaas (Pix com divisão). Sem a chave, tudo continua como antes. Padrão: sandbox de testes.
+  // Produção só com ASAAS_ENV=production, e só depois de confirmação do dono.
+  asaasApiKey: process.env.ASAAS_API_KEY || '',
+  asaasBaseUrl: process.env.ASAAS_ENV === 'production' ? 'https://api.asaas.com' : 'https://api-sandbox.asaas.com',
+  asaasWebhookToken: process.env.ASAAS_WEBHOOK_TOKEN || '',
   adminPhone: process.env.ADMIN_PHONE || '',
   adminPassword: process.env.ADMIN_PASSWORD || '',
   osrmUrl: process.env.OSRM_URL || 'https://router.project-osrm.org',

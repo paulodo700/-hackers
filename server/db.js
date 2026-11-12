@@ -241,9 +241,11 @@ function openDb(file) {
     if (!userCols.has(col)) db.exec(`ALTER TABLE users ADD COLUMN ${col} TEXT NOT NULL DEFAULT ''`);
   }
   if (!userCols.has('blocked')) db.exec('ALTER TABLE users ADD COLUMN blocked INTEGER NOT NULL DEFAULT 0');
-  for (const [col, type] of [['commission', 'REAL'], ['settled_at', 'TEXT'], ['settlement_id', 'INTEGER'], ['origin_precise', 'INTEGER'], ['dest_precise', 'INTEGER'], ['payment_status', "TEXT NOT NULL DEFAULT 'pending'"], ['paid_at', 'TEXT'], ['payment_ref', 'TEXT'], ['wallet_at', 'TEXT']]) {
+  for (const [col, type] of [['commission', 'REAL'], ['settled_at', 'TEXT'], ['settlement_id', 'INTEGER'], ['origin_precise', 'INTEGER'], ['dest_precise', 'INTEGER'], ['payment_status', "TEXT NOT NULL DEFAULT 'pending'"], ['paid_at', 'TEXT'], ['payment_ref', 'TEXT'], ['wallet_at', 'TEXT'], ['asaas_payment_id', 'TEXT']]) {
     if (!rideCols.has(col)) db.exec(`ALTER TABLE rides ADD COLUMN ${col} ${type}`);
   }
+  const bankCols = new Set(db.prepare('PRAGMA table_info(driver_bank)').all().map((c) => c.name));
+  if (!bankCols.has('asaas_wallet_id')) db.exec('ALTER TABLE driver_bank ADD COLUMN asaas_wallet_id TEXT');
   const driverCols = new Set(db.prepare('PRAGMA table_info(drivers)').all().map((c) => c.name));
   if (!driverCols.has('cnh_expires')) db.exec("ALTER TABLE drivers ADD COLUMN cnh_expires TEXT NOT NULL DEFAULT ''");
   if (!driverCols.has('pay_notice_at')) db.exec('ALTER TABLE drivers ADD COLUMN pay_notice_at TEXT');

@@ -9,7 +9,7 @@ const { ACTIVE } = require('../rides');
 const { localDay, dayRange, isDay, shiftDay } = require('../time');
 
 // Rotas da central.
-module.exports = function adminRoutes({ db, rides, dispatch, drivers, geo, docs, finance, audit, places, wallet }) {
+module.exports = function adminRoutes({ db, rides, dispatch, drivers, geo, docs, finance, audit, places, wallet, asaas }) {
   const router = express.Router();
   router.use(requireAuth(db, 'admin'));
 
@@ -154,6 +154,13 @@ module.exports = function adminRoutes({ db, rides, dispatch, drivers, geo, docs,
     if (!verifyPassword(body.password, row.password_hash)) throw new AppError(401, 'Senha incorreta');
     const id = wallet.requestWithdrawal(req.user, wallet.CENTRAL, body.amount);
     res.status(201).json({ id, balance: wallet.balance(wallet.CENTRAL) });
+  });
+
+  // Abre a subconta Asaas do motoqueiro (divisão automática das corridas Pix). Só a central.
+  router.post('/wallet/drivers/:id/subaccount', async (req, res) => {
+    const result = await asaas.createSubaccount(req.params.id, req.body || {});
+    audit.log(req.user, 'Subconta Asaas criada', `motoqueiro #${Number(req.params.id)}`);
+    res.status(201).json(result);
   });
 
   router.get('/bank', (req, res) => res.json({ bank: finance.centralBank() }));

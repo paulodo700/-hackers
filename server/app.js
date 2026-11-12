@@ -51,6 +51,27 @@ function createApp(deps) {
     res.json({ ok: true });
   });
 
+  // Asaas: avisa quando o Pix da corrida cai. Token próprio (cabeçalho asaas-access-token).
+  // Reaproveita markPaid: a divisão com o motoqueiro acontece igual ao fluxo manual.
+  app.post('/api/payments/asaas/webhook', (req, res, next) => {
+    const expected = config.asaasWebhookToken;
+    if (!expected) return next(new AppError(503, 'Pix automático ainda não está ligado'));
+    const got = String(req.get('asaas-access-token') || '');
+    const crypto = require('node:crypto');
+    const ok = got.length === expected.length && crypto.timingSafeEqual(Buffer.from(got), Buffer.from(expected));
+    if (!ok) return next(new AppError(401, 'Não autorizado'));
+    const body = req.body || {};
+    const p = body.payment || {};
+    if (!['PAYMENT_RECEIVED', 'PAYMENT_CONFIRMED'].includes(body.event)) return res.json({ ok: true, ignored: true });
+    const rideId = Number(p.externalReference);
+    const ride = rideId ? db.prepare('SELECT payment_status FROM rides WHERE id = ?').get(rideId) : null;
+    if (!ride) return res.json({ ok: true, ignored: true });
+    // Asaas pode mandar dois avisos do mesmo pagamento (confirmado e recebido): o segundo não conta de novo.
+    if (ride.payment_status === 'paid') return res.json({ ok: true, duplicate: true });
+    deps.wallet.markPaid(rideId, { amount: p.value, provider: 'asaas', ref: String(p.id || '').slice(0, 60) });
+    res.json({ ok: true });
+  });
+
   // Notificações: chave pública e cadastro do aparelho (só para quem entrou).
   app.get('/api/push/key', (req, res) => res.json({ key: deps.push.publicKey() }));
   app.post('/api/push/subscribe', auth.requireAuth(db), (req, res) => {

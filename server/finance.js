@@ -6,10 +6,10 @@ const { cleanBank, pixCharge, maskDoc } = require('./pix');
 
 const round2 = (n) => Math.round(n * 100) / 100;
 
-function createFinance({ db, audit }) {
+function createFinance({ db, audit, asaas = null }) {
   /* ----- Banco do motoqueiro ----- */
   function driverBank(userId) {
-    return db.prepare('SELECT holder_name, holder_doc, bank_name, pix_type, pix_key, updated_at FROM driver_bank WHERE user_id = ?').get(Number(userId)) || null;
+    return db.prepare('SELECT holder_name, holder_doc, bank_name, pix_type, pix_key, asaas_wallet_id, updated_at FROM driver_bank WHERE user_id = ?').get(Number(userId)) || null;
   }
 
   function setDriverBank(user, input) {
@@ -45,6 +45,11 @@ function createFinance({ db, audit }) {
     if (ride.payment !== 'pix') throw new AppError(409, 'Esta corrida não é paga em Pix');
     if (!['in_progress', 'completed'].includes(ride.status)) throw new AppError(409, 'O Pix fica disponível depois do embarque');
     const bank = ride.driver_id ? driverBank(ride.driver_id) : null;
+    // Com o Asaas ligado, o Pix sempre passa pela divisão (comissão da central). Sem subconta, não cobra direto.
+    if (asaas && asaas.enabled()) {
+      if (!bank || !bank.asaas_wallet_id) throw new AppError(409, 'Este motoqueiro ainda não tem conta para o Pix automático. Peça à central para cadastrar.');
+      return asaas.rideCharge(ride, bank.asaas_wallet_id);
+    }
     if (!bank) throw new AppError(409, 'O motoqueiro ainda não cadastrou a chave Pix. Combine o pagamento com ele.');
     const charge = await pixCharge({
       key: bank.pix_key,

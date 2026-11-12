@@ -10,6 +10,7 @@ const { createDispatcher } = require('./dispatch');
 const { createAudit } = require('./audit');
 const { createDocs } = require('./docs');
 const { createFinance } = require('./finance');
+const { createAsaas } = require('./asaas');
 const { createPlaces } = require('./places');
 const { createPush } = require('./push');
 const { createWallet } = require('./wallet');
@@ -21,7 +22,8 @@ function buildServer({ dbPath = config.dbPath, geoImpl = geo, docsDir = config.d
   const db = openDb(dbPath);
   const bus = new EventEmitter();
   const audit = createAudit({ db });
-  const finance = createFinance({ db, audit });
+  const asaas = createAsaas({ db });
+  const finance = createFinance({ db, audit, asaas });
   const wallet = createWallet({ db, audit, finance });
   const places = createPlaces({ db });
   const push = createPush({ db, config });
@@ -33,7 +35,7 @@ function buildServer({ dbPath = config.dbPath, geoImpl = geo, docsDir = config.d
   bus.on('ride:update', (ride) => {
     if (ride && ride.passenger_id) push.rideChanged(ride);
   });
-  const deps = { db, bus, rides, drivers, dispatch, audit, docs, finance, wallet, push, places, geo: geo.withSearchCache(geo.withRouteCache(geoImpl)) };
+  const deps = { db, bus, rides, drivers, dispatch, audit, docs, finance, asaas, wallet, push, places, geo: geo.withSearchCache(geo.withRouteCache(geoImpl)) };
   const app = createApp(deps);
   const server = http.createServer(app);
   const io = attachRealtime(server, deps);
