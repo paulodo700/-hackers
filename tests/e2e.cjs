@@ -1,0 +1,344 @@
+// Teste de ponta a ponta no navegador: passageiro, motoqueiro e central ao mesmo tempo.
+// Uso: node tests/e2e.cjs [pasta-para-capturas]   (precisa do Playwright instalado)
+const { spawn } = require('node:child_process');
+const { mkdtempSync, mkdirSync } = require('node:fs');
+const { tmpdir } = require('node:os');
+const path = require('node:path');
+const { chromium } = require('playwright');
+
+async function main() {
+const PORT = 3111;
+const BASE = `http://127.0.0.1:${PORT}`;
+const shots = process.argv[2] || path.join(tmpdir(), 'mototaxi-e2e');
+mkdirSync(shots, { recursive: true });
+
+const server = spawn('node', [path.join(__dirname, '..', 'server', 'index.js')], {
+  env: {
+    ...process.env,
+    PORT: String(PORT),
+    DB_PATH: path.join(mkdtempSync(path.join(tmpdir(), 'mototaxi-')), 'e2e.db'),
+    JWT_SECRET: 'segredo-do-teste',
+    ADMIN_PHONE: '11900000000',
+    ADMIN_PASSWORD: 'central123',
+    // Sem internet no teste: o cálculo de rota cai na estimativa e a busca de endereço fica vazia.
+    OSRM_URL: 'http://127.0.0.1:9',
+    NOMINATIM_URL: 'http://127.0.0.1:9',
+  },
+  stdio: ['ignore', 'pipe', 'inherit'],
+});
+await new Promise((resolve, reject) => {
+  server.stdout.on('data', (d) => String(d).includes('rodando') && resolve());
+  server.on('exit', (code) => reject(new Error(`servidor saiu com código ${code}`)));
+});
+
+const browser = await chromium.launch();
+const errors = [];
+let failed = false;
+
+async function open(name, url, options) {
+  // Sem animações (capturas nítidas) e, com E2E_ESCURO=1, no tema escuro.
+  const ctx = await browser.newContext({
+    locale: 'pt-BR',
+    reducedMotion: 'reduce',
+    colorScheme: process.env.E2E_ESCURO ? 'dark' : 'light',
+    ...options,
+  });
+  const page = await ctx.newPage();
+  page.on('pageerror', (e) => errors.push(`${name}: ${e.message}`));
+  page.on('console', (m) => {
+    // Mapa (imagens) e serviços externos ficam fora do ar no teste; isso não é erro do app.
+    if (m.type() === 'error' && !/tile\.openstreetmap|Failed to load resource/.test(m.text() + m.location().url)) {
+      errors.push(`${name}: ${m.text()}`);
+    }
+  });
+  await page.goto(BASE + url);
+  return page;
+}
+// Leva a posição do motorista até o destino da corrida atual (ele precisa estar lá para finalizar).
+async function motoristaNoDestino(page) {
+  await page.evaluate(async () => {
+    const sessao = JSON.parse(localStorage.getItem('mototaxi:motoqueiro') || 'null');
+    const h = { Authorization: `Bearer ${sessao.token}`, 'Content-Type': 'application/json' };
+    const estado = await (await fetch('/api/driver/state', { headers: h })).json();
+    if (!estado.ride) return;
+    await fetch('/api/driver/location', { method: 'POST', headers: h, body: JSON.stringify({ lat: estado.ride.dest.lat, lng: estado.ride.dest.lng }) });
+  });
+}
+const phone = { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, permissions: ['geolocation'] };
+const shot = (page, name) => page.screenshot({ path: path.join(shots, `${name}.png`) });
+// Espera o texto aparecer NA TELA (ignora cópias escondidas do mesmo texto).
+const see = (page, text) => page.getByText(text, { exact: false }).locator('visible=true').first().waitFor({ timeout: 15000 });
+const tap = (page, name) => page.getByRole('button', { name, exact: true }).click();
+async function clickMap(page, dx, dy) {
+  const box = await page.locator('.mapa').boundingBox();
+  await page.mouse.click(box.x + box.width / 2 + dx, box.y + box.height / 2 + dy);
+}
+
+try {
+  const home = await open('inicio', '/', phone);
+  // O endereço principal abre direto o passageiro, sem mostrar as outras telas.
+  await see(home, 'Peça sua moto em poucos toques');
+  if (!home.url().endsWith('/passageiro/')) throw new Error('A raiz deveria abrir a tela do passageiro');
+  if (await home.getByText(/central|motoqueiro/i).count()) throw new Error('A tela do passageiro cita as outras telas');
+  await shot(home, '01-inicio');
+
+  // Motoqueiro se cadastra e fica aguardando aprovação.
+  const moto = await open('motoqueiro', '/motoqueiro/', { ...phone, geolocation: { latitude: -10.001, longitude: -48.001 } });
+  await tap(moto, 'Não tem conta? Criar agora');
+  await moto.getByLabel('Seu nome').fill('João da Moto');
+  await moto.getByLabel('Telefone com DDD').fill('(11) 95555-4444');
+  await moto.getByLabel('Modelo da moto').fill('CG 160');
+  await moto.getByLabel('Placa').fill('abc1d23');
+  await moto.getByLabel('Crie uma senha').fill('123456');
+  await tap(moto, 'Criar conta');
+  // Cadastro incompleto: precisa enviar documentos e conta antes de a central aprovar.
+  await see(moto, 'Complete seu cadastro');
+  await tap(moto, 'Completar cadastro');
+  const foto = path.join(shots, 'documento-teste.jpg');
+  await home.screenshot({ path: foto, type: 'jpeg' }); // uma foto de verdade, para o app reduzir e enviar
+  for (const nome of ['CNH (frente)', 'Documento da moto', 'Selfie segurando a CNH']) {
+    await moto.getByLabel(`Foto: ${nome}`).setInputFiles(foto);
+    await see(moto, 'Foto enviada.');
+    await moto.locator('.doc.ok', { hasText: nome }).waitFor();
+  }
+  await moto.getByLabel('Nome completo do titular da conta').fill('João da Moto');
+  await moto.getByLabel('CPF ou CNPJ do titular').fill('529.982.247-25');
+  await moto.getByLabel('Tipo da chave Pix').selectOption('cpf');
+  await moto.getByLabel('Chave Pix', { exact: true }).fill('529.982.247-25');
+  await moto.getByLabel('Sua senha (para confirmar)').fill('123456');
+  await shot(moto, '02a-motoqueiro-cadastro');
+  await tap(moto, 'Salvar conta');
+  await see(moto, 'Cadastro completo');
+  await tap(moto, 'Voltar');
+  await see(moto, 'Cadastro em análise');
+  await shot(moto, '02-motoqueiro-aguardando');
+
+  // Central entra e aprova.
+  const central = await open('central', '/central/', { viewport: { width: 1280, height: 820 }, permissions: ['geolocation'], geolocation: { latitude: -10, longitude: -48 } });
+  await central.getByLabel('Telefone com DDD').fill('11900000000');
+  await central.getByLabel('Senha').fill('central123');
+  await tap(central, 'Entrar');
+  await see(central, 'Corridas em andamento');
+  await central.getByRole('button', { name: /Configurações/ }).click();
+  await see(central, 'Preço da corrida');
+  await central.getByLabel('Nome da cidade').fill('Vila Bela');
+  await tap(central, 'Usar minha localização');
+  await see(central, 'Centro marcado: -10.00000');
+  await tap(central, 'Salvar configurações');
+  await see(central, 'Configurações salvas');
+  // Conta da central para receber a comissão (pede a senha).
+  const conta = central.locator('section', { hasText: 'Minha conta para receber' });
+  await conta.getByLabel('Nome completo do titular da conta').fill('Central Moto LTDA');
+  await conta.getByLabel('CPF ou CNPJ do titular').fill('11.222.333/0001-81');
+  await conta.getByLabel('Tipo da chave Pix').selectOption('cnpj');
+  await conta.getByLabel('Chave Pix', { exact: true }).fill('11.222.333/0001-81');
+  await conta.getByLabel('Sua senha (para confirmar)').fill('central123');
+  await conta.getByRole('button', { name: 'Salvar minha conta' }).click();
+  await see(central, 'Conta da central salva');
+  await central.getByLabel('Nome da cidade').scrollIntoViewIfNeeded();
+  await shot(central, '03-central-configuracoes');
+
+  // Personalização: nome, frase, aviso e chave Pix definidos pela central.
+  await central.getByRole('button', { name: /Personalizar/ }).click();
+  await central.getByLabel('Nome do serviço').fill('Moto Já');
+  await central.getByLabel(/Frase de apresentação/).fill('A moto mais rápida da cidade');
+  await central.getByLabel(/Aviso para os passageiros/).fill('Atendemos das 6h às 23h');
+  await central.getByLabel(/Telefone\/WhatsApp da central/).fill('(11) 90000-0000');
+  await central.getByRole('button', { name: 'Usar a cor #0a7cff' }).click();
+  await tap(central, 'Salvar personalização');
+  await see(central, 'Personalização salva');
+  await shot(central, '03b-central-personalizar');
+  await central.getByRole('button', { name: /Motoqueiros/ }).click();
+  await see(central, 'João da Moto');
+  // A central abre a ficha, confere documentos e conta, e aprova.
+  await tap(central, 'Ver ficha');
+  await see(central, 'Titular da conta');
+  await central.locator('.fotos img').nth(2).waitFor();
+  await shot(central, '04a-central-ficha');
+  await tap(central, 'Aprovar motoqueiro');
+  await see(central, 'João da Moto aprovado');
+  await central.locator('td .tag', { hasText: 'Aprovado' }).waitFor();
+  await shot(central, '04-central-motoqueiros');
+
+  // Motoqueiro é liberado sozinho e fica online.
+  await see(moto, 'Você está offline');
+  await tap(moto, 'Ficar online');
+  await see(moto, 'Você está online');
+  await shot(moto, '05-motoqueiro-online');
+
+  // Passageiro se cadastra e pede.
+  const pass = await open('passageiro', '/passageiro/', { ...phone, geolocation: { latitude: -10, longitude: -48 } });
+  await see(pass, 'A moto mais rápida da cidade'); // frase e nome definidos pela central
+  await see(pass, 'Moto Já');
+  await tap(pass, 'Não tem conta? Criar agora');
+  await see(pass, 'Termos de uso e a Política de privacidade');
+  await pass.getByLabel('Seu nome').fill('Maria Silva <img src=x>'); // nome com HTML: deve aparecer como texto
+  await pass.getByLabel('Telefone com DDD').fill('11988887777');
+  await pass.getByLabel('Crie uma senha').fill('123456');
+  await tap(pass, 'Criar conta');
+  await see(pass, 'Para onde vamos?');
+  await see(pass, 'Atendemos das 6h às 23h');
+  await pass.waitForFunction(() => document.querySelector('.endereco input').value !== '');
+  await clickMap(pass, 70, -60);
+  await pass.getByRole('button', { name: /Pedir mototáxi · R\$/ }).waitFor({ timeout: 15000 });
+  await pass.getByLabel('Observação para o motoqueiro').fill('portão azul');
+  await pass.getByRole('radio', { name: 'Pix' }).check();
+  await shot(pass, '06-passageiro-preco');
+  await pass.getByRole('button', { name: /Pedir mototáxi · R\$/ }).click();
+
+  // Motoqueiro recebe a oferta e aceita.
+  await see(moto, 'Aceitar corrida');
+  await see(moto, 'portão azul');
+  await shot(moto, '07-motoqueiro-oferta');
+  await tap(moto, 'Aceitar corrida');
+  await see(moto, 'Vá buscar o passageiro');
+  await see(pass, 'Motoqueiro a caminho');
+  await see(pass, 'ABC1D23');
+  await shot(pass, '08-passageiro-a-caminho');
+  await central.getByRole('button', { name: /Ao vivo/ }).click();
+  await see(central, 'Maria Silva');
+  await central.locator('.pin.origem').first().hover();
+  await central.locator('.leaflet-tooltip').first().waitFor();
+  if (await central.locator('img[src="x"]').count()) throw new Error('HTML do nome do passageiro foi interpretado no mapa da central');
+  await shot(central, '09-central-ao-vivo');
+
+  await tap(moto, 'Cheguei ao local');
+  await see(pass, 'Seu motoqueiro chegou!');
+  await tap(moto, 'Iniciar corrida');
+  await see(pass, 'Em viagem');
+  // Pix da corrida: QR Code com o valor, direto para a conta do motoqueiro.
+  await tap(pass, 'Pagar com Pix');
+  await see(pass, 'O valor vai direto para a conta do motoqueiro.');
+  await pass.locator('img.qr').waitFor();
+  const codigo = await pass.getByLabel('Código Pix copia e cola').inputValue();
+  if (!codigo.includes('52998224725') || !codigo.startsWith('000201')) throw new Error('Código Pix não usa a chave do motoqueiro');
+  await shot(pass, '10a-passageiro-pix');
+  await tap(pass, 'Fechar');
+  await shot(moto, '10-motoqueiro-em-viagem');
+  await motoristaNoDestino(moto);
+  await tap(moto, 'Finalizar corrida');
+  await tap(moto, 'Finalizar');
+  await see(moto, 'Receba do passageiro');
+  await shot(moto, '11-motoqueiro-finalizada');
+  await tap(moto, 'Pronto');
+  await see(moto, 'Você está online');
+
+  await see(pass, 'Você chegou!');
+  await pass.getByRole('button', { name: '5 estrelas' }).click();
+  await shot(pass, '12-passageiro-avaliar');
+  await tap(pass, 'Enviar avaliação');
+  await see(pass, 'Obrigado!');
+  await tap(pass, 'Nova corrida');
+  await see(pass, 'Para onde vamos?');
+  // Menu lateral do passageiro.
+  await tap(pass, 'Abrir menu');
+  await pass.getByRole('button', { name: 'Meu perfil' }).waitFor();
+  await pass.getByRole('button', { name: 'Falar com a central' }).waitFor();
+  await pass.getByRole('link', { name: 'Termos e privacidade' }).waitFor();
+  await shot(pass, '13a-passageiro-menu');
+  await pass.getByRole('button', { name: 'Histórico' }).click();
+  await see(pass, 'Concluída');
+  await shot(pass, '13-passageiro-historico');
+  // Perfil: corrigir o nome.
+  await tap(pass, 'Abrir menu');
+  await pass.getByRole('button', { name: 'Meu perfil' }).click();
+  await pass.getByLabel('Seu nome').fill('Maria Souza');
+  await tap(pass, 'Salvar meus dados');
+  await see(pass, 'Dados salvos.');
+  await shot(pass, '13b-passageiro-perfil');
+  await tap(pass, 'Fechar');
+  await see(pass, 'Olá, Maria');
+
+  // Central lança uma corrida para quem ligou.
+  await central.getByRole('button', { name: /Nova corrida/ }).click();
+  await central.getByPlaceholder('Nome de quem vai na moto').fill('Dona Ana');
+  await central.getByPlaceholder('(00) 00000-0000').fill('(11) 97777-0000');
+  await clickMap(central, -40, 30);
+  await clickMap(central, 90, -80);
+  await central.locator('.preco strong', { hasText: 'R$' }).waitFor({ timeout: 15000 });
+  await shot(central, '14-central-nova-corrida');
+  await tap(central, 'Lançar corrida');
+  await central.locator('.item', { hasText: 'Dona Ana' }).waitFor({ timeout: 15000 });
+
+  await see(moto, 'Aceitar corrida');
+  await tap(moto, 'Aceitar corrida');
+  await see(moto, 'Dona Ana');
+  await central.locator('.item .tag', { hasText: 'Motoqueiro a caminho' }).waitFor();
+  await tap(moto, 'Cheguei ao local');
+  await tap(moto, 'Iniciar corrida');
+  await motoristaNoDestino(moto);
+  await tap(moto, 'Finalizar corrida');
+  await tap(moto, 'Finalizar');
+  await tap(moto, 'Pronto');
+  await tap(moto, 'Abrir menu');
+  await shot(moto, '15a-motoqueiro-menu');
+  await moto.getByRole('button', { name: 'Ganhos' }).click();
+  await moto.locator('.pagina').getByText('2 corridas').first().waitFor();
+  await shot(moto, '15-motoqueiro-ganhos');
+  // Carteira: a central confirma os pagamentos recebidos, e a divisão acontece sozinha.
+  await central.getByRole('button', { name: /Carteira/ }).click();
+  await see(central, 'Pagamentos a confirmar');
+  await shot(central, '15c-central-carteira');
+  for (let i = 0; i < 5; i++) {
+    const botao = central.getByRole('button', { name: 'Pagamento recebido' }).first();
+    if (!(await botao.count())) break;
+    await botao.click();
+    await see(central, 'Divisão feita.');
+    await central.waitForTimeout(400);
+  }
+  await see(central, 'Nenhum pagamento esperando confirmação.');
+
+  // Motorista: o saldo já tem a parte dele, e ele saca para a conta.
+  await tap(moto, 'Abrir menu');
+  await moto.getByRole('button', { name: 'Ganhos' }).click();
+  await see(moto, 'Saldo disponível');
+  await shot(moto, '15b-motoqueiro-carteira');
+  await tap(moto, 'Sacar para minha conta');
+  await moto.getByLabel('Sua senha').fill('123456');
+  await tap(moto, 'Confirmar saque');
+  await see(moto, 'Saque pedido.');
+
+  // Central paga o saque (Pix enviado) com a senha dela.
+  await central.getByRole('button', { name: /Carteira/ }).click();
+  await see(central, 'Saques para pagar');
+  await tap(central, 'Paguei');
+  await central.getByLabel('Sua senha').fill('central123');
+  await tap(central, 'Confirmar: Pix enviado');
+  await see(central, 'Pix enviado.');
+  await see(central, 'Nenhum saque pendente.');
+
+  await central.getByRole('button', { name: /Relatórios/ }).click();
+  await see(central, 'Comissão');
+  await central.locator('.indicador', { hasText: 'Corridas concluídas' }).getByText('2', { exact: true }).waitFor();
+  await shot(central, '16-central-relatorios');
+  await central.getByRole('button', { name: /Corridas/ }).click();
+  await see(central, 'Dona Ana');
+  await shot(central, '17-central-corridas');
+  await central.getByRole('button', { name: /Passageiros/ }).click();
+  await see(central, 'Maria Souza');
+  await see(central, '1 passageiro cadastrado');
+  await shot(central, '18-central-passageiros');
+  await central.getByRole('button', { name: /Motoqueiros/ }).click();
+  await see(central, 'Faturou');
+  await shot(central, '19-central-motoqueiros');
+
+  // Recarregar a página do motoqueiro mantém a sessão e o estado.
+  await moto.reload();
+  await see(moto, 'Você está online');
+
+  if (errors.length) throw new Error(`Erros no console:\n${errors.join('\n')}`);
+  console.log(`OK: fluxo completo passou. Capturas em ${shots}`);
+} catch (err) {
+  failed = true;
+  console.error('FALHOU:', err.message);
+  if (errors.length) console.error(errors.join('\n'));
+  let i = 0;
+  for (const ctx of browser.contexts()) for (const p of ctx.pages()) await p.screenshot({ path: path.join(shots, `falha-${i++}.png`) }).catch(() => {});
+} finally {
+  await browser.close();
+  server.kill();
+}
+process.exit(failed ? 1 : 0);
+}
+
+main();

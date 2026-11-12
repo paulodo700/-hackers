@@ -1,0 +1,106 @@
+const express = require('express');
+const { AppError } = require('../errors');
+const { getSettings } = require('../db');
+const { requireAuth } = require('../auth');
+const { calcPrice } = require('../pricing');
+const { validCoord, completeRoute } = require('../geo');
+const { createLimiter } = require('../limit');
+
+// Rotas do passageiro.
+module.exports = function rideRoutes({ db, rides, geo, finance, asaas, asaasCharge }) {
+  const deps = { asaas, asaasCharge };
+  const router = express.Router();
+  router.use(requireAuth(db, 'passenger'));
+  const estimateLimit = createLimiter({ windowMs: 60 * 1000, max: 40 });
+  const orderLimit = createLimiter({ windowMs: 10 * 60 * 1000, max: 30 });
+
+  function points(body) {
+    const origin = body && body.origin;
+    const dest = body && body.dest;
+    if (!validCoord(origin)) throw new AppError(400, 'Informe o local de partida no mapa');
+    if (!validCoord(dest)) throw new AppError(400, 'Informe o destino no mapa');
+    return { origin, dest };
+  }
+
+  // Só o dono enxerga a corrida; para os outros ela "não existe".
+  function ownRide(req) {
+    const ride = rides.getRide(req.params.id);
+    if (!ride || ride.passenger_id !== req.user.id) throw new AppError(404, 'Corrida não encontrada');
+    return ride;
+  }
+
+  router.post('/estimate', estimateLimit, async (req, res) => {
+    const { origin, dest } = points(req.body);
+    const route = completeRoute(await geo.routeDistanceKm(origin, dest), origin, dest);
+    res.json({
+      distance_km: route.km,
+      source: route.source,
+      price: calcPrice(route.km, getSettings(db)),
+      duration_min: route.min,
+      route: route.points,
+    });
+  });
+
+  router.post('/', orderLimit, async (req, res) => {
+    const { origin, dest } = points(req.body);
+    if (db.prepare('SELECT blocked FROM users WHERE id = ?').get(req.user.id).blocked) {
+      throw new AppError(403, 'Sua conta está bloqueada. Fale com a central.');
+    }
+    const settings = getSettings(db);
+    const payment = req.body.payment;
+    if ((payment === 'cash' && !settings.pay_cash) || (payment === 'pix' && !settings.pay_pix)) {
+      throw new AppError(400, 'Esta forma de pagamento não está disponível');
+    }
+    const route = completeRoute(await geo.routeDistanceKm(origin, dest), origin, dest);
+    const ride = rides.createRide({
+      passengerId: req.user.id,
+      passengerName: req.user.name,
+      passengerPhone: req.user.phone,
+      origin,
+      dest,
+      distanceKm: route.km,
+      durationMin: route.min,
+      route: route.points,
+      payment: req.body.payment,
+      notes: req.body.notes,
+      source: 'app',
+    });
+    res.status(201).json({ ride });
+  });
+
+  router.get('/active', (req, res) => res.json({ ride: rides.activeRideFor(req.user) }));
+
+  // Últimos destinos da pessoa, para pedir de novo com um toque.
+  router.get('/recent-places', (req, res) => {
+    const rows = db
+      .prepare(
+        `SELECT dest_text AS label, dest_lat AS lat, dest_lng AS lng, MAX(id) AS last FROM rides
+          WHERE passenger_id = ? AND status = 'completed' AND dest_text NOT IN ('', 'Local marcado no mapa')
+          GROUP BY dest_text ORDER BY last DESC LIMIT 5`
+      )
+      .all(req.user.id);
+    res.json({ places: rows.map((r) => ({ label: r.label, lat: r.lat, lng: r.lng })) });
+  });
+
+  router.get('/history', (req, res) => res.json({ rides: rides.list({ passengerId: req.user.id, limit: 30 }) }));
+
+  router.get('/:id', (req, res) => res.json({ ride: ownRide(req) }));
+
+  // QR Code Pix da corrida: o valor vai direto para a conta do motoqueiro.
+  router.get('/:id/pix', async (req, res) => {
+    const ride = ownRide(req);
+    res.json(deps.asaas.enabled ? await deps.asaasCharge.chargeRide(ride) : await finance.rideCharge(ride));
+  });
+
+  router.post('/:id/cancel', (req, res) => {
+    ownRide(req);
+    res.json({ ride: rides.act(req.params.id, 'cancel', req.user, req.body && req.body.reason) });
+  });
+
+  router.post('/:id/rate', (req, res) => {
+    ownRide(req);
+    res.json({ ride: rides.rate(req.params.id, req.user.id, req.body && req.body.rating) });
+  });
+
+  return router;
+};
