@@ -36,3 +36,13 @@
   um ajuste novo, inclua em `DEFAULTS`, `TEXTS`/`FLAGS` e `PUBLIC_KEYS`.
 - Os Termos (`public/termos.html`) são um modelo genérico; o dono foi avisado de que precisa de revisão profissional.
 - Ele quer o app "pronto para publicar e lucrar": priorize confiabilidade e clareza para usuário leigo.
+- Versão 3 (12/11/2026): Pix da corrida direto na chave do motoqueiro (`server/pix.js`, `server/finance.js`),
+  cadastro do motoqueiro com documentos (`server/docs.js`, arquivos em `data/docs/`, nunca na pasta pública) e conta
+  bancária, aba **Acertos** (comissão gravada em `rides.commission`), conta da central em Configurações, registro de
+  atividades (`server/audit.js`), três PWAs com ícone e `scope` próprios. Guia: `docs/VIRAR-APLICATIVO.md`.
+- **Limites que o dono já sabe:** o sistema não movimenta dinheiro (só gera o Pix copia e cola e controla a
+  comissão; a central confirma o recebimento à mão) e não faz biometria facial automática (conferência manual).
+  Automatizar exige contratar gateway de pagamento / serviço de verificação; não simular essas funções.
+- O código Pix foi validado por testes de estrutura e CRC, mas **não foi lido por um app de banco real**:
+  ele precisa fazer um Pix de teste de R$ 0,01.
+- A versão 3 acrescentou a dependência `qrcode`: ao atualizar no Windows é preciso rodar `1-instalar.bat` de novo.

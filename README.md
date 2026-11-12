@@ -71,7 +71,7 @@ atendem bem; se o movimento crescer muito, troque por um serviço pago ou própr
 ## Testes
 
 ```bash
-npm test                 # 51 testes: preço, corrida, distribuição, login, segurança, API e tempo real
+npm test                 # 61 testes: preço, corrida, distribuição, login, segurança, Pix, comissão, API e tempo real
 node tests/e2e.cjs       # navegador de verdade com passageiro, motoqueiro e central (precisa do Playwright)
 ```
 
@@ -107,6 +107,29 @@ docs/superpowers/                    especificação e plano da versão 1
 - **Senhas:** cada pessoa troca a sua; a central redefine a de quem esqueceu. Trocar a senha derruba os logins antigos.
 - **Proteções:** limite de tentativas e de pedidos por endereço, preço confirmado igual ao estimado, contagem da oferta
   correta mesmo com o relógio do celular errado, página de Termos e Privacidade.
+
+## O que a versão 3 trouxe (dinheiro e cadastro seguro)
+
+- **Pix direto na conta do motoqueiro:** na corrida paga em Pix, passageiro e motoqueiro veem um QR Code com o
+  valor exato e a chave do motoqueiro. O dinheiro não passa pela central.
+- **Cadastro do motoqueiro com documentos:** foto da CNH, do documento da moto e selfie segurando a CNH, mais a
+  conta para receber (titular, CPF/CNPJ e chave Pix). A central confere tudo na **ficha do motoqueiro** antes de aprovar.
+- **Acertos de comissão:** o app guarda a comissão de cada corrida, mostra quanto cada motoqueiro deve, gera para
+  ele o Pix para a conta da central e a central confirma o recebimento.
+- **Conta da central:** cadastrada em Configurações → *Minha conta para receber*.
+- **Segurança:** mudar conta bancária exige a senha; fotos de documentos só abrem com o login da central;
+  registro de atividades com tudo que mexe em dinheiro, senha e cadastro.
+- **Três aplicativos separados**, cada um com seu ícone. Veja [`docs/VIRAR-APLICATIVO.md`](docs/VIRAR-APLICATIVO.md).
+
+**O que o sistema não faz (e por quê):**
+
+- **Não movimenta dinheiro sozinho.** Ele gera o código Pix e controla quem deve quanto. Quem transfere é o
+  aplicativo do banco de cada pessoa. A confirmação do recebimento é feita por você, olhando o extrato.
+  Depósito e confirmação automáticos exigem contratar um serviço de pagamentos (com CPF/CNPJ, contrato e taxa por transação).
+- **Não faz reconhecimento facial automático.** A selfie e os documentos são conferidos por uma pessoa da central.
+  Conferência automática exige contratar um serviço de verificação de identidade.
+- **Antes de usar com dinheiro de verdade, faça um Pix de teste de R$ 0,01** em cada conta cadastrada e confira
+  o nome que aparece no banco.
 
 > **Sobre os Termos de uso (`/termos.html`):** o texto é um modelo genérico. Antes de operar comercialmente, peça a um
 > advogado ou contador para revisar, principalmente por causa da LGPD e das regras de mototáxi do seu município.

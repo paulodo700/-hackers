@@ -108,6 +108,8 @@ Essa parte tem várias telas no site da Cloudflare. Quando chegar nela, peça ao
 
 - O servidor faz **uma cópia por dia, sozinho**, na pasta `C:\mototaxi\data\backups`, e guarda as 30 últimas.
 - Para fazer uma cópia na hora: dois cliques em **backup-agora.bat** (ela vai para `C:\mototaxi\backups`).
+- As **fotos dos documentos dos motoqueiros** ficam em `C:\mototaxi\data\docs`. Inclua essa pasta quando copiar
+  para o pendrive, e nunca a compartilhe: são dados pessoais.
 - **Importante:** cópia no mesmo computador não protege se o disco estragar. De vez em quando, copie a pasta
   de backups para um pendrive ou para o Google Drive.
   Dá para automatizar: abra o arquivo `.env` com o Bloco de Notas e acrescente uma linha com a pasta do
@@ -123,6 +125,7 @@ Essa parte tem várias telas no site da Cloudflare. Quando chegar nela, peça ao
 3. Copie o conteúdo novo **por cima** da pasta `C:\mototaxi`, escolhendo **substituir os arquivos**.
    As pastas `data` (banco de dados) e o arquivo `.env` (senha) não vêm no ZIP, então continuam os seus.
 4. Dê dois cliques em **1-instalar.bat** (quando perguntar se quer refazer a configuração, responda `n`).
+   Este passo é obrigatório: versões novas podem trazer peças novas que precisam ser instaladas.
 5. Dê dois cliques em **2-iniciar.bat**.
 
 ## Problemas comuns
