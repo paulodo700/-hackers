@@ -80,6 +80,25 @@ try {
   await moto.getByLabel('Placa').fill('abc1d23');
   await moto.getByLabel('Crie uma senha').fill('123456');
   await tap(moto, 'Criar conta');
+  // Cadastro incompleto: precisa enviar documentos e conta antes de a central aprovar.
+  await see(moto, 'Complete seu cadastro');
+  await tap(moto, 'Completar cadastro');
+  const foto = path.join(shots, 'documento-teste.jpg');
+  await home.screenshot({ path: foto, type: 'jpeg' }); // uma foto de verdade, para o app reduzir e enviar
+  for (const nome of ['CNH (frente)', 'Documento da moto', 'Selfie segurando a CNH']) {
+    await moto.getByLabel(`Foto: ${nome}`).setInputFiles(foto);
+    await see(moto, 'Foto enviada.');
+    await moto.locator('.doc.ok', { hasText: nome }).waitFor();
+  }
+  await moto.getByLabel('Nome completo do titular da conta').fill('João da Moto');
+  await moto.getByLabel('CPF ou CNPJ do titular').fill('529.982.247-25');
+  await moto.getByLabel('Tipo da chave Pix').selectOption('cpf');
+  await moto.getByLabel('Chave Pix', { exact: true }).fill('529.982.247-25');
+  await moto.getByLabel('Sua senha (para confirmar)').fill('123456');
+  await shot(moto, '02a-motoqueiro-cadastro');
+  await tap(moto, 'Salvar conta');
+  await see(moto, 'Cadastro completo');
+  await tap(moto, 'Voltar');
   await see(moto, 'Cadastro em análise');
   await shot(moto, '02-motoqueiro-aguardando');
 
@@ -96,6 +115,16 @@ try {
   await see(central, 'Centro marcado: -10.00000');
   await tap(central, 'Salvar configurações');
   await see(central, 'Configurações salvas');
+  // Conta da central para receber a comissão (pede a senha).
+  const conta = central.locator('section', { hasText: 'Minha conta para receber' });
+  await conta.getByLabel('Nome completo do titular da conta').fill('Central Moto LTDA');
+  await conta.getByLabel('CPF ou CNPJ do titular').fill('11.222.333/0001-81');
+  await conta.getByLabel('Tipo da chave Pix').selectOption('cnpj');
+  await conta.getByLabel('Chave Pix', { exact: true }).fill('11.222.333/0001-81');
+  await conta.getByLabel('Sua senha (para confirmar)').fill('central123');
+  await conta.getByRole('button', { name: 'Salvar minha conta' }).click();
+  await see(central, 'Conta da central salva');
+  await central.getByLabel('Nome da cidade').scrollIntoViewIfNeeded();
   await shot(central, '03-central-configuracoes');
 
   // Personalização: nome, frase, aviso e chave Pix definidos pela central.
@@ -104,14 +133,19 @@ try {
   await central.getByLabel(/Frase de apresentação/).fill('A moto mais rápida da cidade');
   await central.getByLabel(/Aviso para os passageiros/).fill('Atendemos das 6h às 23h');
   await central.getByLabel(/Telefone\/WhatsApp da central/).fill('(11) 90000-0000');
-  await central.getByLabel(/Chave Pix/).fill('pix@motoja.com');
   await central.getByRole('button', { name: 'Usar a cor #0a7cff' }).click();
   await tap(central, 'Salvar personalização');
   await see(central, 'Personalização salva');
   await shot(central, '03b-central-personalizar');
   await central.getByRole('button', { name: /Motoqueiros/ }).click();
   await see(central, 'João da Moto');
-  await tap(central, 'Aprovar');
+  // A central abre a ficha, confere documentos e conta, e aprova.
+  await tap(central, 'Ver ficha');
+  await see(central, 'Titular da conta');
+  await central.locator('.fotos img').nth(2).waitFor();
+  await shot(central, '04a-central-ficha');
+  await tap(central, 'Aprovar motoqueiro');
+  await see(central, 'João da Moto aprovado');
   await central.locator('td .tag', { hasText: 'Aprovado' }).waitFor();
   await shot(central, '04-central-motoqueiros');
 
@@ -137,6 +171,7 @@ try {
   await clickMap(pass, 70, -60);
   await pass.getByRole('button', { name: /Pedir mototáxi · R\$/ }).waitFor({ timeout: 15000 });
   await pass.getByLabel('Observação para o motoqueiro').fill('portão azul');
+  await pass.getByRole('radio', { name: 'Pix' }).check();
   await shot(pass, '06-passageiro-preco');
   await pass.getByRole('button', { name: /Pedir mototáxi · R\$/ }).click();
 
@@ -160,6 +195,14 @@ try {
   await see(pass, 'Seu motoqueiro chegou!');
   await tap(moto, 'Iniciar corrida');
   await see(pass, 'Em viagem');
+  // Pix da corrida: QR Code com o valor, direto para a conta do motoqueiro.
+  await tap(pass, 'Pagar com Pix');
+  await see(pass, 'O valor vai direto para a conta do motoqueiro.');
+  await pass.locator('img.qr').waitFor();
+  const codigo = await pass.getByLabel('Código Pix copia e cola').inputValue();
+  if (!codigo.includes('52998224725') || !codigo.startsWith('000201')) throw new Error('Código Pix não usa a chave do motoqueiro');
+  await shot(pass, '10a-passageiro-pix');
+  await tap(pass, 'Fechar');
   await shot(moto, '10-motoqueiro-em-viagem');
   await tap(moto, 'Finalizar corrida');
   await tap(moto, 'Finalizar');
@@ -219,6 +262,22 @@ try {
   await moto.getByRole('button', { name: 'Ganhos' }).click();
   await moto.locator('.pagina').getByText('2 corridas').first().waitFor();
   await shot(moto, '15-motoqueiro-ganhos');
+  // Comissão: o motoqueiro gera o Pix para a central e avisa que pagou.
+  await see(moto, 'Comissão em aberto');
+  await tap(moto, 'Pagar comissão por Pix');
+  await moto.locator('img.qr').waitFor();
+  if (!(await moto.getByLabel('Código Pix copia e cola').inputValue()).includes('11222333000181')) throw new Error('Pix da comissão não usa a chave da central');
+  await shot(moto, '15b-motoqueiro-comissao');
+  await tap(moto, 'Já paguei, avisar a central');
+  await see(moto, 'Você avisou o pagamento');
+
+  await central.getByRole('button', { name: /Acertos/ }).click();
+  await see(central, 'Avisou que pagou');
+  await shot(central, '15c-central-acertos');
+  await tap(central, 'Confirmar recebimento');
+  await tap(central, 'Recebi');
+  await see(central, 'Acerto confirmado');
+  await see(central, 'Ninguém deve comissão no momento.');
 
   await central.getByRole('button', { name: /Relatórios/ }).click();
   await see(central, 'Comissão a pagar');

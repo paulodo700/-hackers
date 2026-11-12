@@ -2,9 +2,9 @@
 import { createClient } from '/shared/api.js';
 import {
   h, mount, brl, km, toast, run, confirmBox, authScreen, registerSW, dateTime, STATUS_PT, PAYMENT_PT,
-  icone, carregarMarca, nomeDaMarca, sloganDaMarca, esqueleto, contatoCentral, caixaPix,
+  icone, carregarMarca, nomeDaMarca, sloganDaMarca, esqueleto, contatoCentral,
 } from '/shared/ui.js';
-import { criarMenu, abrirPerfil, abrirAjuda } from '/shared/menu.js';
+import { criarMenu, abrirPerfil, abrirAjuda, abrirPix } from '/shared/menu.js';
 import { criarMapa, criarCamada, criarRota, enquadrar, ondeEstou, campoEndereco, minutosAte } from '/shared/mapa.js';
 
 const client = createClient('passageiro');
@@ -426,9 +426,15 @@ const TELAS = {
   arrived: (r) =>
     h('div', { class: 'pilha' }, passos(r), h('div', {}, h('h2', {}, 'Seu motoqueiro chegou!'), h('p', { class: 'sub' }, `Procure a moto de placa ${r.driver.plate}.`)), cartaoMotoqueiro(r), valor(r), botaoCancelar(r)),
   in_progress: (r) =>
-    h('div', { class: 'pilha' }, passos(r), h('div', {}, h('h2', {}, 'Em viagem'), h('p', { class: 'sub' }, 'Boa viagem! Use o capacete.')), caixaTempo(), cartaoMotoqueiro(r), trajeto(r), valor(r)),
+    h('div', { class: 'pilha' }, passos(r), h('div', {}, h('h2', {}, 'Em viagem'), h('p', { class: 'sub' }, 'Boa viagem! Use o capacete.')), caixaTempo(), cartaoMotoqueiro(r), trajeto(r), valor(r), botaoPix(r)),
   completed: telaConcluida,
 };
+
+// Corrida em Pix: abre o QR Code com o valor exato, que cai direto na conta do motoqueiro.
+function botaoPix(r) {
+  if (r.payment !== 'pix') return null;
+  return h('button', { class: 'btn dark block', type: 'button', onclick: () => abrirPix(client, `/rides/${r.id}/pix`, 'Pagar com Pix') }, 'Pagar com Pix');
+}
 
 function telaConcluida(r) {
   if (r.rating) {
@@ -450,7 +456,7 @@ function telaConcluida(r) {
     'div',
     { class: 'pilha' },
     h('div', {}, h('h2', {}, 'Você chegou!'), h('p', { class: 'sub' }, `Pague ${brl(r.price)} em ${PAYMENT_PT[r.payment].toLowerCase()} ao motoqueiro.`)),
-    r.payment === 'pix' && caixaPix(st.cfg.pix_key),
+    botaoPix(r),
     h('p', {}, `Como foi a corrida com ${r.driver ? r.driver.name : 'o motoqueiro'}?`),
     estrelas,
     enviar,

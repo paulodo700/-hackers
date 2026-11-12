@@ -2,9 +2,9 @@
 import { createClient } from '/shared/api.js';
 import {
   h, mount, brl, km, toast, run, confirmBox, authScreen, registerSW, dateTime, phoneMask, PAYMENT_PT, beep, unlockSound,
-  icone, carregarMarca, nomeDaMarca, esqueleto, contatoCentral, caixaPix,
+  icone, carregarMarca, nomeDaMarca, esqueleto, contatoCentral,
 } from '/shared/ui.js';
-import { criarMenu, abrirPerfil, abrirAjuda } from '/shared/menu.js';
+import { criarMenu, abrirPerfil, abrirAjuda, abrirPix, formularioBanco, reduzirFoto } from '/shared/menu.js';
 import { criarMapa, criarCamada, criarRota, enquadrar, distanciaKm, minutosAte } from '/shared/mapa.js';
 
 const client = createClient('motoqueiro');
@@ -82,6 +82,7 @@ async function montarEstrutura() {
     itens: () => [
       { icone: 'moto', rotulo: 'Início', atual: st.aba === 'inicio', acao: () => trocarAba('inicio') },
       st.cfg.d_earnings && { icone: 'carteira', rotulo: 'Ganhos', atual: st.aba === 'ganhos', acao: () => trocarAba('ganhos') },
+      { icone: 'documento', rotulo: 'Documentos e conta', atual: st.aba === 'cadastro', acao: () => trocarAba('cadastro') },
       { icone: 'usuario', rotulo: 'Meu perfil', acao: () => abrirPerfil(client, () => (titulo.textContent = client.user.name)) },
       st.cfg.d_support && st.central && { icone: 'ajuda', rotulo: 'Falar com a central', acao: () => abrirAjuda(st.central, 'Olá! Sou motoqueiro e preciso de ajuda.') },
       st.cfg.d_terms && { icone: 'documento', rotulo: 'Termos e privacidade', href: '/termos.html' },
@@ -213,12 +214,13 @@ async function carregarResumo() {
 
 function trocarAba(aba) {
   st.aba = aba;
-  const ganhos = aba === 'ganhos';
-  mapaEl.hidden = ganhos;
-  painel.hidden = ganhos;
-  pagina.hidden = !ganhos;
+  const emPagina = aba !== 'inicio';
+  mapaEl.hidden = emPagina;
+  painel.hidden = emPagina;
+  pagina.hidden = !emPagina;
   desenhado = null;
-  if (ganhos) desenharGanhos();
+  if (aba === 'ganhos') desenharGanhos();
+  else if (aba === 'cadastro') desenharCadastro();
   else {
     map.invalidateSize();
     desenhar();
@@ -399,13 +401,40 @@ function desenhar() {
   if (st.pos) camada.set('eu', 'eu', st.pos);
 
   if (st.final) return mount(painel, telaFinal(st.final));
-  if (d.status === 'pending') return mount(painel, telaEspera('relogio', 'Cadastro em análise', 'A central precisa aprovar seu cadastro. Assim que aprovar, esta tela libera sozinha.'));
+  if (d.status === 'pending') return mount(painel, telaPendente());
   if (d.status === 'blocked') return mount(painel, telaEspera('bloqueio', 'Cadastro bloqueado', 'Fale com a central para saber o motivo.'));
   mount(painel, telaInicio(d));
 }
 
 const telaEspera = (nomeIcone, titulo, texto) =>
   h('div', { class: 'pilha' }, h('h2', { class: 'linha-status' }, icone(nomeIcone), titulo), h('p', { class: 'sub' }, texto), h('button', { class: 'btn block', onclick: (e) => run(e.currentTarget, recarregar) }, 'Atualizar'), contatoCentral(st.central, 'Olá! Sou motoqueiro e preciso de ajuda com meu cadastro.'));
+
+// Cadastro ainda não aprovado: mostra o que falta enviar.
+function telaPendente() {
+  const caixa = h('div', { class: 'pilha' }, h('h2', { class: 'linha-status' }, icone('relogio'), 'Cadastro em análise'));
+  client
+    .api('/driver/onboarding')
+    .then((ob) => {
+      const falta = [];
+      if (!Object.values(ob.docs).every(Boolean)) falta.push('as fotos dos documentos');
+      if (!ob.bank) falta.push('a conta para receber');
+      mount(
+        caixa,
+        h('h2', { class: 'linha-status' }, icone('relogio'), ob.complete ? 'Cadastro em análise' : 'Complete seu cadastro'),
+        h('p', { class: 'sub' }, ob.complete ? 'Tudo enviado. A central vai conferir seus documentos e aprovar. Esta tela libera sozinha.' : `Falta enviar ${falta.join(' e ')}. Sem isso a central não consegue aprovar.`),
+        h('button', { class: `btn block ${ob.complete ? '' : 'primary big'}`, onclick: () => trocarAba('cadastro') }, icone('documento'), ob.complete ? 'Ver o que enviei' : 'Completar cadastro'),
+        contatoCentral(st.central, 'Olá! Sou motoqueiro e preciso de ajuda com meu cadastro.')
+      );
+    })
+    .catch(() => {});
+  return caixa;
+}
+
+// Corrida em Pix: mostra o QR Code para o passageiro ler. O valor cai direto na conta do motoqueiro.
+function botaoPix(r) {
+  if (r.payment !== 'pix') return null;
+  return h('button', { class: 'btn dark block', type: 'button', onclick: () => abrirPix(client, `/driver/rides/${r.id}/pix`, 'Receber por Pix') }, 'Mostrar QR Code Pix');
+}
 
 function telaInicio(d) {
   const alternar = h(
@@ -500,6 +529,7 @@ function telaCorrida(r) {
       h('div', {}, h('i'), h('span', {}, h('b', {}, 'Levar até'), r.dest.text || 'Local marcado no mapa'))
     ),
     r.notes && h('p', { class: 'tag warn' }, `Obs.: ${r.notes}`),
+    r.status === 'in_progress' && botaoPix(r),
     h('a', { class: 'btn block', href: linkRota, target: '_blank', rel: 'noopener' }, icone('rota'), 'Abrir rota no mapa'),
     principal,
     desistir
@@ -521,7 +551,7 @@ function telaFinal(r) {
     { class: 'pilha' },
     h('h2', {}, 'Corrida finalizada'),
     h('div', { class: 'preco' }, h('div', {}, h('b', {}, 'Receba do passageiro'), h('br'), h('span', { class: 'muted' }, PAYMENT_PT[r.payment])), h('strong', {}, brl(r.price))),
-    r.payment === 'pix' && caixaPix(st.cfg.pix_key),
+    botaoPix(r),
     h('button', { class: 'btn primary big block', onclick: () => ((st.final = null), desenhar(), carregarResumo()) }, icone('certo'), 'Pronto')
   );
 }
@@ -529,9 +559,9 @@ function telaFinal(r) {
 async function desenharGanhos() {
   const cabeca = () => h('div', { class: 'cabeca-pagina' }, h('button', { class: 'btn small', onclick: () => trocarAba('inicio') }, icone('voltar'), 'Voltar'), h('h2', {}, 'Meus ganhos'));
   mount(pagina, cabeca(), esqueleto(3));
-  let s, rides;
+  let s, rides, acerto;
   try {
-    [s, { rides }] = await Promise.all([client.api('/driver/summary'), client.api('/driver/history')]);
+    [s, { rides }, acerto] = await Promise.all([client.api('/driver/summary'), client.api('/driver/history'), client.api('/driver/settlement')]);
   } catch (err) {
     return mount(pagina, cabeca(), h('p', { class: 'vazio-lista' }, err.message));
   }
@@ -542,6 +572,7 @@ async function desenharGanhos() {
     cabeca(),
     h('div', { class: 'ganhos' }, bloco('Hoje', s.today), bloco('7 dias', s.week)),
     h('p', { class: 'muted', style: 'margin:10px 0 18px' }, `Comissão da central: ${s.commission_percent}% do valor das corridas.`),
+    blocoComissao(acerto),
     h('h2', {}, 'Últimas corridas'),
     rides.length
       ? h(
@@ -558,5 +589,133 @@ async function desenharGanhos() {
           )
         )
       : h('p', { class: 'vazio-lista' }, 'Nenhuma corrida concluída ainda.')
+  );
+}
+
+/* ---------- Comissão da central ---------- */
+
+function blocoComissao(a) {
+  const devendo = a.owed.amount > 0;
+  const pagar = h(
+    'button',
+    {
+      class: 'btn primary block',
+      onclick: () =>
+        abrirPix(client, '/driver/settlement/pix', 'Pagar comissão', (j) =>
+          h(
+            'button',
+            {
+              class: 'btn dark block',
+              type: 'button',
+              onclick: (e) =>
+                run(e.currentTarget, async () => {
+                  await client.api('/driver/settlement/notify', { body: {} });
+                  toast('Central avisada. Ela confirma quando o Pix cair.', 'ok');
+                  j.fechar();
+                  desenharGanhos();
+                }),
+            },
+            icone('certo'),
+            'Já paguei, avisar a central'
+          )
+        ),
+    },
+    'Pagar comissão por Pix'
+  );
+  return h(
+    'section',
+    { class: 'card', style: 'margin-bottom:18px' },
+    h('div', { class: 'preco' }, h('div', {}, h('b', {}, 'Comissão em aberto'), h('br'), h('span', { class: 'muted' }, `${a.owed.rides} corrida${a.owed.rides === 1 ? '' : 's'}`)), h('strong', {}, brl(a.owed.amount))),
+    !devendo && h('p', { class: 'passo-ok', style: 'margin-top:10px' }, 'Você está em dia com a central.'),
+    devendo && a.notice_at && h('p', { class: 'tag ok', style: 'margin-top:10px' }, `Você avisou o pagamento em ${dateTime(a.notice_at)}. Aguardando a central confirmar.`),
+    devendo && !a.central_ready && h('p', { class: 'muted', style: 'margin-top:10px' }, 'A central ainda não cadastrou a conta para receber. Combine o pagamento com ela.'),
+    devendo && a.central_ready && h('div', { style: 'margin-top:12px' }, pagar),
+    a.history.length > 0 &&
+      h(
+        'div',
+        { style: 'margin-top:14px' },
+        h('b', { class: 'muted' }, 'Acertos confirmados'),
+        a.history.slice(0, 5).map((x) => h('p', {}, `${dateTime(x.paid_at)} · ${brl(x.amount)} · ${x.rides} corrida${x.rides === 1 ? '' : 's'}`))
+      )
+  );
+}
+
+/* ---------- Documentos e conta ---------- */
+
+async function desenharCadastro() {
+  const cabeca = () => h('div', { class: 'cabeca-pagina' }, h('button', { class: 'btn small', onclick: () => trocarAba('inicio') }, icone('voltar'), 'Voltar'), h('h2', {}, 'Documentos e conta'));
+  mount(pagina, cabeca(), esqueleto(3));
+  let ob;
+  try {
+    ob = await client.api('/driver/onboarding');
+  } catch (err) {
+    return mount(pagina, cabeca(), h('p', { class: 'vazio-lista' }, err.message));
+  }
+  pintarCadastro(ob, cabeca);
+}
+
+function pintarCadastro(ob, cabeca) {
+  const DICAS = {
+    cnh: 'Foto nítida da frente da sua CNH (categoria A).',
+    crlv: 'Foto do documento da moto (CRLV).',
+    selfie: 'Foto do seu rosto segurando a CNH ao lado. É a conferência facial.',
+  };
+  const linha = (kind) => {
+    const enviado = !!ob.docs[kind];
+    const arquivo = h('input', {
+      type: 'file',
+      accept: 'image/*',
+      capture: kind === 'selfie' ? 'user' : 'environment',
+      'aria-label': `Foto: ${ob.labels[kind]}`,
+      onchange: () =>
+        run(botao, async () => {
+          if (!arquivo.files[0]) return;
+          botao.textContent = 'Enviando…';
+          try {
+            const novo = await client.upload(`/driver/documents/${kind}`, await reduzirFoto(arquivo.files[0]));
+            toast('Foto enviada.', 'ok');
+            pintarCadastro(novo, cabeca);
+          } finally {
+            arquivo.value = '';
+            botao.textContent = enviado ? 'Trocar foto' : 'Tirar foto';
+          }
+        }),
+    });
+    const botao = h('button', { class: `btn small ${enviado ? '' : 'primary'}`, type: 'button', onclick: () => arquivo.click() }, enviado ? 'Trocar foto' : 'Tirar foto');
+    return h(
+      'div',
+      { class: `doc ${enviado ? 'ok' : ''}` },
+      h('span', { class: 'marca-doc', 'aria-hidden': 'true' }, icone(enviado ? 'certo' : 'documento')),
+      h('div', {}, h('strong', {}, ob.labels[kind]), h('small', {}, enviado ? `Enviada em ${dateTime(ob.docs[kind])}` : DICAS[kind])),
+      botao,
+      arquivo
+    );
+  };
+  const b = ob.bank;
+  mount(
+    pagina,
+    cabeca(),
+    ob.complete
+      ? h('p', { class: 'passo-ok' }, 'Cadastro completo. A central confere e aprova.')
+      : h('p', { class: 'alerta' }, 'Envie as três fotos e cadastre sua conta. Sem isso a central não consegue aprovar.'),
+    h('h3', { class: 'secao' }, '1. Documentos'),
+    h('div', { class: 'docs' }, Object.keys(ob.labels).map(linha)),
+    h('p', { class: 'muted', style: 'margin-top:8px' }, 'As fotos ficam guardadas com segurança e só a central vê.'),
+    h('h3', { class: 'secao' }, '2. Conta para receber'),
+    h('p', { class: 'muted', style: 'margin-bottom:12px' }, 'As corridas pagas em Pix caem direto nesta conta. Use uma chave Pix no seu nome.'),
+    b && h('p', { class: 'tag ok', style: 'margin-bottom:12px' }, `Conta cadastrada: ${b.holder_name} · chave ${b.pix_key}`),
+    h(
+      'div',
+      { class: 'card' },
+      formularioBanco({
+        atual: b,
+        rotuloBotao: b ? 'Atualizar conta' : 'Salvar conta',
+        aoSalvar: async (dados) => {
+          const novo = await client.api('/driver/bank', { method: 'PUT', body: dados });
+          toast('Conta salva.', 'ok');
+          pintarCadastro(novo, cabeca);
+        },
+      })
+    )
   );
 }

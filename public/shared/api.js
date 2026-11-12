@@ -56,6 +56,30 @@ export function createClient(app) {
     return data;
   }
 
+  // Envia um arquivo (foto de documento).
+  async function upload(path, blob) {
+    let res;
+    try {
+      res = await fetch(`/api${path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': blob.type || 'image/jpeg', Authorization: `Bearer ${session ? session.token : ''}` },
+        body: blob,
+      });
+    } catch {
+      throw new Error('Sem conexão com a internet. Tente de novo.');
+    }
+    const data = await res.json().catch(() => null);
+    if (!res.ok) throw new Error((data && data.error) || 'Não foi possível enviar a foto.');
+    return data;
+  }
+
+  // Baixa um arquivo protegido (foto de documento) e devolve um endereço temporário para mostrar na tela.
+  async function fileUrl(path) {
+    const res = await fetch(`/api${path}`, { headers: { Authorization: `Bearer ${session ? session.token : ''}` } });
+    if (!res.ok) throw new Error('Não foi possível abrir o documento.');
+    return URL.createObjectURL(await res.blob());
+  }
+
   async function enter(path, body) {
     const data = await api(path, { body });
     if (data.user.role !== role) {
@@ -87,6 +111,8 @@ export function createClient(app) {
 
   return {
     api,
+    upload,
+    fileUrl,
     login: (phone, password) => enter('/auth/login', { phone, password }),
     register: (fields) => enter('/auth/register', { ...fields, role }),
     logout,

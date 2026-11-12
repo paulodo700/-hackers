@@ -70,17 +70,16 @@ function createApp(deps) {
       short_name: meta.short || s.brand_name.slice(0, 12),
       id: `/${req.params.app}/`,
       start_url: `/${req.params.app}/`,
-      scope: '/',
+      // Cada tela é um aplicativo separado: instalados lado a lado, cada um abre só a sua parte.
+      scope: `/${req.params.app}/`,
       display: 'standalone',
       orientation: meta.orientation,
       lang: 'pt-BR',
       background_color: '#151515',
       theme_color: '#151515',
       icons: [
-        { src: '/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
-        { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
-        { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
-        { src: '/icon.svg', sizes: 'any', type: 'image/svg+xml' },
+        { src: `/icon-${req.params.app}-192.png`, sizes: '192x192', type: 'image/png', purpose: 'any' },
+        { src: `/icon-${req.params.app}-512.png`, sizes: '512x512', type: 'image/png', purpose: 'any' },
       ],
     });
   });

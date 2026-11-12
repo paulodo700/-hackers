@@ -5,6 +5,7 @@ import {
   icone, botaoTema, carregarMarca, aplicarMarca, nomeDaMarca, esqueleto,
 } from '/shared/ui.js';
 import { criarMapa, criarCamada, criarRota, enquadrar, campoEndereco, ondeEstou, removerMapa } from '/shared/mapa.js';
+import { janela, formularioBanco } from '/shared/menu.js';
 
 const client = createClient('central');
 const root = document.getElementById('root');
@@ -15,6 +16,7 @@ const ABAS = [
   ['motoqueiros', 'moto', 'Motoqueiros'],
   ['passageiros', 'pessoas', 'Passageiros'],
   ['corridas', 'lista', 'Corridas'],
+  ['acertos', 'carteira', 'Acertos'],
   ['relatorios', 'grafico', 'Relatórios'],
   ['personalizar', 'pincel', 'Personalizar'],
   ['config', 'ajustes', 'Configurações'],
@@ -459,6 +461,7 @@ function telaMotoqueiros() {
                 h(
                   'div',
                   { class: 'acoes-linha', style: 'margin:0' },
+                  h('button', { class: 'btn small', onclick: () => abrirFicha(d.id) }, 'Ver ficha'),
                   d.status !== 'approved' && h('button', { class: 'btn small go', onclick: mudar(d, 'approved') }, d.status === 'blocked' ? 'Desbloquear' : 'Aprovar'),
                   d.status !== 'blocked' && h('button', { class: 'btn small', onclick: mudar(d, 'blocked', `Bloquear ${d.name}? Ele deixa de receber corridas.`) }, 'Bloquear')
                 )
@@ -635,7 +638,7 @@ function telaConfig() {
   mount(
     conteudo,
     h('h2', {}, 'Configurações'),
-    h('div', { class: 'config' }, h('div', { class: 'pilha' }, form, cartaoRedefinir(), cartaoMinhaSenha()), h('div', { class: 'pilha' }, h('p', { class: 'muted' }, 'Clique no mapa para marcar o centro da cidade. É onde o mapa abre e onde a busca de endereços procura.'), mapaEl, gps))
+    h('div', { class: 'config' }, h('div', { class: 'pilha' }, form, cartaoMinhaConta(), cartaoRedefinir(), cartaoMinhaSenha(), cartaoRegistro()), h('div', { class: 'pilha' }, h('p', { class: 'muted' }, 'Clique no mapa para marcar o centro da cidade. É onde o mapa abre e onde a busca de endereços procura.'), mapaEl, gps))
   );
 
   const map = criarMapa(mapaEl, centro, 13, { animado: false });
@@ -817,8 +820,8 @@ function telaPersonalizar() {
   c.default_theme = h('select', {}, h('option', { value: 'auto' }, 'Automático (segue o celular)'), h('option', { value: 'claro' }, 'Claro'), h('option', { value: 'escuro' }, 'Escuro'));
   const salvar = h('button', { class: 'btn primary big block', type: 'submit' }, 'Salvar personalização');
   const cartao = (titulo, ...filhos) => h('section', { class: 'card' }, h('h3', { class: 'bloco-titulo', style: 'margin-top:0' }, titulo), filhos);
-  const FLAGS = ['pay_cash', 'pay_pix', 'p_history', 'p_support', 'p_terms', 'd_earnings', 'd_support', 'd_terms'];
-  const TEXTOS = ['brand_name', 'brand_color', 'slogan', 'default_theme', 'support_phone', 'notice_passenger', 'notice_driver', 'pix_key'];
+  const FLAGS = ['pay_cash', 'pay_pix', 'require_docs', 'p_history', 'p_support', 'p_terms', 'd_earnings', 'd_support', 'd_terms'];
+  const TEXTOS = ['brand_name', 'brand_color', 'slogan', 'default_theme', 'support_phone', 'notice_passenger', 'notice_driver'];
 
   const form = h(
     'form',
@@ -853,10 +856,10 @@ function telaPersonalizar() {
         texto('support_phone', 'Telefone/WhatsApp da central', { type: 'tel', maxlength: 30, placeholder: '(00) 00000-0000' })
       ),
       cartao(
-        'Pagamento',
+        'Pagamento e cadastro',
         liga('pay_cash', 'Aceitar dinheiro'),
-        liga('pay_pix', 'Aceitar Pix'),
-        h('div', { style: 'margin-top:14px' }, texto('pix_key', 'Chave Pix (mostrada ao fim da corrida paga em Pix)', { maxlength: 80, placeholder: 'Telefone, e-mail, CPF/CNPJ ou chave aleatória' }))
+        liga('pay_pix', 'Aceitar Pix', 'O passageiro recebe um QR Code e o valor cai direto na conta do motoqueiro'),
+        liga('require_docs', 'Exigir documentos e conta para aprovar motoqueiro', 'CNH, documento da moto, selfie e chave Pix')
       ),
       cartao(
         'Menu do passageiro',
@@ -892,7 +895,212 @@ function telaPersonalizar() {
 }
 
 
+/* ---------- Ficha do motoqueiro ---------- */
+
+const TIPO_PIX = { telefone: 'Telefone', cpf: 'CPF', cnpj: 'CNPJ', email: 'E-mail', aleatoria: 'Chave aleatória' };
+
+async function abrirFicha(id) {
+  const corpo = h('div', {}, esqueleto(2));
+  const j = janela('Ficha do motoqueiro', corpo);
+  j.fundo.firstChild.classList.add('ficha');
+  let f;
+  try {
+    f = await client.api(`/admin/drivers/${id}`);
+  } catch (err) {
+    return mount(corpo, h('p', {}, err.message));
+  }
+  const d = f.driver;
+  const item = (rotulo, valor) => [h('dt', {}, rotulo), h('dd', {}, valor || '—')];
+  const fotos = h('div', { class: 'fotos' });
+  // As fotos são protegidas: cada uma é baixada com o login da central.
+  for (const kind of Object.keys(f.labels)) {
+    const fig = h('figure', {}, h('div', { class: 'falta' }, f.docs[kind] ? 'Carregando…' : 'Não enviada'), h('figcaption', {}, f.labels[kind]));
+    fotos.append(fig);
+    if (!f.docs[kind]) continue;
+    client
+      .fileUrl(`/admin/drivers/${id}/documents/${kind}`)
+      .then((url) => {
+        const img = h('img', { src: url, alt: f.labels[kind], tabindex: 0, onclick: () => janela(f.labels[kind], h('img', { class: 'foto-grande', src: url, alt: f.labels[kind] })).fundo.firstChild.classList.add('ficha') });
+        fig.firstChild.replaceWith(img);
+      })
+      .catch(() => (fig.firstChild.textContent = 'Erro ao abrir'));
+  }
+  const completo = Object.values(f.docs).every(Boolean) && !!f.bank;
+  const acao = (rotulo, classe, status, pergunta) =>
+    h(
+      'button',
+      {
+        class: `btn ${classe}`,
+        onclick: async (e) => {
+          const b = e.currentTarget;
+          if (pergunta && !(await confirmBox(pergunta, 'Confirmar'))) return;
+          const ok = await run(b, () => client.api(`/admin/drivers/${id}/status`, { body: { status } }));
+          if (ok) {
+            toast(status === 'approved' ? `${d.name} aprovado.` : `${d.name} bloqueado.`, 'ok');
+            j.fechar();
+          }
+        },
+      },
+      rotulo
+    );
+  mount(
+    corpo,
+    !completo && h('p', { class: 'alerta' }, 'Cadastro incompleto: confira abaixo o que falta o motoqueiro enviar.'),
+    h(
+      'div',
+      { class: 'ficha-grade' },
+      h('dl', {}, item('Nome', d.name), item('Telefone', phoneMask(d.phone)), item('Moto', `${d.moto_model} · ${d.plate}`), item('Cadastro', dateTime(d.created_at)), item('Situação', SITUACAO[d.status][0])),
+      h(
+        'dl',
+        {},
+        f.bank
+          ? [item('Titular da conta', f.bank.holder_name), item('CPF/CNPJ do titular', f.bank.holder_doc), item('Banco', f.bank.bank_name), item('Chave Pix', `${TIPO_PIX[f.bank.pix_type]}: ${f.bank.pix_key}`)]
+          : item('Conta para receber', 'Não cadastrada'),
+        item('Comissão em aberto', `${brl(f.owed.amount)} (${f.owed.rides} corrida${f.owed.rides === 1 ? '' : 's'})`)
+      )
+    ),
+    h('h3', { class: 'bloco-titulo' }, 'Documentos'),
+    h('p', { class: 'muted' }, 'Compare o rosto da selfie com a foto da CNH e confira se a placa bate com o documento da moto. Clique na foto para ampliar.'),
+    fotos,
+    h('div', { class: 'acoes-linha', style: 'margin-top:18px' }, d.status !== 'approved' && acao(d.status === 'blocked' ? 'Desbloquear' : 'Aprovar motoqueiro', 'go', 'approved'), d.status !== 'blocked' && acao('Bloquear', '', 'blocked', `Bloquear ${d.name}? Ele deixa de receber corridas.`))
+  );
+}
+
+/* ---------- Acertos (comissão) ---------- */
+
+function telaAcertos() {
+  const corpo = h('div', {}, esqueleto(3));
+  mount(conteudo, h('h2', {}, 'Acertos de comissão'), h('p', { class: 'muted', style: 'margin:-8px 0 16px' }, 'As corridas são pagas direto ao motoqueiro. Aqui você vê quanto cada um deve de comissão e confirma quando o Pix cair na sua conta.'), corpo);
+
+  async function carregar() {
+    let v;
+    try {
+      v = await client.api('/admin/settlements');
+    } catch (err) {
+      return mount(corpo, h('p', { class: 'vazio-lista' }, err.message));
+    }
+    const card = (rotulo, valor) => h('div', { class: 'indicador' }, h('b', {}, rotulo), h('strong', {}, valor));
+    mount(
+      corpo,
+      !v.central_ready && h('p', { class: 'alerta' }, 'Você ainda não cadastrou sua conta para receber. Vá em Configurações → Minha conta para receber. Sem ela os motoqueiros não conseguem gerar o Pix da comissão.'),
+      h('div', { class: 'indicadores' }, card('Total a receber', brl(v.total)), card('Motoqueiros devendo', v.drivers.length), card('Avisaram que pagaram', v.drivers.filter((d) => d.notice_at).length), card('Acertos confirmados', v.history.length)),
+      h('h3', { class: 'bloco-titulo' }, 'Em aberto'),
+      v.drivers.length
+        ? h(
+            'div',
+            { class: 'tabela-caixa' },
+            h(
+              'table',
+              {},
+              h('thead', {}, h('tr', {}, h('th', {}, 'Motoqueiro'), h('th', {}, 'Telefone'), h('th', { class: 'n' }, 'Corridas'), h('th', { class: 'n' }, 'Deve'), h('th', {}, 'Aviso'), h('th', {}, ''))),
+              h(
+                'tbody',
+                {},
+                v.drivers.map((d) => {
+                  const botao = h(
+                    'button',
+                    {
+                      class: 'btn small go',
+                      onclick: async () => {
+                        if (!(await confirmBox(`Confirmar que recebeu ${brl(d.amount)} de ${d.name}? Confira antes no extrato do seu banco.`, 'Recebi'))) return;
+                        const ok = await run(botao, () => client.api('/admin/settlements', { body: { driver_id: d.id } }));
+                        if (ok) {
+                          toast('Acerto confirmado.', 'ok');
+                          carregar();
+                        }
+                      },
+                    },
+                    'Confirmar recebimento'
+                  );
+                  return h(
+                    'tr',
+                    {},
+                    h('td', {}, h('b', {}, d.name)),
+                    h('td', {}, h('a', { href: `tel:${d.phone}` }, phoneMask(d.phone))),
+                    h('td', { class: 'n' }, d.rides),
+                    h('td', { class: 'n' }, h('b', {}, brl(d.amount))),
+                    h('td', {}, d.notice_at ? h('span', { class: 'tag ok' }, `Avisou que pagou em ${dateTime(d.notice_at)}`) : h('span', { class: 'tag' }, 'Sem aviso')),
+                    h('td', {}, botao)
+                  );
+                })
+              )
+            )
+          )
+        : h('p', { class: 'vazio-lista' }, 'Ninguém deve comissão no momento.'),
+      v.history.length > 0 && h('h3', { class: 'bloco-titulo' }, 'Últimos acertos confirmados'),
+      v.history.length > 0 &&
+        h(
+          'div',
+          { class: 'tabela-caixa' },
+          h(
+            'table',
+            {},
+            h('thead', {}, h('tr', {}, h('th', {}, 'Quando'), h('th', {}, 'Motoqueiro'), h('th', { class: 'n' }, 'Corridas'), h('th', { class: 'n' }, 'Valor'))),
+            h('tbody', {}, v.history.map((x) => h('tr', {}, h('td', {}, dateTime(x.paid_at)), h('td', {}, x.driver_name), h('td', { class: 'n' }, x.rides), h('td', { class: 'n' }, brl(x.amount)))))
+          )
+        )
+    );
+  }
+  carregar();
+  return {};
+}
+
+/* ---------- Conta da central e registro de atividades ---------- */
+
+function cartaoMinhaConta() {
+  const caixa = h('div', {}, esqueleto(1));
+  const pintar = (bank) =>
+    mount(
+      caixa,
+      bank
+        ? h('p', { class: 'tag ok', style: 'margin-bottom:12px' }, `Conta cadastrada: ${bank.holder_name} · ${TIPO_PIX[bank.pix_type]}: ${bank.pix_key}`)
+        : h('p', { class: 'alerta' }, 'Nenhuma conta cadastrada. Os motoqueiros só conseguem pagar a comissão por Pix depois disso.'),
+      formularioBanco({
+        atual: bank,
+        rotuloBotao: bank ? 'Atualizar minha conta' : 'Salvar minha conta',
+        aoSalvar: async (dados) => {
+          const r = await client.api('/admin/bank', { method: 'PUT', body: dados });
+          toast('Conta da central salva.', 'ok');
+          pintar(r.bank);
+        },
+      })
+    );
+  client
+    .api('/admin/bank')
+    .then((r) => pintar(r.bank))
+    .catch((err) => mount(caixa, h('p', {}, err.message)));
+  return h(
+    'section',
+    { class: 'card' },
+    h('h3', { class: 'bloco-titulo', style: 'margin-top:0' }, 'Minha conta para receber'),
+    h('p', { class: 'muted', style: 'margin-bottom:12px' }, 'É para esta conta que os motoqueiros pagam a comissão. Use uma chave Pix no seu nome ou no da sua empresa.'),
+    caixa
+  );
+}
+
+function cartaoRegistro() {
+  const lista = h('div', { class: 'registro' }, 'Carregando…');
+  client
+    .api('/admin/audit')
+    .then(({ entries }) =>
+      mount(
+        lista,
+        entries.length
+          ? entries.map((e) => h('div', {}, h('time', {}, `${dateTime(e.at)} · ${e.user_name || 'sistema'}`), h('br'), h('b', {}, e.action), e.detail ? ` — ${e.detail}` : ''))
+          : 'Nenhuma atividade registrada ainda.'
+      )
+    )
+    .catch((err) => (lista.textContent = err.message));
+  return h(
+    'section',
+    { class: 'card' },
+    h('h3', { class: 'bloco-titulo', style: 'margin-top:0' }, 'Registro de atividades'),
+    h('p', { class: 'muted', style: 'margin-bottom:8px' }, 'Tudo que mexe com dinheiro, senhas e cadastros fica anotado aqui.'),
+    lista
+  );
+}
+
 const TELAS = {
-  vivo: telaVivo, nova: telaNova, motoqueiros: telaMotoqueiros, passageiros: telaPassageiros, corridas: telaCorridas,
+  vivo: telaVivo, nova: telaNova, motoqueiros: telaMotoqueiros, passageiros: telaPassageiros, corridas: telaCorridas, acertos: telaAcertos,
   relatorios: telaRelatorios, personalizar: telaPersonalizar, config: telaConfig,
 };

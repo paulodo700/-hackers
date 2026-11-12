@@ -1,5 +1,5 @@
 // Menu lateral (gaveta) das telas de passageiro e motoqueiro, e a janela "Meu perfil".
-import { h, mount, icone, run, toast, phoneMask, botaoTema, contatoCentral } from '/shared/ui.js';
+import { h, mount, icone, run, toast, phoneMask, botaoTema, contatoCentral, brl, copiar } from '/shared/ui.js';
 
 // Janela simples por cima da tela. Devolve { fechar }.
 export function janela(titulo, ...conteudo) {
@@ -15,7 +15,7 @@ export function janela(titulo, ...conteudo) {
     )
   );
   document.body.append(fundo);
-  return { fechar };
+  return { fechar, fundo };
 }
 
 // `itens`: lista de { icone, rotulo, acao } ou { icone, rotulo, href }; itens nulos são ignorados.
@@ -122,4 +122,76 @@ export function abrirPerfil(client, aoMudar = () => {}) {
 // Falar com a central.
 export function abrirAjuda(telefone, mensagem) {
   janela('Falar com a central', h('p', { style: 'margin-bottom:14px' }, 'Precisa de ajuda? A central atende por telefone e WhatsApp.'), contatoCentral(telefone, mensagem));
+}
+
+// Janela com o QR Code Pix e o código "copia e cola". `extra` são botões a mais (opcional).
+export async function abrirPix(client, caminho, titulo, extra = () => null) {
+  const corpo = h('div', { class: 'pilha' }, h('div', { class: 'linha-status' }, h('div', { class: 'girando' }), 'Gerando o Pix…'));
+  const j = janela(titulo, corpo);
+  try {
+    const pix = await client.api(caminho);
+    const codigo = h('textarea', { readonly: true, rows: 3, 'aria-label': 'Código Pix copia e cola' }, pix.code);
+    mount(
+      corpo,
+      h('div', { class: 'preco' }, h('div', {}, h('b', {}, 'Valor'), h('br'), h('span', { class: 'muted' }, `Para: ${pix.holder}`)), h('strong', {}, brl(pix.amount))),
+      h('img', { class: 'qr', alt: 'QR Code Pix', src: `data:image/svg+xml;utf8,${encodeURIComponent(pix.qr)}` }),
+      h('p', { class: 'muted', style: 'text-align:center' }, 'Abra o aplicativo do banco, escolha Pix e aponte a câmera. Ou copie o código abaixo.'),
+      codigo,
+      h('button', { class: 'btn primary block', type: 'button', onclick: () => copiar(pix.code) }, icone('copiar'), 'Copiar código Pix'),
+      pix.to === 'motoqueiro' && h('p', { class: 'muted', style: 'text-align:center' }, 'O valor vai direto para a conta do motoqueiro.'),
+      extra(j)
+    );
+  } catch (err) {
+    mount(corpo, h('p', {}, err.message));
+  }
+  return j;
+}
+
+const TIPOS_PIX = [['telefone', 'Telefone'], ['cpf', 'CPF'], ['cnpj', 'CNPJ'], ['email', 'E-mail'], ['aleatoria', 'Chave aleatória']];
+
+// Formulário de conta bancária (motoqueiro e central). A senha é pedida para confirmar.
+export function formularioBanco({ atual, rotuloBotao = 'Salvar conta', aoSalvar }) {
+  const c = {
+    holder_name: h('input', { maxlength: 60, required: true, autocomplete: 'name', value: (atual && atual.holder_name) || '' }),
+    holder_doc: h('input', { maxlength: 20, required: true, inputmode: 'numeric', placeholder: atual ? 'Digite de novo para confirmar' : 'Somente números' }),
+    bank_name: h('input', { maxlength: 40, placeholder: 'Ex.: Nubank, Caixa, Banco do Brasil', value: (atual && atual.bank_name) || '' }),
+    pix_type: h('select', { required: true }, TIPOS_PIX.map(([v, t]) => h('option', { value: v, selected: atual && atual.pix_type === v }, t))),
+    pix_key: h('input', { maxlength: 80, required: true, value: (atual && atual.pix_key) || '' }),
+    password: h('input', { type: 'password', required: true, autocomplete: 'current-password' }),
+  };
+  const botao = h('button', { class: 'btn primary block', type: 'submit' }, rotuloBotao);
+  const campo = (rotulo, el) => h('label', { class: 'field' }, h('span', {}, rotulo), el);
+  return h(
+    'form',
+    {
+      onsubmit: (e) => {
+        e.preventDefault();
+        run(botao, async () => {
+          await aoSalvar(Object.fromEntries(Object.entries(c).map(([k, el]) => [k, el.value.trim()])));
+          c.password.value = '';
+          c.holder_doc.value = '';
+        });
+      },
+    },
+    campo('Nome completo do titular da conta', c.holder_name),
+    campo('CPF ou CNPJ do titular', c.holder_doc),
+    campo('Banco (opcional)', c.bank_name),
+    h('div', { class: 'duas' }, campo('Tipo da chave Pix', c.pix_type), campo('Chave Pix', c.pix_key)),
+    campo('Sua senha (para confirmar)', c.password),
+    botao
+  );
+}
+
+// Reduz a foto antes de enviar (fotos de celular chegam a 10 MB; aqui ficam com menos de 1 MB).
+export async function reduzirFoto(arquivo, lado = 1600) {
+  const img = await createImageBitmap(arquivo).catch(() => null);
+  if (!img) throw new Error('Não foi possível ler a foto. Tente tirar outra.');
+  const escala = Math.min(1, lado / Math.max(img.width, img.height));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(img.width * escala);
+  canvas.height = Math.round(img.height * escala);
+  canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+  const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.82));
+  if (!blob) throw new Error('Não foi possível preparar a foto.');
+  return blob;
 }

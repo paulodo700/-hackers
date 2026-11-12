@@ -58,6 +58,14 @@ test('telefone da central e nome do aplicativo instalado seguem as configuraçõ
   const manifest = async (app) => (await fetch(`${s.base}/${app}/manifest.webmanifest`)).json();
   assert.equal((await manifest('passageiro')).name, 'Moto Já');
   assert.equal((await manifest('passageiro')).start_url, '/passageiro/');
+  // Três aplicativos separados: cada um com seu endereço, alcance e ícone.
+  for (const app of ['passageiro', 'motoqueiro', 'central']) {
+    const m = await manifest(app);
+    assert.equal(m.id, `/${app}/`);
+    assert.equal(m.scope, `/${app}/`);
+    assert.equal(m.icons[1].src, `/icon-${app}-512.png`);
+    assert.equal((await fetch(s.base + m.icons[1].src)).status, 200);
+  }
   assert.equal((await manifest('motoqueiro')).name, 'Moto Já Motoqueiro');
   assert.equal((await manifest('central')).short_name, 'Central');
   assert.equal((await fetch(`${s.base}/outro/manifest.webmanifest`)).status, 404);
