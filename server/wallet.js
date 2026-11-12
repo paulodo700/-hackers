@@ -9,7 +9,7 @@ const MIN_WITHDRAW = 10;
 const cents = (n) => Math.round(Number(n) * 100) / 100;
 const driverAccount = (id) => `driver:${Number(id)}`;
 
-function createWallet({ db, audit, finance }) {
+function createWallet({ db, audit, finance, external = false }) {
   const sumOf = db.prepare('SELECT COALESCE(SUM(amount), 0) AS v FROM ledger WHERE account = ?');
   const insertEntry = db.prepare(
     'INSERT INTO ledger (account, amount, kind, ride_id, withdrawal_id, note, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
@@ -70,6 +70,9 @@ function createWallet({ db, audit, finance }) {
   }
 
   function requestWithdrawal(user, account, amount, { note = '' } = {}) {
+    // Com o Asaas ligado, o dinheiro já vai para a subconta de cada um: o saque é feito pelo Asaas.
+    // Permitir também o saque interno pagaria duas vezes.
+    if (external) throw new AppError(409, 'Seus saques são feitos pela sua conta no gateway de pagamento.');
     const value = cents(amount);
     if (!Number.isFinite(value) || value < MIN_WITHDRAW) throw new AppError(400, `O saque mínimo é R$ ${MIN_WITHDRAW.toFixed(2)}`);
     const bank = bankOf(account);

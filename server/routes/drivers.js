@@ -8,7 +8,7 @@ const { requireAuth } = require('../auth');
 const { localDay, dayRange, shiftDay } = require('../time');
 
 // Rotas do motoqueiro.
-module.exports = function driverRoutes({ db, rides, dispatch, drivers, docs, finance, wallet }) {
+module.exports = function driverRoutes({ db, rides, dispatch, drivers, docs, finance, wallet, asaas, asaasCharge }) {
   const router = express.Router();
   router.use(requireAuth(db, 'driver'));
 
@@ -86,7 +86,7 @@ module.exports = function driverRoutes({ db, rides, dispatch, drivers, docs, fin
   router.get('/rides/:id/pix', async (req, res) => {
     const ride = rides.getRide(req.params.id);
     if (!ride || ride.driver_id !== req.user.id) throw new AppError(404, 'Corrida não encontrada');
-    res.json(await finance.rideCharge(ride));
+    res.json(asaas.enabled ? await asaasCharge.chargeRide(ride) : await finance.rideCharge(ride));
   });
 
   /* ----- Carteira: ganhos automáticos e saque para a conta do motorista ----- */

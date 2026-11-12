@@ -108,6 +108,17 @@ module.exports = function adminRoutes({ db, rides, dispatch, drivers, geo, docs,
     });
   });
 
+  // Conta Asaas do motorista (walletId da subconta). A central cadastra depois de criar a subconta no Asaas.
+  router.put('/drivers/:id/asaas-wallet', (req, res) => {
+    const id = Number(req.params.id);
+    const walletId = String((req.body && req.body.wallet_id) || '').trim();
+    if (!/^[a-z0-9_-]{6,60}$/i.test(walletId)) throw new AppError(400, 'Código da conta Asaas inválido');
+    const info = db.prepare('UPDATE drivers SET asaas_wallet_id = ? WHERE user_id = ?').run(walletId, id);
+    if (info.changes !== 1) throw new AppError(404, 'Motorista não encontrado');
+    audit.log(req.user, 'Conta de recebimento Asaas cadastrada', `motorista #${id}`);
+    res.json({ ok: true });
+  });
+
   router.get('/drivers/:id/documents/:kind', (req, res) => {
     const file = docs.read(req.params.id, req.params.kind);
     audit.log(req.user, 'Documento de motoqueiro visualizado', `${KINDS[req.params.kind] || req.params.kind} do motoqueiro #${Number(req.params.id)}`);

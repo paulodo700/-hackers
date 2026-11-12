@@ -62,6 +62,24 @@ function createApp(deps) {
     res.json({ ok: true });
   });
 
+  // Asaas: avisa quando um Pix de corrida cai. Responde 200 para o Asaas parar de reenviar (inclusive em repetição).
+  app.post('/api/payments/asaas', (req, res, next) => {
+    if (!deps.asaas.validWebhook(req.get('asaas-access-token'))) return next(new AppError(401, 'Não autorizado'));
+    const evento = req.body || {};
+    const pago = evento.event === 'PAYMENT_RECEIVED' || evento.event === 'PAYMENT_CONFIRMED';
+    const pagamento = evento.payment || {};
+    const ref = String(pagamento.externalReference || '');
+    const m = ref.match(/^corrida-(\d+)$/);
+    if (!pago || !m) return res.json({ ok: true, ignored: true });
+    try {
+      deps.wallet.markPaid(Number(m[1]), { amount: pagamento.value, provider: 'asaas', ref: String(pagamento.id || '').slice(0, 60) });
+    } catch (err) {
+      // Já confirmada antes (repetição do aviso) ou corrida ainda não concluída: não é erro para o Asaas.
+      if (!(err instanceof AppError && err.status === 409)) throw err;
+    }
+    res.json({ ok: true });
+  });
+
   app.get('/api/public/config', (req, res) => {
     res.json({ ...publicSettings(db), demo: config.demo });
   });

@@ -12,17 +12,20 @@ const { createDocs } = require('./docs');
 const { createFinance } = require('./finance');
 const { createPlaces } = require('./places');
 const { createPush } = require('./push');
+const { createAsaas } = require('./asaas');
+const { createAsaasCharge } = require('./asaas-charge');
 const { createWallet } = require('./wallet');
 const { createApp } = require('./app');
 const { attachRealtime } = require('./realtime');
 
 // Junta todas as peças. `geo` pode ser trocado nos testes.
-function buildServer({ dbPath = config.dbPath, geoImpl = geo, docsDir = config.docsDir } = {}) {
+function buildServer({ dbPath = config.dbPath, geoImpl = geo, docsDir = config.docsDir, asaasImpl = null } = {}) {
   const db = openDb(dbPath);
   const bus = new EventEmitter();
   const audit = createAudit({ db });
   const finance = createFinance({ db, audit });
-  const wallet = createWallet({ db, audit, finance });
+  const asaas = asaasImpl || createAsaas({ apiKey: config.asaasApiKey, env: config.asaasEnv, webhookToken: config.asaasWebhookToken });
+  const wallet = createWallet({ db, audit, finance, external: asaas.enabled });
   const places = createPlaces({ db });
   const push = createPush({ db, config });
   const rides = createRideService({ db, bus, places, wallet });
@@ -33,7 +36,8 @@ function buildServer({ dbPath = config.dbPath, geoImpl = geo, docsDir = config.d
   bus.on('ride:update', (ride) => {
     if (ride && ride.passenger_id) push.rideChanged(ride);
   });
-  const deps = { db, bus, rides, drivers, dispatch, audit, docs, finance, wallet, push, places, geo: geo.withSearchCache(geo.withRouteCache(geoImpl)) };
+  const asaasCharge = createAsaasCharge({ db, asaas });
+  const deps = { db, bus, rides, drivers, dispatch, audit, docs, finance, wallet, push, asaas, asaasCharge, places, geo: geo.withSearchCache(geo.withRouteCache(geoImpl)) };
   const app = createApp(deps);
   const server = http.createServer(app);
   const io = attachRealtime(server, deps);

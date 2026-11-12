@@ -69,14 +69,14 @@ function rideInput(extra = {}) {
 }
 
 // Servidor de verdade em porta livre, com mapa falso (sempre 2 km) para não depender da internet.
-async function startServer({ geo } = {}) {
+async function startServer({ geo, asaas } = {}) {
   const geoImpl = geo || {
     routeDistanceKm: async () => ({ km: 2, source: 'osrm' }),
     searchAddress: async (q) => [{ label: `Resultado ${q}`, lat: -10, lng: -48 }],
     reverseAddress: async () => 'Rua Teste, 1 - Centro',
   };
   const docsDir = require('node:fs').mkdtempSync(require('node:path').join(require('node:os').tmpdir(), 'mototaxi-docs-'));
-  const built = buildServer({ dbPath: ':memory:', geoImpl, docsDir });
+  const built = buildServer({ dbPath: ':memory:', geoImpl, docsDir, asaasImpl: asaas || null });
   ensureAdmin(built.db, { phone: '11900000000', password: 'central123' });
   await new Promise((r) => built.server.listen(0, r));
   const base = `http://127.0.0.1:${built.server.address().port}`;

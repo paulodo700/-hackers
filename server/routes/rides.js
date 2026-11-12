@@ -7,7 +7,8 @@ const { validCoord, completeRoute } = require('../geo');
 const { createLimiter } = require('../limit');
 
 // Rotas do passageiro.
-module.exports = function rideRoutes({ db, rides, geo, finance }) {
+module.exports = function rideRoutes({ db, rides, geo, finance, asaas, asaasCharge }) {
+  const deps = { asaas, asaasCharge };
   const router = express.Router();
   router.use(requireAuth(db, 'passenger'));
   const estimateLimit = createLimiter({ windowMs: 60 * 1000, max: 40 });
@@ -86,7 +87,10 @@ module.exports = function rideRoutes({ db, rides, geo, finance }) {
   router.get('/:id', (req, res) => res.json({ ride: ownRide(req) }));
 
   // QR Code Pix da corrida: o valor vai direto para a conta do motoqueiro.
-  router.get('/:id/pix', async (req, res) => res.json(await finance.rideCharge(ownRide(req))));
+  router.get('/:id/pix', async (req, res) => {
+    const ride = ownRide(req);
+    res.json(deps.asaas.enabled ? await deps.asaasCharge.chargeRide(ride) : await finance.rideCharge(ride));
+  });
 
   router.post('/:id/cancel', (req, res) => {
     ownRide(req);

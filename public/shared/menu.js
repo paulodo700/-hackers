@@ -90,6 +90,8 @@ export async function abrirPerfil(client, aoMudar = () => {}) {
   const email = inp(u.email, { type: 'email', maxlength: 80, autocomplete: 'email', placeholder: 'seu@email.com' });
   const contatoNome = inp(u.emergency_name, { maxlength: 60, placeholder: 'Ex.: Mãe, esposa, irmão' });
   const contatoFone = inp(u.emergency_phone ? phoneMask(u.emergency_phone) : '', { type: 'tel', placeholder: '(00) 00000-0000' });
+  // CPF só é pedido ao passageiro para cobrar o Pix pelo gateway.
+  const cpf = inp(u.cpf_masked || '', { inputmode: 'numeric', maxlength: 14, placeholder: 'Somente números' });
   const placa = d ? inp(d.plate, { maxlength: 10, autocapitalize: 'characters' }) : null;
   const modelo = d ? inp(d.moto_model, { maxlength: 40 }) : null;
   const cnh = d ? inp(d.cnh_expires, { type: 'date', 'aria-label': 'Validade da CNH' }) : null;
@@ -112,6 +114,7 @@ export async function abrirPerfil(client, aoMudar = () => {}) {
               email: email.value,
               emergency_name: contatoNome.value,
               emergency_phone: contatoFone.value,
+              cpf: cpf.value,
             };
             if (d) Object.assign(body, { plate: placa.value, moto_model: modelo.value, cnh_expires: cnh.value });
             const { user } = await client.api('/auth/profile', { method: 'PUT', body });
@@ -125,6 +128,9 @@ export async function abrirPerfil(client, aoMudar = () => {}) {
       h('h3', { class: 'bloco-titulo', style: 'margin-top:0' }, 'Dados pessoais'),
       campo('Seu nome', nome),
       campo('E-mail (para avisos e recibos)', email),
+      h('h3', { class: 'bloco-titulo' }, 'Documento para pagamento Pix'),
+      h('p', { class: 'muted', style: 'margin-bottom:8px' }, 'Seu CPF é enviado ao gateway de pagamento para gerar o Pix da corrida. Não é mostrado a motoristas.'),
+      campo('CPF', cpf),
       h('h3', { class: 'bloco-titulo' }, 'Contato de emergência'),
       h('p', { class: 'muted', style: 'margin-bottom:8px' }, 'Quem a central avisa se algo acontecer durante uma corrida.'),
       h('div', { class: 'duas' }, campo('Nome', contatoNome), campo('Telefone', contatoFone)),
@@ -173,7 +179,7 @@ export async function abrirPix(client, caminho, titulo, extra = () => null) {
     mount(
       corpo,
       h('div', { class: 'preco' }, h('div', {}, h('b', {}, 'Valor'), h('br'), h('span', { class: 'muted' }, `Para: ${pix.holder}`)), h('strong', {}, brl(pix.amount))),
-      h('img', { class: 'qr', alt: 'QR Code Pix', src: `data:image/svg+xml;utf8,${encodeURIComponent(pix.qr)}` }),
+      h('img', { class: 'qr', alt: 'QR Code Pix', src: pix.qrImage ? `data:image/png;base64,${pix.qrImage}` : `data:image/svg+xml;utf8,${encodeURIComponent(pix.qr)}` }),
       h('p', { class: 'muted', style: 'text-align:center' }, 'Abra o aplicativo do banco, escolha Pix e aponte a câmera. Ou copie o código abaixo.'),
       codigo,
       h('button', { class: 'btn primary block', type: 'button', onclick: () => copiar(pix.code) }, icone('copiar'), 'Copiar código Pix'),

@@ -237,7 +237,7 @@ function openDb(file) {
   if (!rideCols.has('duration_min')) db.exec('ALTER TABLE rides ADD COLUMN duration_min REAL');
   if (!rideCols.has('route')) db.exec('ALTER TABLE rides ADD COLUMN route TEXT');
   const userCols = new Set(db.prepare('PRAGMA table_info(users)').all().map((c) => c.name));
-  for (const col of ['email', 'emergency_name', 'emergency_phone']) {
+  for (const col of ['email', 'emergency_name', 'emergency_phone', 'cpf', 'asaas_customer_id']) {
     if (!userCols.has(col)) db.exec(`ALTER TABLE users ADD COLUMN ${col} TEXT NOT NULL DEFAULT ''`);
   }
   if (!userCols.has('blocked')) db.exec('ALTER TABLE users ADD COLUMN blocked INTEGER NOT NULL DEFAULT 0');
@@ -246,6 +246,7 @@ function openDb(file) {
   }
   const driverCols = new Set(db.prepare('PRAGMA table_info(drivers)').all().map((c) => c.name));
   if (!driverCols.has('cnh_expires')) db.exec("ALTER TABLE drivers ADD COLUMN cnh_expires TEXT NOT NULL DEFAULT ''");
+  if (!driverCols.has('asaas_wallet_id')) db.exec("ALTER TABLE drivers ADD COLUMN asaas_wallet_id TEXT NOT NULL DEFAULT ''");
   if (!driverCols.has('pay_notice_at')) db.exec('ALTER TABLE drivers ADD COLUMN pay_notice_at TEXT');
   const insert = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');
   for (const [key, value] of Object.entries(DEFAULTS)) insert.run(key, String(value));

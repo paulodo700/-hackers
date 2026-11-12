@@ -71,7 +71,7 @@ atendem bem; se o movimento crescer muito, troque por um serviço pago ou própr
 ## Testes
 
 ```bash
-npm test                 # 72 testes: preço, corrida, distribuição, login, segurança, Pix, comissão, API e tempo real
+npm test                 # 80 testes: preço, corrida, distribuição, login, segurança, Pix, comissão, API e tempo real
 node tests/e2e.cjs       # navegador de verdade com passageiro, motoqueiro e central (precisa do Playwright)
 ```
 
@@ -107,6 +107,13 @@ docs/superpowers/                    especificação e plano da versão 1
 - **Senhas:** cada pessoa troca a sua; a central redefine a de quem esqueceu. Trocar a senha derruba os logins antigos.
 - **Proteções:** limite de tentativas e de pedidos por endereço, preço confirmado igual ao estimado, contagem da oferta
   correta mesmo com o relógio do celular errado, página de Termos e Privacidade.
+
+## Asaas (versão 6)
+
+- Cobrança Pix por corrida com divisão automática: a parte do motorista vai para a subconta dele no Asaas.
+- Passageiro informa o CPF em "Meu perfil" (usado só para gerar o Pix).
+- Webhook `POST /api/payments/asaas` confirma o pagamento e repete sem pagar duas vezes.
+- Configuração e passo a passo em `docs/PAGAMENTOS-AUTOMATICOS.md`.
 
 ## Carteira e divisão automática (versão 5)
 

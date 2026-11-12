@@ -4,6 +4,7 @@ const auth = require('../auth');
 
 const { createLimiter } = require('../limit');
 const { normalizePhone } = require('../auth');
+const { validCpf } = require('../pix');
 
 function publicUser(u) {
   return { id: u.id, role: u.role, name: u.name, phone: u.phone };
@@ -112,12 +113,23 @@ module.exports = function authRoutes({ db }) {
         else if (cnh !== undefined) db.prepare('UPDATE drivers SET cnh_expires = ? WHERE user_id = ?').run(cnh, req.user.id);
       }
     })();
+    // CPF só é usado para cobrar o Pix pelo gateway. Se a pessoa enviar, precisa ser válido.
+    // Campo mascarado (•••) significa "não mudou": não regrava o CPF.
+    if (body.cpf !== undefined && String(body.cpf).trim() !== '' && !String(body.cpf).includes('•')) {
+      const digits = String(body.cpf).replace(/\D/g, '');
+      if (!validCpf(digits)) throw new AppError(400, 'CPF inválido');
+      if (digits !== (db.prepare('SELECT cpf FROM users WHERE id = ?').get(req.user.id).cpf || '')) {
+        db.prepare("UPDATE users SET cpf = ?, asaas_customer_id = '' WHERE id = ?").run(digits, req.user.id);
+      }
+    }
     res.json({ user: { ...req.user, name, email, emergency_name: emergencyName, emergency_phone: emergencyDigits } });
   });
 
   router.get('/me', auth.requireAuth(db), (req, res) => {
-    const full = db.prepare('SELECT email, emergency_name, emergency_phone FROM users WHERE id = ?').get(req.user.id);
-    const out = { user: { ...req.user, ...full } };
+    const full = db.prepare('SELECT email, emergency_name, emergency_phone, cpf FROM users WHERE id = ?').get(req.user.id);
+    const cpfDigits = full.cpf || '';
+    // Só mostra os dois últimos dígitos do CPF.
+    const out = { user: { ...req.user, email: full.email, emergency_name: full.emergency_name, emergency_phone: full.emergency_phone, cpf_masked: cpfDigits ? `•••.•••.•••-${cpfDigits.slice(-2)}` : '' } };
     if (req.user.role === 'driver') {
       out.driver = db
         .prepare('SELECT plate, moto_model, status, online, cnh_expires FROM drivers WHERE user_id = ?')

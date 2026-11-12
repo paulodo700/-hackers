@@ -54,3 +54,9 @@
   da central), saques com senha e confirmação da central, webhook de pagamento com segredo (`/api/payments/webhook`).
   O sistema NÃO movimenta dinheiro sozinho: divisão real exige gateway licenciado (ver `docs/PAGAMENTOS-AUTOMATICOS.md`).
   Os acertos antigos de comissão foram removidos; a aba da central agora é **Carteira**.
+- Versão 6 (12/11/2026): integração com o **Asaas** (`server/asaas.js`, `server/asaas-charge.js`). Cobrança Pix com
+  split para a subconta do motorista (`drivers.asaas_wallet_id`), cliente com CPF do passageiro (`users.cpf`), webhook
+  `/api/payments/asaas` (cabeçalho `asaas-access-token`). Ambiente sandbox: https://api-sandbox.asaas.com/v3; produção:
+  https://api.asaas.com/v3. Cabeçalho da chave: `access_token`. Com o Asaas ligado, o saque interno é bloqueado.
+  Chave de sandbox salva como segredo do ambiente "mototaxi", mas a API ainda respondeu 401 (cabeçalho não enviado pelo
+  proxy): conferir o cadastro do segredo (cabeçalho `access_token`, sem prefixo) antes do teste real.
